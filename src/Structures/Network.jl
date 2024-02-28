@@ -1,5 +1,10 @@
 # Graph to store all metadatas of the actual network
 
+# TODO : think about the following
+# Having one abstract type and several specialized types could be a way to differentiate node types and coding fcuntions without if clauses
+# However it is highly unrecommanded to put different types in a single vector and is it even adapted for metagraph ?
+# TODO : ask guillaume about this 
+
 # Network Node Data
 struct NetworkNode
     # Defining properties
