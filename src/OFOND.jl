@@ -44,6 +44,12 @@ include("Algorithms/Lower Bound/semi_linear_bound.jl")
 # Local search heuristic
 include("Algorithms/Local Search/bundle_reintroduction.jl")
 include("Algorithms/Local Search/two_node_incremental.jl")
+# Large Neighborhood Search
+include("Algorithms/LNS/lns_utils.jl")
+include("Algorithms/LNS/two_node_perturbation.jl")
+include("Algorithms/LNS/attract_reduce_perturbation.jl")
+include("Algorithms/LNS/single_plant_perturbation.jl")
+include("Algorithms/LNS/slope_scaling_mechanism.jl")
 
 # Functions / Structures to be made public
 
