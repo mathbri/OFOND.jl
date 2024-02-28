@@ -8,7 +8,7 @@ using IterTools
 using Random, Statistics
 using Dates
 using Geodesy
-using JuMP, Gurobi, HiGHS
+using JuMP, HiGHS
 
 # Project files
 
