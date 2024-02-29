@@ -1,6 +1,8 @@
 # This file contains all constants used in the project
 
-const SUPPLIER, PLANT, PLATFORM = hash("supplier"), hash("plant"), hash("platform")
+# May be better to use Enum or Symbol than what I am actually doing
+
+const SUPPLIER, PLANT, XDOCK, ILN = hash("supplier"), hash("plant"), hash("xdock"), hash("iln")
 const PORT_L, PORT_D = hash("port-l"), hash("port-d")
 
 const DIRECT, OUTSOURCE, CROSS_PLAT, DELIVERY = hash("direct"), hash("outsource"), hash("cross-plat"), hash("delivery")

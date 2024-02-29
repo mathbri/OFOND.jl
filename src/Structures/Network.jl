@@ -35,6 +35,11 @@ struct NetworkArc
     capacity :: Int      # container capacity on this arc
 end
 
+# Network Graph
+struct NetworkGraph
+    graph :: MetaGraph
+end
+
 function Base.:(==)(node1::NetworkNode, node2::NetworkNode)
     return (node1.account == node2.account) && (node1.type == node2.type)
 end
@@ -50,7 +55,7 @@ function change_node_type(node::NetworkNode, newType::UInt)
 end
 
 # Initializing empty network graph
-function initialize_network()
+function NetworkGraph()
     network = MetaGraph(
         DiGraph();
         label_type = UInt,
@@ -58,12 +63,12 @@ function initialize_network()
         edge_data_type = NetworkArc,
         graph_data=nothing,
     )
-    return network
+    return NetworkGraph(network)
 end
 
 # TODO : transformation of csv data to struct is to be done in the reading file
 # Adding a node to the network
-function add_node!(network::MetaGraph, node::NetworkNode)
+function add_node!(network::NetworkGraph, node::NetworkNode)
     # TODO : add warning if duplicate node found
     # Adding the node to the network graph
     network[hash(node)] = node
@@ -77,7 +82,7 @@ end
 
 # TODO : transformation of csv data to struct is to be done in the reading file
 # Adding a leg to the network
-function add_leg!(network::MetaGraph, source::NetworkNode, destination::NetworkNode, arc::NetworkArc)
+function add_arc!(network::NetworkGraph, source::NetworkNode, destination::NetworkNode, arc::NetworkArc)
     # TODO : add warning if same source and destination
     # TODO : add warning if source or destination is unknown 
     # Adding the leg to the network graph

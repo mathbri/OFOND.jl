@@ -35,6 +35,7 @@ include("Reading/read_solution.jl")
 include("Writing/write_instance.jl")
 include("Writing/write_solution.jl")
 
+# TODO : describe our algorithms work to explicit pain points
 # Algorithms
 include("Algorithms/bin_packing.jl")
 # Benchmarks heuristics

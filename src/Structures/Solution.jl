@@ -1,7 +1,13 @@
+# Solution structure
+
 struct Solution
-    # Paths
-    # Time-space graph
+    # Paths used for delivery (vector of network node hash)
+    bundlePaths :: Dict{UInt, Vector{UInt}}
+    # Transport units completion through time 
+    timeSpaceGraph :: MetaGraph
 end
+
+# Methods
 
 function analyze_solution()
     
