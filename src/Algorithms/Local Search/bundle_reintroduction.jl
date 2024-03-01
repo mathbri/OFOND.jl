@@ -14,3 +14,5 @@ function bundle_reintroduction_local_search()
 
     # Return the best solution
 end
+
+# Turn this local search into an operator by doing it just for one bundle

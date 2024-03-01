@@ -8,9 +8,10 @@ end
 
 # Time Space Arc (store container loads)
 mutable struct TimeSpaceArc
-    capacity :: Int        # bin capacity on this arc
-    loads :: Vector{Int}   # bin loads on this arc (used for fastier computation)
-    bins :: Vector{Bin}    # bins routed on this arc (actually used in solution)
+    capacity :: Int         # bin capacity on this arc
+    loads :: Vector{Int}    # bin loads on this arc (used for fastier computation)
+    bins :: Vector{Bin}     # bins routed on this arc (actually used in solution)
+    currentCost :: Float64  # Add the possibility to adapt the cost specifically for this timed copy of the network arc
 end
 
 # Time Space Graph

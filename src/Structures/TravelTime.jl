@@ -2,11 +2,11 @@
 
 # Travel Time Node
 struct TravelTimeNode
-    account :: String       # account number of the node
-    type :: UInt            # node type
+    networkNode :: UInt     # network node hash
     stepsToDelivery :: Int  # time steps away from the delivery step
-    isCommon :: Bool        # does it belong to the core
 end
+
+# Maybe a common node structure for travel-time and time-space graph
 
 # Travel Time Graph
 struct TravelTimeGraph
