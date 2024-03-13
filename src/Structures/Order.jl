@@ -2,12 +2,10 @@
 
 # TODO : transform hashs into shallow copy of objects for easier usage
 struct Order
-    # Defining properties
-    supplier :: UInt            # supplier of the order
-    customer :: UInt            # customer of the order
+    bundle :: Bundle            # bundle to which the order belongs
     deliveryDate :: Int         # delivery date index in instance time horizon
+    content :: Dict{Commodity, Int}  # order content in packages
     # Packing properties
-    content :: Dict{UInt, Int}  # order content in packages
     volume :: Int               # total volume of the order
     ffdUnits :: Int            # number of trucks used with ffd loading and base capacity
     giantUnits :: Int          # number of trucks used with giant container loading

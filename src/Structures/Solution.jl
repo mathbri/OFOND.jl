@@ -7,6 +7,8 @@ struct Solution
     timeSpaceGraph :: MetaGraph
 end
 
+# TODO : add a relaxed solution structure 
+
 # Methods
 
 function analyze_solution()
