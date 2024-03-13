@@ -13,6 +13,7 @@ using Dates
 using Geodesy
 using JuMP
 using HiGHS
+using SparseArrays
 
 # Project files
 
