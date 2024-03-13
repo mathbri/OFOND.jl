@@ -1,10 +1,5 @@
 # Graph to store all metadatas of the actual network
 
-# TODO : think about the following
-# Having one abstract type and several specialized types could be a way to differentiate node types and coding fcuntions without if clauses
-# However it is highly unrecommanded to put different types in a single vector and is it even adapted for metagraph ?
-# TODO : ask guillaume about this 
-
 # Network Node Data
 struct NetworkNode
     # Defining properties
@@ -48,7 +43,10 @@ function Base.hash(node::NetworkNode)
     return hash(node.account, node.type)
 end
 
-# TODO : shallow copy fields that did not change
+function Base.show(node::NetworkNode)
+    # TODO : implement function
+end
+
 # Copy a node information and only change the node type
 function change_node_type(node::NetworkNode, newType::UInt)
     return NetworkNode(node.account, newType, node.name, node.coordinates, node.country, node.continent, node.isCommon, node.volumeCost)
@@ -69,7 +67,9 @@ end
 # TODO : transformation of csv data to struct is to be done in the reading file
 # Adding a node to the network
 function add_node!(network::NetworkGraph, node::NetworkNode)
-    # TODO : add warning if duplicate node found
+    if haskey(network, hash(node))
+        @warn "Same node already in the network" :node=network[hash(node)]
+    end
     # Adding the node to the network graph
     network[hash(node)] = node
     # If the node is a port, loading port point added so adding destination port point also
@@ -77,14 +77,20 @@ function add_node!(network::NetworkGraph, node::NetworkNode)
         newNode = change_node_type(node, PORT_D)
         network[hash(newNode)] = newNode
     end
-    # TODO : if the node is a platform or a plant, add a corresponding supplier node with a free arc to the original node
 end
 
 # TODO : transformation of csv data to struct is to be done in the reading file
 # Adding a leg to the network
 function add_arc!(network::NetworkGraph, source::NetworkNode, destination::NetworkNode, arc::NetworkArc)
-    # TODO : add warning if same source and destination
-    # TODO : add warning if source or destination is unknown 
+    if haskey(network, hash(source), hash(destination))
+        @warn "Source and destination already have arc data" :source=network[hash(source)] :destination=network[hash(destination)]
+    end
+    if !haskey(network, hash(source))
+        @warn "Source unknown in the network" :source=network[hash(source)]
+    end
+    if !haskey(network, hash(destination))
+        @warn "Destination unknown in the network" :destination=network[hash(destination)]
+    end
     # Adding the leg to the network graph
     network[hash(source), hash(destination)] = arc
-end
+end 
