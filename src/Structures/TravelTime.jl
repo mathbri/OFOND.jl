@@ -1,29 +1,24 @@
 # Graph structure used to compute bundle paths 
 
-# Travel Time Node
-struct TravelTimeNode
-    networkNode :: UInt     # network node hash
-    stepsToDelivery :: Int  # time steps away from the delivery step
-end
+# TODO : change name to delivery graph to avoid confusion with arc travel times ?
 
-# Maybe a common node structure for travel-time and time-space graph
-
+# TODO : add field description
 # Travel Time Graph
 struct TravelTimeGraph
-    graph :: MetaGraph
+    graph :: DiGraph
+    costMatrix :: SparseMatrix{Int, Float64}
+    networkNodes :: Vector{NetworkNode}
+    networkArcs :: SparseMatrix{Int, NetworkArc}
+    timeSteps :: Vector{Int}
+    commonNodes :: Vector{Int}
     maxDeliveryTime :: Int
 end
 
+# For networkNodes and networkArcs creation : pre-allocating memory (or pushing) stores only a shallow copy of objects 
+
 # Methods
 
-function Base.:(==)(node1::TravelTimeNode, node2::TravelTimeNode)
-    return (node1.account == node2.account) && (node1.type == node2.type) && (node1.stepsToDelivery == node2.stepsToDelivery)
-end
-
-# The idea is to have hash(stepsToDelivery, nodeHash)
-function Base.hash(node::TravelTimeNode)
-    return hash(node.stepsToDelivery, hash(node.account, node.type))
-end
+# TODO : adapt from here
 
 # Initialize empty travel time graph
 function TravelTimeGraph(maxDeliveryTime::Int)
@@ -47,7 +42,6 @@ function add_arc!(travelTimeGraph::TravelTimeGraph, source::TravelTimeNode, dest
     
 end
 
-# TODO : change name to delivery graph to avoid confusion with arc travel times ?
 # Create travel-time graph from network graph
 function TravelTimeGraph(network::NetworkGraph)
     # Computing time horizon of the travel time graph
