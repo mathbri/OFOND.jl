@@ -6,12 +6,13 @@
 # Travel Time Graph
 struct TravelTimeGraph
     graph :: DiGraph
-    costMatrix :: SparseMatrix{Int, Float64}
+    costMatrix :: SparseMatrixCSC{Int, Float64}
     networkNodes :: Vector{NetworkNode}
-    networkArcs :: SparseMatrix{Int, NetworkArc}
+    networkArcs :: SparseMatrixCSC{Int, NetworkArc}
     timeSteps :: Vector{Int}
     commonNodes :: Vector{Int}
     maxDeliveryTime :: Int
+    bundlesOnNode :: Vector{Vector{Bundle}}
 end
 
 # For networkNodes and networkArcs creation : pre-allocating memory (or pushing) stores only a shallow copy of objects 
