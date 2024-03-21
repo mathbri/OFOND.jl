@@ -4,7 +4,7 @@
 struct NetworkNode
     # Defining properties
     account :: String               # account number of the node
-    type :: UInt                    # node type
+    type :: Symbol                  # node type
     # Informations
     name :: String                  # name of the node
     coordinates :: Tuple{Int, Int}  # coordinates of the node expressed in (lat*100, lon*100)
@@ -19,16 +19,16 @@ end
 # Network Arc Data 
 struct NetworkArc
     # Informations
-    type :: UInt         # type of arc
-    distance :: Float64  # distance in km 
-    travelTime :: Int    # time step taken to use the arc
+    type :: Symbol         # type of arc
+    distance :: Float64    # distance in km 
+    travelTime :: Int      # time step taken to use the arc
     isCommon :: Bool         
     # Transportation Costs
-    unitCost :: Float64  # cost of routing a transport unit on this arc
-    isLinear :: Bool     # is it linear cost or bin-packing cost 
+    unitCost :: Float64    # cost of routing a transport unit on this arc
+    isLinear :: Bool       # is it linear cost or bin-packing cost 
     carbonCost :: Float64  # co2 cost induced by (fully-loaded) transport units
     # Load
-    capacity :: Int      # container capacity on this arc
+    capacity :: Int        # transport unit capacity
 end
 
 # Network Graph
