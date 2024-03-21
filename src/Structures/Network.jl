@@ -23,10 +23,11 @@ struct NetworkArc
     distance :: Float64  # distance in km 
     travelTime :: Int    # time step taken to use the arc
     isCommon :: Bool         
-    # Transport Costs
-    unitCost :: Float64  # cost of routing a transport unit on this arc 
-    # Load
+    # Transportation Costs
+    unitCost :: Float64  # cost of routing a transport unit on this arc
     isLinear :: Bool     # is it linear cost or bin-packing cost 
+    carbonCost :: Float64  # co2 cost induced by (fully-loaded) transport units
+    # Load
     capacity :: Int      # container capacity on this arc
 end
 
