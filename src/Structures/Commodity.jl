@@ -1,5 +1,7 @@
 # Commodity structure to store corresponding metadata
 
+# TODO : a lot of commodities so maybe use the most lightwieght data structures like string15 and Int8
+# TODO : another way is to share common data and just have a wrapper to know to which order it belongs
 struct Commodity
     order :: Order           # order of the commodity
     partNumber :: String     # part number of the commodity

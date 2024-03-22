@@ -28,6 +28,7 @@ include("Structures/TimeSpace.jl")
 include("Structures/Commodity.jl")
 include("Structures/Order.jl")
 include("Structures/Bundle.jl")
+include("Structures/Instance.jl")
 include("Structures/Solution.jl")
 
 # Import and Export of data
