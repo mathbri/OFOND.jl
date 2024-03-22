@@ -1,8 +1,6 @@
 # Instance structure to store problem metadata
 
 struct Instance
-    # Parameters
-    parameters :: Parameters
     # Network 
     networkGraph :: MetaGraph
     # Commodities

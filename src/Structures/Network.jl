@@ -3,17 +3,17 @@
 # Network Node Data
 struct NetworkNode
     # Defining properties
-    account :: String               # account number of the node
-    type :: Symbol                  # node type
+    account :: String      # account number of the node
+    type :: Symbol         # node type
     # Informations
-    name :: String                  # name of the node
-    coordinates :: Tuple{Int, Int}  # coordinates of the node expressed in (lat*100, lon*100)
-    country :: String               # country the node is located in
-    continent :: String             # continent the node is located in
+    name :: String         # name of the node
+    coordinates :: LLA     # coordinates of the node expressed in (lat*100, lon*100)
+    country :: String      # country the node is located in
+    continent :: String    # continent the node is located in
     # Network properties
     isCommon :: Bool
     # Costs
-    volumeCost :: Float64           # cost of routing a m3 through this node
+    volumeCost :: Float64  # cost of routing a m3 through this node
 end
 
 # Network Arc Data 
@@ -65,7 +65,6 @@ function NetworkGraph()
     return NetworkGraph(network)
 end
 
-# TODO : transformation of csv data to struct is to be done in the reading file
 # Adding a node to the network
 function add_node!(network::NetworkGraph, node::NetworkNode)
     if haskey(network, hash(node))
@@ -80,7 +79,6 @@ function add_node!(network::NetworkGraph, node::NetworkNode)
     end
 end
 
-# TODO : transformation of csv data to struct is to be done in the reading file
 # Adding a leg to the network
 function add_arc!(network::NetworkGraph, source::NetworkNode, destination::NetworkNode, arc::NetworkArc)
     if haskey(network, hash(source), hash(destination))
