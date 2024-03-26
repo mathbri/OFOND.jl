@@ -1,13 +1,13 @@
 # Solution structure
 
 struct Solution
-    # Paths used for delivery (vector of network node hash)
-    bundlePaths :: Dict{UInt, Vector{UInt}}
+    # Travel time graph (on which paths are computed)
+    travelTimeGraph :: TravelTimeGraph
+    # Paths used for delivery
+    bundlePaths :: Vector{Vector{Int}}
     # Transport units completion through time 
     timeSpaceGraph :: MetaGraph
 end
-
-# TODO : add a relaxed solution structure 
 
 # Methods
 

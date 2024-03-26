@@ -17,6 +17,8 @@ function semi_linear_bound_heuristic()
     # Construct and return solution object   
 end
 
+# You can also add a milp phase here only for the shared network if it is not too big 
+
 function semi_linear_bound()
     # Do the same but don't compute the corresponding solution
 end

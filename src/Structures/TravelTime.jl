@@ -11,8 +11,11 @@ struct TravelTimeGraph
     networkArcs :: SparseMatrixCSC{Int, NetworkArc}
     timeSteps :: Vector{Int}
     commonNodes :: Vector{Int}
-    maxDeliveryTime :: Int
-    bundlesOnNode :: Vector{Vector{Bundle}}
+    maxDeliveryTime :: Int # store avalue for each bundle, remove from this structure 
+    # also store start / end node code for each bundle at creation time to avoid computing it each time 
+    # use hash for lightweight dict
+    # is maxDelTime useful when we have start / end node ?
+    bundlesOnNode :: Vector{Vector{Bundle}} # remove from this structure, to be used only in heuristics
 end
 
 # For networkNodes and networkArcs creation : pre-allocating memory (or pushing) stores only a shallow copy of objects 
@@ -82,6 +85,7 @@ function TravelTimeGraph(network::NetworkGraph)
             travelTimeGraph[ttSourceHash, ttDestHash] = EPS
         end
     end
+    # Also return the start / end node for each bundle
     return travelTimeGraph
 end
 
@@ -115,4 +119,9 @@ function restrict_bundle_travel_time(bundleGraph::TravelTimeGraph, maxDelTime::I
     end
     # Returning induced subgraph
     return induced_subgraph(bundleGraph, nodesToExtract)
+end
+
+# Compute for each bundle the maximum delivery time allowed (for now : direct time + 1 week)
+function get_max_delivery_time(network::NetworkGraph)
+    
 end
