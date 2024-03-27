@@ -5,11 +5,14 @@ struct Order
     bundle :: Bundle              # bundle to which the order belongs
     deliveryDate :: Int           # delivery date index in instance time horizon
     content :: Vector{Commodity}  # order content in packages
-    # Packing properties
     volume :: Int                 # total volume of the order
-    ffdUnits :: Int               # number of trucks used with ffd loading and base capacity
-    giantUnits :: Int             # number of trucks used with giant container loading
-    minPackSize :: Int            # size of the smallest commodity in the order
+end
+
+struct OrderUtils
+    volume :: Int       # total volume of the order
+    ffdUnits :: Int     # number of trucks used with ffd loading and base capacity
+    giantUnits :: Int   # number of trucks used with giant container loading
+    minPackSize :: Int  # size of the smallest commodity in the order
 end
 
 struct PartialOrder

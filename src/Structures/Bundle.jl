@@ -4,6 +4,9 @@ struct Bundle
     supplier :: NetworkNode  # supplier node
     customer :: NetworkNode  # customer node
     orders :: Vector{Order}  # vector of order
+end
+
+struct BundleUtils
     maxPackSize :: Int       # size of the largest commodity in the bundle
 end
 

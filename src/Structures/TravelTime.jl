@@ -6,16 +6,17 @@
 # Travel Time Graph
 struct TravelTimeGraph
     graph :: DiGraph
-    costMatrix :: SparseMatrixCSC{Int, Float64}
     networkNodes :: Vector{NetworkNode}
-    networkArcs :: SparseMatrixCSC{Int, NetworkArc}
+    networkArcs :: SparseMatrixCSC{NetworkArc, Int}
     timeSteps :: Vector{Int}
+end
+
+struct TravelTimeUtils
+    costMatrix :: SparseMatrixCSC{Float64, Int}
     commonNodes :: Vector{Int}
-    maxDeliveryTime :: Int # store avalue for each bundle, remove from this structure 
-    # also store start / end node code for each bundle at creation time to avoid computing it each time 
-    # use hash for lightweight dict
-    # is maxDelTime useful when we have start / end node ?
-    bundlesOnNode :: Vector{Vector{Bundle}} # remove from this structure, to be used only in heuristics
+    bundleStartNodes :: Vector{Int}
+    bundleEndNodes :: Vector{Int}
+    bundlesOnNode :: Vector{Vector{Bundle}} 
 end
 
 # For networkNodes and networkArcs creation : pre-allocating memory (or pushing) stores only a shallow copy of objects 

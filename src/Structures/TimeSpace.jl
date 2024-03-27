@@ -9,7 +9,6 @@ end
 # Time Space Arc (store container loads)
 struct TimedArc
     capacity :: Int       # bin capacity on this arc
-    loads :: Vector{Int}  # bin loads on this arc (used for fastier computation)
     bins :: Vector{Bin}   # bins routed on this arc (actually used in solution)
 end
 
@@ -19,10 +18,14 @@ struct RelaxedTimedArc
     content :: Vector{Commodity}  # all commodities on this arc
 end
 
+struct TimeSpaceUtils
+    currentCost :: SparseMatrixCSC{Float64, Int}   # used by slope scaling
+    binLoads :: SparseMatrixCSC{Vector{Int}, Int}  # bin loads on this arc (used for fastier computation)
+end
+
 # Time Space Graph
 struct TimeSpaceGraph
     graph :: MetaGraph
-    currentCost :: SparseMatrixCSC{Float64, Float64}
     timeHorizon :: Int
 end
 
