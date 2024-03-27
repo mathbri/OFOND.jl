@@ -42,6 +42,7 @@ function milp_packing()
     
 end
 
+# TODO : to implement for V0
 # Local search where path are fixed and bin-packing are optimized again
 function bin_packing_local_search()
     
