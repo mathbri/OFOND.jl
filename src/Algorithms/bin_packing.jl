@@ -1,7 +1,5 @@
 # Bin packing functions
 
-# TODO : store last size seen to avoid recomputing some find...
-
 function first_fit_decreasing(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
     # Sorting commodities in decreasing order of size (if not already done)
     if !sorted

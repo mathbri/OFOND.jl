@@ -1,21 +1,13 @@
 # Time Space Graph structure for solution representation 
 
-# Time Space Node
-struct TimedNode
-    networkNode :: NetworkNode  # network node hash corresponding
-    timeStep :: Int      # time horizon step on which the node is located
-end
-
-# Time Space Arc (store container loads)
-struct TimedArc
-    capacity :: Int       # bin capacity on this arc
-    bins :: Vector{Bin}   # bins routed on this arc (actually used in solution)
-end
-
-struct RelaxedTimedArc
-    capacity :: Int               # bin capacity on this arc
-    totalLoad :: Int              # total volume of commodities
-    content :: Vector{Commodity}  # all commodities on this arc
+# Time Space Graph
+struct TimeSpaceGraph
+    graph :: DiGraph
+    timeHorizon :: Int
+    networkNodes :: Vector{NetworkNode}
+    timeSteps :: Vector{Int}
+    networkArcs :: SparseMatrixCSC{NetworkArc, Int}
+    bins :: SparseMatrixCSC{Vector{Bin}, Int}
 end
 
 struct TimeSpaceUtils
@@ -23,19 +15,53 @@ struct TimeSpaceUtils
     binLoads :: SparseMatrixCSC{Vector{Int}, Int}  # bin loads on this arc (used for fastier computation)
 end
 
-# Time Space Graph
-struct TimeSpaceGraph
-    graph :: MetaGraph
-    timeHorizon :: Int
-end
-
-function Base.:(==)(node1::TimedNode, node2::TimedNode)
-    return (node1.networkNode == node2.networkNode) && (node1.timeStep == node2.timeStep)
-end
-
-# The idea is to have hash(timeStep, nodeHash)
-function Base.hash(node::TimedNode)
-    return hash(node.timeStep, hash(node.networkNode))
+# TODO : put all major block in functions
+function build_time_space_and_utils(network::NetworkGraph, timeHorizon::Int)
+    # Initializing structures
+    timeSpaceGraph = TimeSpaceGraph(DiGraph(), timeHorizon, NetworkNode[], Int[], sparse(zeros(Int, 0, 0)), sparse(zeros(Int, 0, 0)))
+    timeSpaceUtils = TimeSpaceUtils(sparse(zeros(Float64, 0, 0)), sparse(zeros(Int, 0, 0)))
+    # Adding all nodes from the network graph
+    for nodeHash in labels(network)
+        nodeData = network[nodeHash]
+        # Adding a timed copy for each time step 
+        for timeStep in 1:timeHorizon
+            # Adding timed copy to the graph
+            add_vertex!(timeSpaceGraph.graph)
+            push!(timeSpaceGraph.networkNodes, nodeData)
+            push!(timeSpaceGraph.timeSteps, timeStep)
+        end
+    end
+    # Initializing vectors for sparse matrices
+    I, J = Int[], Int[]
+    arcs, bins, costs, loads = NetworkArc[], Vector{Vector{Bin}}(), Float64[], Vector{Vector{Int}}()
+    nodesHash = hash.(timeSpaceGraph.networkNodes)
+    # Adding all arcs form the network graph
+    for (sourceHash, destHash) in edge_labels(network)
+        arcData = network[sourceHash, destHash]
+        # I get all source node copies and dest node copies (via hash)
+        sourceNodeIdxs = findall(nodeHash -> nodeHash == sourceHash, nodesHash)
+        destNodeIdxs = findall(nodeHash -> nodeHash == destHash, nodesHash)
+        # I add an arc when source step to del - arc travel time = dest step to del
+        for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in destNodeIdxs
+            if timeSpaceGraph.stepToDel[sourceNodeIdx] - arcData.travelTime == timeSpaceGraph.stepToDel[destNodeIdx]
+                push!(I, sourceNodeIdx)
+                push!(J, destNodeIdx)
+                push!(arcs, arcData)
+                push!(costs, EPS)
+                push!(loads, Int[])
+                push!(bins, Bin[])
+            end
+        end
+    end
+    # Building sparse matrix
+    arcMatrix = sparse(I, J, arcs)
+    costMatrix = sparse(I, J, costs)
+    loadMatrix = sparse(I, J, loads)
+    binMatrix = sparse(I, J, bins)
+    # Creating final structures
+    finalTimeSPace = TimeSpaceGraph(timeSpaceGraph.graph, timeSpaceGraph.timeHorizon, timeSpaceGraph.networkNodes, timeSpaceGraph.timeSteps, arcMatrix, binMatrix)
+    finalTimeSpaceUtils = TimeSpaceUtils(costMatrix, loadMatrix)
+    return finalTimeSPace, finalTimeSpaceUtils
 end
 
 # TODO : adapt from here

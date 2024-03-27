@@ -8,7 +8,7 @@ struct TravelTimeGraph
     graph :: DiGraph
     networkNodes :: Vector{NetworkNode}
     networkArcs :: SparseMatrixCSC{NetworkArc, Int}
-    timeSteps :: Vector{Int}
+    stepToDel :: Vector{Int}
 end
 
 struct TravelTimeUtils
@@ -16,26 +16,104 @@ struct TravelTimeUtils
     commonNodes :: Vector{Int}
     bundleStartNodes :: Vector{Int}
     bundleEndNodes :: Vector{Int}
-    bundlesOnNode :: Vector{Vector{Bundle}} 
+    bundlesOnNode :: Dict{Int, Vector{Bundle}} 
 end
 
 # For networkNodes and networkArcs creation : pre-allocating memory (or pushing) stores only a shallow copy of objects 
 
 # Methods
 
-# TODO : adapt from here
-
-# Initialize empty travel time graph
-function TravelTimeGraph(maxDeliveryTime::Int)
-    travelTimeGraph = MetaGraph(
-        DiGraph();
-        label_type = UInt,
-        vertex_data_type = TravelTimeNode,
-        edge_data_type = Float64,
-        weight_function = identity,
-    )
-    return TravelTimeGraph(travelTimeGraph, maxDeliveryTime)
+# TODO : put all major block in functions
+function build_travel_time_and_utils(network::NetworkGraph, bundles::Vector{Bundle})
+    # Computing for each node which bundles starts and which bundles end at this node 
+    bundlesOnSupplier = Dict{UInt, Vector{Bundle}}()
+    bundlesOnCustomer = Dict{UInt, Vector{Bundle}}()
+    bundlesMaxDelTime = Dict{UInt, Int}()
+    bundleIndexes = Dict{UInt, Int}()
+    for (idx, bundle) in enumerate(bundles)
+        suppHash = hash(bundle.supplier)
+        supplierBundles = get!(bundlesOnSupplier, suppHash, Bundle[])
+        push!(supplierBundles, bundle)
+        custHash = hash(bundle.customer)
+        customerBundles = get!(bundlesOnCustomer, custHash, Bundle[])
+        push!(customerBundles, bundle)
+        bundleMaxTime[hash(bundle)] = 1 + network[suppHash, custHash].travelTime
+        bundlesIndexes[hash(bundle)] = idx
+    end
+    overallMaxDelTime = maximum(values(bundleMaxTime))
+    # Initializing structures
+    travelTimeGraph = TravelTimeGraph(DiGraph(), NetworkNode[], sparse(zeros(Int, 0, 0)), Int[])
+    travelTimeUtils = TravelTimeUtils(sparse(zeros(Float64, 0, 0)), Int[], zeros(Int, length(bundles)), zeros(Int, length(bundles)), Dict{Int, Vector{Bundle}}())
+    # Adding all nodes from the network graph
+    for nodeHash in labels(network)
+        nodeData = network[nodeHash]
+        # Computing the number of times we have to add a timed copy of the node 
+        # plant = 0, suppliers = max of bundle del time, platforms = overall max del time (done with init cond in max)
+        nodeExtraCopies = nodeData.type == :plant ? 0 : maximum(bundleMaxTime[hash(bundle)] for bundle in bundlesOnSupplier[nodeHash], init=overallMaxDelTime) - 1
+        for stepToDel in 0:nodeExtraCopies
+            # Adding timed copy to the graph
+            add_vertex!(travelTimeGraph.graph)
+            nodeIdx = nv(travelTimeGraph.graph)
+            push!(travelTimeGraph.networkNodes, nodeData)
+            push!(travelTimeGraph.stepToDel, stepToDel)
+            # if supplier, checking if bundles with maxDelTime corresponds
+            if nodeData.type == :supplier
+                startOnNode = filter(bundle -> bundleMaxTime[hash(bundle)] == stepToDel, bundlesOnSupplier[nodeHash])
+                for bundle in startOnNode
+                    travelTimeUtils.bundleStartNodes[bundleIndexes[hash(bundle)]] = nodeIdx
+                end
+                continue
+            end
+            # if plant, adding corresponding bundles
+            if nodeData.type == :plant
+                for bundle in bundlesOnSupplier[nodeHash]
+                    travelTimeUtils.bundleEndNodes[bundleIndexes[hash(bundle)]] = nodeIdx
+                end
+                continue
+            end
+            # else its a platform, adding to common nodes
+            push!(travelTimeUtils.commonNodes, nodeIdx)
+        end
+    end
+    # Initializing vectors for sparse matrices
+    I, J = Int[], Int[]
+    arcs, costs = NetworkArc[], Float64[]
+    nodesHash = hash.(travelTimeGraph.networkNodes)
+    # Adding all arcs form the network graph
+    for (sourceHash, destHash) in edge_labels(network)
+        arcData = network[sourceHash, destHash]
+        # I get all source node copies and dest node copies (via hash)
+        sourceNodeIdxs = findall(nodeHash -> nodeHash == sourceHash, nodesHash)
+        destNodeIdxs = findall(nodeHash -> nodeHash == destHash, nodesHash)
+        # I add an arc when source step to del - arc travel time = dest step to del
+        for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in destNodeIdxs
+            if travelTimeGraph.stepToDel[sourceNodeIdx] - arcData.travelTime == travelTimeGraph.stepToDel[destNodeIdx]
+                push!(I, sourceNodeIdx)
+                push!(J, destNodeIdx)
+                push!(arcs, arcData)
+                push!(costs, EPS)
+            end
+        end
+        # Also add shortcut
+        for sourceNodeIdx1 in sourceNodeIdxs, sourceNodeIdx2 in sourceNodeIdxs
+            if travelTimeGraph.stepToDel[sourceNodeIdx1] - 1 == travelTimeGraph.stepToDel[sourceNodeIdx2]
+                push!(I, sourceNodeIdx1)
+                push!(J, sourceNodeIdx2)
+                push!(arcs, NetworkArc(:shortcut, EPS, 1, false, 0., false, 0., 0))
+                push!(costs, EPS)
+            end
+        end
+    end
+    # Building sparse matrix
+    arcMatrix = sparse(I, J, arcs)
+    costMatrix = sparse(I, J, costs)
+    # Creating final structures
+    finalTravelTime = TravelTimeGraph(travelTimeGraph.graph, travelTimeGraph.networkNodes, arcMatrix, travelTimeGraph.stepToDel)
+    finalTravelTimeUtils = TravelTimeUtils(costMatrix, travelTimeUtils.commonNodes, travelTimeUtils.bundleStartNodes, travelTimeUtils.bundleEndNodes, travelTimeUtils.bundleOnNodes)
+    return finalTravelTime, finalTravelTimeUtils
 end
+
+# TODO : adapt from here
 
 # Add node to the travel time graph
 function add_node!(travelTimeGraph::TravelTimeGraph, node::TravelTimeNode)

@@ -11,6 +11,10 @@ struct BundleUtils
     orderUtils :: Vector{OrderUtils}  # vector of order utils
 end
 
+function Base.hash(bundle::Bundle)
+    return hash(bundle.supplier, hash(bundle.customer))
+end
+
 function BundleUtils(bundle::Bundle)
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
     orderUtils = OrderUtils[OrderUtils(order) for order in bundle.orders]
