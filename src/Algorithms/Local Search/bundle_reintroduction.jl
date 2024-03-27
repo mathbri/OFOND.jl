@@ -10,6 +10,10 @@ function bundle_reintroduction_local_search()
     #         Insert it back greedily
     #     If the cost is better than the best one encountered so far :
     #         Store the new best solution inplace of the old one 
+    #     If no increase :
+    #         divide opening cot of trucks by 2
+    #     If no increase :
+    #         do not take into account current loading
     #     Otherwise, revert the current solution to its previous state
 
     # Return the best solution

@@ -15,6 +15,10 @@ function greedy_heuristic()
     #                      Otherwise : compute explicitly with a bin-packing function the added number of trucks and multiply with arc truck cost
     #         Add regularization cost on the arcs
     #     Compute the shortest path from supplier (with stepsToDelivery = maxDeliveryTime) to customer (with stepsToDelivery = 0)
+    #     If path not elementary :
+    #         divide opening cot of trucks by 2
+    #     If path not elementary :
+    #         do not take into account current loading
     #     Store bundle path in Solution object 
     #     Update time space graph :
     #         For all arc in the path, update timed arcs loading with the corresponding bundle order content 
