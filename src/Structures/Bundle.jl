@@ -8,18 +8,19 @@ end
 
 struct BundleUtils
     maxPackSize :: Int       # size of the largest commodity in the bundle
+    orderUtils :: Vector{OrderUtils}  # vector of order utils
 end
 
-struct PartialBundle
-    supplier :: NetworkNode  # supplier node
-    customer :: NetworkNode  # customer node
-    orders :: Vector{PartialOrder}  # vector of order
+function BundleUtils(bundle::Bundle)
+    maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
+    orderUtils = OrderUtils[OrderUtils(order) for order in bundle.orders]
+    return BundleUtils(maxPackSize, orderUtils)
 end
 
-function Bundle(partialBundle::PartialBundle)
-    orders = Order[Order(partial for partial in partialBundle.orders)]
-    maxPackSize = maximum(order -> maximum(com -> com.size, order.content), partialBundle.orders)
-    return Bundle(partialBundle.supplier, partialBundle.customer, orders, maxPackSize)
+function BundleUtils(bundle::Bundle, binPackAlg::Function, capacity::Int)
+    maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
+    orderUtils = OrderUtils[OrderUtils(order, binPackAlg, capacity) for order in bundle.orders]
+    return BundleUtils(maxPackSize, orderUtils)
 end
 
 # Methods

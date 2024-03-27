@@ -65,7 +65,6 @@ function read_and_add_legs!(networkGraph::NetworkGraph, leg_file::String)
     println("Read $(ne(networkGraph)) legs : $counts \n")
 end
 
-# TODO : check that it does what it is supposed to
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     orders = Dict{UInt, Order}()
     bundles = Dict{UInt, Bundle}()
@@ -80,15 +79,15 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         supplierNode = networkGraph[hash(row.supplier_account, :supplier)]
         customerNode = networkGraph[hash(row.customer_account, :plant)]
         # Getting bundle and order
-        bundle = get!(bundles, hash(row.supplier_account, hash(row.customer_account)), Bundle(supplierNode, customerNode, Order[], 0))
+        bundle = get!(bundles, hash(row.supplier_account, hash(row.customer_account)), Bundle(supplierNode, customerNode, Order[]))
         orderKey = hash(row.supplier_account, hash(row.customer_account, hash(row.delivery_time_step)))
-        order = get!(orders, orderKey, Order(bundle, row.delivery_time_step, Commodity[], 0, 0, 0, 0))
+        order = get!(orders, orderKey, Order(bundle, row.delivery_time_step, Commodity[]))
         # If the order is new we have to add it to the bundle
         if !haskey(orders, orderKey) 
             push!(bundle.orders, order) 
         end
         # Creating commodity (to be duplicated)
-        commodity = Commodity(order, row.part_number, round(Int, max(1, row.size*100)), 0.)
+        commodity = Commodity(order, row.part_number, round(Int, max(1, row.size*100)), row.lead_time_cost)
         # Duplicating commodity by quantity
         append!(order.content, [commodity for _ in 1:row.quantity])
         comCount += row.quantity
@@ -96,29 +95,7 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         deliveryDate = Date(row.delivery_date)
         push!(allDates, deliveryDate)
     end
-    # Computing properties of all objects
-    println("Computing properties...")
-    bundleVector = Bundle[]
-    for (key, bundle) in bundles
-        maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
-        finalBundle = Bundle(bundle.supplier, bundle.customer, Vector{Order}(undef, length(bundle.orders)), maxPackSize)
-        # Computing properties of orders
-        for (idxO, order) in enumerate(bundle.orders) 
-            volume = sum(com -> com.size, order.content)
-            ffdUnits = 0
-            giantUnits = 0
-            minPackSize = minimum(com -> com.size, order.content)
-            finalOrder = Order(finalBundle, order.deliveryDate, Vector{Commodity}(undef, length(order.content)), volume, ffdUnits, giantUnits, minPackSize)
-            # Assigning commodities to new order
-            for (idxC, commodity) in enumerate(order.content)
-                finalCommodity = Commodity(finalOrder, commodity.partNumber, commodity.size, commodity.leadTimeCost)
-                finalOrder.content[idxC] = finalCommodity
-            end
-            finalBundle.orders[idxO] = finalOrder
-        end
-        # Adding final bundle to vector
-        push!(bundleVector, finalBundle)
-    end
+    bundleVector = collect(values(bundles))
     # Ordering the time horizon
     dateHorizon = sort(collect(allDates))
     println("Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities " * 
