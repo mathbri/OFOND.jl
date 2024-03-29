@@ -15,6 +15,10 @@ function Base.hash(bundle::Bundle)
     return hash(bundle.supplier, hash(bundle.customer))
 end
 
+function Base.:(==)(bun1::Bundle, bun2::Bundle)
+    return (bun1.supplier == bun2.supplier) && (bun1.customer == bun2.customer)
+end
+
 function BundleUtils(bundle::Bundle)
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
     orderUtils = OrderUtils[OrderUtils(order) for order in bundle.orders]

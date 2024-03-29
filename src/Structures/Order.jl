@@ -14,6 +14,7 @@ struct OrderUtils
     giantUnits :: Int   # number of trucks used with giant container loading
     minPackSize :: Int  # size of the smallest commodity in the order
 end
+# TODO : add unique commodity vector to order utils ?
 
 # Methods
 
@@ -30,6 +31,10 @@ function OrderUtils(order::Order, binPackAlg::Function, capacity::Int)
     giantUnits = ceil(Int, volume / capacity)
     minPackSize = minimum(com -> com.size, order.content)
     return OrderUtils(volume, bpUnits, giantUnits, minPackSize)
+end
+
+function Base.:(==)(ord1::Order, ord2::Order)
+    return (ord1.bundle == ord2.bundle) && (ord1.deliveryDate == ord2.deliveryDate)
 end
 
 function get_supplier(order::Order)

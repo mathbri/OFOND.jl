@@ -11,6 +11,11 @@ end
 
 # Methods
 
+# TODO : think about data structures for fast equality computation of objects
+function Base.:(==)(com1::Commodity, com2::Commodity)
+    return (com1.order == com2.order) && (ord1.partNumber == ord2.partNumber)
+end
+
 function get_supplier(commodity::Commodity)
     return commodity.order.bundle.supplier
 end

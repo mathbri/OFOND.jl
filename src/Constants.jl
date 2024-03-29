@@ -7,3 +7,4 @@ const ARC_TYPES = [:direct, :outsource, :cross_plat, :delivery, :oversea, :port_
 
 const EPS = 1e-5
 const INFINITY = 1e9
+const VOLUME_FACTOR = 100

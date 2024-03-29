@@ -8,6 +8,7 @@ struct TimeSpaceGraph
     timeSteps :: Vector{Int}
     networkArcs :: SparseMatrixCSC{NetworkArc, Int}
     bins :: SparseMatrixCSC{Vector{Bin}, Int}
+    travelTimeLink :: Dict{UInt, Int}                # dict to easily recover nodes from travel time to time space
 end
 
 struct TimeSpaceUtils
@@ -18,7 +19,7 @@ end
 # TODO : put all major block in functions
 function build_time_space_and_utils(network::NetworkGraph, timeHorizon::Int)
     # Initializing structures
-    timeSpaceGraph = TimeSpaceGraph(DiGraph(), timeHorizon, NetworkNode[], Int[], sparse(zeros(Int, 0, 0)), sparse(zeros(Int, 0, 0)))
+    timeSpaceGraph = TimeSpaceGraph(DiGraph(), timeHorizon, NetworkNode[], Int[], sparse(zeros(Int, 0, 0)), sparse(zeros(Int, 0, 0)), Dict{UInt, Int}())
     timeSpaceUtils = TimeSpaceUtils(sparse(zeros(Float64, 0, 0)), sparse(zeros(Int, 0, 0)))
     # Adding all nodes from the network graph
     for nodeHash in labels(network)
@@ -29,6 +30,7 @@ function build_time_space_and_utils(network::NetworkGraph, timeHorizon::Int)
             add_vertex!(timeSpaceGraph.graph)
             push!(timeSpaceGraph.networkNodes, nodeData)
             push!(timeSpaceGraph.timeSteps, timeStep)
+            timeSpaceGraph.travelTimeLink[hash(timeStep, hash(nodeData))] = nv(timeSpaceGraph.graph)
         end
     end
     # Initializing vectors for sparse matrices
@@ -59,9 +61,21 @@ function build_time_space_and_utils(network::NetworkGraph, timeHorizon::Int)
     loadMatrix = sparse(I, J, loads)
     binMatrix = sparse(I, J, bins)
     # Creating final structures
-    finalTimeSPace = TimeSpaceGraph(timeSpaceGraph.graph, timeSpaceGraph.timeHorizon, timeSpaceGraph.networkNodes, timeSpaceGraph.timeSteps, arcMatrix, binMatrix)
+    finalTimeSPace = TimeSpaceGraph(timeSpaceGraph.graph, timeSpaceGraph.timeHorizon, timeSpaceGraph.networkNodes, timeSpaceGraph.timeSteps, arcMatrix, binMatrix, timeSpaceGraph.travelTimeLink)
     finalTimeSpaceUtils = TimeSpaceUtils(costMatrix, loadMatrix)
     return finalTimeSPace, finalTimeSpaceUtils
+end
+
+# Project a node of the travel time graph on the time space graph for a specific delivery date 
+function time_space_projector(travelTimeGraph::TravelTimeGraph, timeSpaceGraph::TimeSpaceGraph, travelTimeNode::Int, deliveryDate::Int)
+    # Computing the time step from the delivery date and the steps from delivery
+    timeSpaceDate = deliveryDate - travelTimeGraph.stepToDel[travelTimeNode]
+    # If it goes out of the horizon, rolling it back to the top
+    timeSpaceDate < 1 && timeSpaceDate += timeSpaceGraph.timeHorizon
+    # Using travel time link dict to return the right node idx
+    return timeSpaceGraph.travelTimeLink[
+        hash(timeSpaceDate, hash(travelTimeGraph.networkNodes[travelTimeNode]))
+    ]    
 end
 
 # TODO : adapt from here
