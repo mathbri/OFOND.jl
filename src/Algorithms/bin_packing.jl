@@ -143,3 +143,12 @@ function update_bins!(timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTim
         first_fit_decreasing!(timeSpaceGraph.bins[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
     end
 end
+
+function update_bins!(timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTimeGraph, path::Vector{Edge}, order::Order; sorted::Bool=false)
+    # For all arcs in the path, updating the right bins
+    for (src, dst) in path
+        timedSrc = time_space_projector(travelTimeGraph, timeSpaceGraph, src, order.deliveryDate)
+        timedDst = time_space_projector(travelTimeGraph, timeSpaceGraph, dst, order.deliveryDate)
+        first_fit_decreasing!(timeSpaceGraph.bins[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
+    end
+end
