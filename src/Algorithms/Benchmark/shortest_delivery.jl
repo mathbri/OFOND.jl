@@ -32,13 +32,16 @@ function shortest_delivery_heuristic(instance::Instance)
         push!(bundlePaths, get_path_nodes(shortestPath))
         # Updating the bins for each order of the bundle
         for order in bundle.orders
-            update_bins!(timeSpaceGraph, travelTimeGraph, shortestPath, bundle)
+            update_bins!(timeSpaceGraph, travelTimeGraph, shortestPath, order)
         end
     end
 
     # Saving solve time
     solveTime = round((time() - preSolveTime) * 1000) / 1000
     println("solve time : $solveTime s")
+    solution = Solution(travelTimeGraph, bundlePaths, timeSpaceGraph)
+    println("Feasible : $(is_feasible(instance, solution))")
+    println("Total Cost : $(compute_cost(solution))")
 
-    return Solution(travelTimeGraph, bundlePaths, timeSpaceGraph)
+    return solution
 end

@@ -22,6 +22,21 @@ function first_fit_decreasing(bins::Vector{Bin}, capacity::Int, commodities::Vec
     return newBins
 end
 
+function first_fit_decreasing!(loads::Vector{Int}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+    # Sorting commodities in decreasing order of size (if not already done)
+    if !sorted
+        sort!(commodities, by=com -> com.size, rev=true)        
+    end
+    # Adding commodities on top of others
+    for commodity in commodities
+        added = false
+        for load in loads
+            (capacity - load >= commodity.size) && (added = true; load += commodity.size; break)
+        end
+        added || push!(loads, capacity - commodity.size)
+    end
+end
+
 function best_fit_decreasing!(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
     # Sorting commodities in decreasing order of size (if not already done)
     if !sorted
@@ -150,5 +165,14 @@ function update_bins!(timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTim
         timedSrc = time_space_projector(travelTimeGraph, timeSpaceGraph, src, order.deliveryDate)
         timedDst = time_space_projector(travelTimeGraph, timeSpaceGraph, dst, order.deliveryDate)
         first_fit_decreasing!(timeSpaceGraph.bins[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
+    end
+end
+
+function update_loads!(timeSpaceUtils::TimeSpaceUtils, timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTimeGraph, path::Vector{Int}, order::Order; sorted::Bool=false)
+    # For all arcs in the path, updating the right bins
+    for (src, dst) in partition(path, 2, 1)
+        timedSrc = time_space_projector(travelTimeGraph, timeSpaceGraph, src, order.deliveryDate)
+        timedDst = time_space_projector(travelTimeGraph, timeSpaceGraph, dst, order.deliveryDate)
+        first_fit_decreasing!(timeSpaceUtils.loads[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
     end
 end

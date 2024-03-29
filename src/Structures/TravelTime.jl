@@ -113,6 +113,18 @@ function build_travel_time_and_utils(network::NetworkGraph, bundles::Vector{Bund
     return finalTravelTime, finalTravelTimeUtils
 end
 
+function is_path_elementary(path::Vector{UInt})
+    if length(path) >= 4
+        for (nodeIdx, nodeHash) in enumerate(path)
+            if nodeHash in path[nodeIdx+1:end]
+                # println("Non elementary path found : $path")
+                return false
+            end
+        end
+    end
+    return true
+end
+
 # TODO : adapt from here
 
 # Add node to the travel time graph
