@@ -6,7 +6,7 @@ struct Solution
     # Paths used for delivery
     bundlePaths :: Vector{Vector{Int}}
     # Transport units completion through time 
-    travelTimeGraph :: travelTimeGraph
+    timeSpaceGraph :: TimerSpaceGraph
 end
 
 # Methods
