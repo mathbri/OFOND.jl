@@ -8,51 +8,53 @@ function sort_order_content!(instance::Instance)
     end
 end
 
-# TODO : adapt to the new arguments 
-function update_cost_matrix!(travelTimeUtils::TravelTimeUtils, travelTimeGraph::TravelTimeGraph, bundle::Bundle, timeSpaceUtils::TimeSpaceUtils)
-    calT = get_prop(network, :calT)
-    for edge in edges(network)
-        srcHash, dstHash = get_prop(network, src(edge), :hash), get_prop(network, dst(edge), :hash)
-        # If it is a shortcut leg, weight alredy set to EPS
-        if srcHash == dstHash
-            continue
-        end
-        # By default, free arc
-        edgeBundleCost = EPS
-        edgeInfo = instance.legs[hash(srcHash, hash(dstHash))]
-        # Some legs are forbidden but only for some bundles so multiplying cost by 10
-        outsourceOtherNode = (edgeInfo.type == OUTSOURCE) && (srcHash != bundle.supplier)
-        deliveryOtherPlant = (edgeInfo.type == DELIVERY) && (dstHash != bundle.customer)
-        if outsourceOtherNode || deliveryOtherPlant
-            bundleTrucks = sum(instance.orders[orderHash].ffdTrucks for orderHash in bundle.orders)
-            edgeBundleCost *= bundleTrucks * 10 * edgeInfo.truckCost 
-            edgeBundleCost += 1_000_000
-            set_prop!(network, edge, :weight, edgeBundleCost)
-            continue
-        end
-        # Adding cost for each order in the bundle
-        for orderHash in bundle.orders
-            order = instance.orders[orderHash]
-            # Computing order trucks if there is a point
-            edgeOrderTrucks = order.ffdTrucks
-            # If it is a massified edge, applying cost obtained via ffd loading
-            if edgeInfo.truckCost > EPS
-                stepsToDelivery = Int8(calT - get_prop(network, src(edge), :timeStep))
-                timeToFill = get_timeIdx_to_fill(instance, order, stepsToDelivery)
-                truckLoadHash = hash(edgeInfo, timeToFill)
-                if haskey(truckLoads, truckLoadHash)
-                    edgeOrderTrucks = compute_trucks_added(order, truckLoads[truckLoadHash], instance.commodities)
-                end            
+# TODO : check that the shotcut computation is actually true
+function get_bundle_update_nodes(travelTimeUtils::TravelTimeUtils, travelTimeGraph::TravelTimeGraph, bundleIdx::Int)
+    startNodes = [travelTimeUtils.bundleStartNodes[bundleIdx]]
+    currentIdx = travelTimeUtils.bundleStartNodes[bundleIdx]
+    while travelTimeGraph.networkArcs[currentIdx, currentIdx + 1].type == :shortcut
+        push!(startNodes, currentIdx + 1)
+        currentIdx += 1
+    end
+    # Other while condition : findfirst(node -> travelTimeGraph.networkArcs[startNode, node].type == :shortcut, outneighbors(travelTimeGraph, startNode)) !== nothing
+    # Other while condition invilves way more computation
+    return vcat(startNodes, travelTimeUtils.commonNodes)
+end
+
+# TODO : divide more in multiple functions, too big and too many arguments
+# Updating cost matrix on the travel time graph for a specific bundle using predefined list of nodes to go through
+function update_cost_matrix!(travelTimeUtils::TravelTimeUtils, travelTimeGraph::TravelTimeGraph, updateNodes::Vector{Int}, bundle::Bundle, bundleDst::Int, bundleUtil::BundleUtils, timeSpaceUtils::TimeSpaceUtils; sorted::Bool=sorted)
+    # Iterating through all update nodes and their outneighbors
+    for src in updateNodes
+        for dst in outneighbors(travelTimeGraph, src)
+            dstData = travelTimeGraph.networkNodes[dst]
+            arcData = travelTimeGraph.networkArcs[src, dst]
+            # If it is a shortcut leg, cost alredy set to EPS
+            arcData.type == :shortcut && continue
+            # If the destination is not the right plant, not updating cost
+            (arcData.type == :shortcut && dst != bundleDst) && continue
+            # Adding cost for each order in the bundle
+            arcBundleCost = EPS
+            for (idxO, order) in enumerate(bundle.orders)
+                orderUtil = bundleUtil.orderUtils[idxO]
+                # Node volume cost 
+                arcBundleCost += dstData.volumeCost * orderUtil.volume
+                # Commodity cost 
+                arcBundleCost += arcData.distance * orderUtil.leadTimeCost
+                # Transport cost 
+                if arcData.isLinear
+                    arcBundleCost += (orderUtil.volume / arcData.capacity) * arcData.unitCost
+                    arcBundleCost += orderUtil.giantUnits * arcData.carbonCost
+                else
+                    arcOrderTrucks = orderUtil.bpUnits
+                    # If the arc is not empty, computing a tentative first fit 
+                    if length(timeSpaceUtils.binLoads[src, dst]) > 0
+                        arcOrderTrucks = first_fit_decreasing(timeSpaceUtils.binLoads[src, dst], arcData.capacity, order.content, sorted=sorted)
+                    end
+                    arcBundleCost += arcOrderTrucks * (arcData.unitCost + arcData.carbonCost)
+                end
             end
-            # By default, free arc and then we add possible volume and truck costs
-            edgeOrderVolumeCost = edgeInfo.volumeCost * order.volume / 100
-            @assert edgeOrderVolumeCost >= 0 "Edge cost cannot be negative"
-            edgeOrderTruckCost = edgeInfo.truckCost * edgeOrderTrucks
-            @assert edgeOrderTruckCost >= 0 "Edge cost cannot be negative"
-            edgeOrderCost = EPS + edgeOrderVolumeCost + edgeOrderTruckCost
-            @assert edgeOrderCost > 0 "Edge cost cannot be negative"
-            edgeBundleCost += edgeOrderCost
+            travelTimeUtils.costMatrix[src, dst] = arcBundleCost
         end
-        set_prop!(network, edge, :weight, edgeBundleCost)
     end
 end

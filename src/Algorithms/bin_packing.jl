@@ -22,6 +22,7 @@ function first_fit_decreasing(bins::Vector{Bin}, capacity::Int, commodities::Vec
     return newBins
 end
 
+# First fit decreasing to update loads
 function first_fit_decreasing!(loads::Vector{Int}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
     # Sorting commodities in decreasing order of size (if not already done)
     if !sorted
@@ -30,11 +31,17 @@ function first_fit_decreasing!(loads::Vector{Int}, capacity::Int, commodities::V
     # Adding commodities on top of others
     for commodity in commodities
         added = false
-        for load in loads
-            (capacity - load >= commodity.size) && (added = true; load += commodity.size; break)
+        for (idxL, load) in enumerate(loads)
+            (capacity - load >= commodity.size) && (added = true; loads[idxL] += commodity.size; break)
         end
         added || push!(loads, capacity - commodity.size)
     end
+end
+
+function first_fit_decreasing(loads::Vector{Int}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+    newLoads = deepcopy(loads)
+    first_fit_decreasing!(newBins, capacity, commodities; sorted=sorted)
+    return length(newLoads) - length(loads)
 end
 
 function best_fit_decreasing!(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)

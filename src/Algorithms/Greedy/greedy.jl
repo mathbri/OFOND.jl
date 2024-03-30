@@ -41,29 +41,39 @@ function greedy_heuristic(instance::Instance)
     # Computing the greedy delivery possible for each bundle
     for bundleIdx in sortedBundleIdxs
         bundle = instance.bundles[bundleIdx]
+        bundleUtil = bundleUtils[bundleIdx]
         # Retrieving bundle start and end nodes
         suppNode = travelTimeUtils.bundleStartNodes[bundleIdx]
         custNode = travelTimeUtils.bundleEndNodes[bundleIdx]
-        # Updating cost matrix
-        update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
+        # Updating cost matrix 
+        bundleUpdateNodes = get_bundle_update_nodes(travelTimeUtils, travelTimeGraph, bundleIdx)
+        update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundleUpdateNodes, bundle, travelTimeUtils.bundleEndNodes[bundleIdx], bundleUtil, timeSpaceUtils)
         # Computing shortest path
         shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
         # TODO : If path not elementary, dividing opening cot of trucks by 2
-        if !is_path_elementary(shortestPath)
-            update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
-            shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
-            # If path not elementary, not taking into account current solution
-            if !is_path_elementary(shortestPath)
-                update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
-                shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
-            end
-        end
+        # if !is_path_elementary(shortestPath)
+        #     update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
+        #     shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
+        #     # If path not elementary, not taking into account current solution
+        #     if !is_path_elementary(shortestPath)
+        #         update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
+        #         shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
+        #     end
+        # end
         # Adding shortest path to all bundle paths
         push!(bundlePaths, get_path_nodes(shortestPath))
-        # Updating the bins and loads for each order of the bundle
+        # Updating the loads for each order of the bundle
+        for order in bundle.orders
+            update_loads!(timeSpaceUtils, timeSpaceGraph, travelTimeGraph, shortestPath, order)
+        end
+    end
+
+    # Computing the actual bin packing 
+    # Done here because its cheaper to compute tentative packings on vectors of int than vectors of bins
+    for bundleIdx in sortedBundleIdxs
+        bundle = instance.bundles[bundleIdx]
         for order in bundle.orders
             update_bins!(timeSpaceGraph, travelTimeGraph, shortestPath, order)
-            update_loads!(timeSpaceUtils, timeSpaceGraph, travelTimeGraph, shortestPath, order)
         end
     end
 

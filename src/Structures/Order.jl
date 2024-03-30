@@ -13,6 +13,7 @@ struct OrderUtils
     bpUnits :: Int     # number of trucks used with ffd loading and base capacity
     giantUnits :: Int   # number of trucks used with giant container loading
     minPackSize :: Int  # size of the smallest commodity in the order
+    leadTimeCost :: Float64 # total lead time cost of the order
 end
 # TODO : add unique commodity vector to order utils ?
 
@@ -30,7 +31,8 @@ function OrderUtils(order::Order, binPackAlg::Function, capacity::Int)
     bpUnits = binPackAlg(Bin[], capacity, order.content)
     giantUnits = ceil(Int, volume / capacity)
     minPackSize = minimum(com -> com.size, order.content)
-    return OrderUtils(volume, bpUnits, giantUnits, minPackSize)
+    leadTimeCost = sum(com -> com.leadTimeCost, order.content)
+    return OrderUtils(volume, bpUnits, giantUnits, minPackSize, leadTimeCost)
 end
 
 function Base.:(==)(ord1::Order, ord2::Order)
