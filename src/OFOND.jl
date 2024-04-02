@@ -22,12 +22,12 @@ include("Utils.jl")
 
 # Structures 
 include("Structures/Network.jl")
-include("Structures/TravelTime.jl")
 include("Structures/Bin.jl")
-include("Structures/TimeSpace.jl")
 include("Structures/Commodity.jl")
 include("Structures/Order.jl")
 include("Structures/Bundle.jl")
+include("Structures/TravelTime.jl")
+include("Structures/TimeSpace.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
 
