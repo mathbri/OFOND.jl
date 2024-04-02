@@ -65,10 +65,18 @@ function read_and_add_legs!(networkGraph::NetworkGraph, leg_file::String)
     println("Read $(ne(networkGraph)) legs : $counts \n")
 end
 
+function bundle_hash(row::CSV.Row)
+    return hash(row.supplier_account, hash(row.customer_account))
+end
+
+function order_hash(row::CSV.Row)
+    return hash(row.delivery_time_step, bundle_hash(row))
+end
+
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     orders = Dict{UInt, Order}()
     bundles = Dict{UInt, Bundle}()
-    comCount = 0
+    comCount, comUnique = 0, 0
     allDates = Set{Date}()
     # Reading .csv file
     csv_reader = CSV.File(commodities_file, types=Dict("supplier_account" => String15, "customer_account" => String))
@@ -79,18 +87,16 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         supplierNode = networkGraph[hash(row.supplier_account, :supplier)]
         customerNode = networkGraph[hash(row.customer_account, :plant)]
         # Getting bundle and order
-        bundle = get!(bundles, hash(row.supplier_account, hash(row.customer_account)), Bundle(supplierNode, customerNode, Order[]))
-        orderKey = hash(row.supplier_account, hash(row.customer_account, hash(row.delivery_time_step)))
-        order = get!(orders, orderKey, Order(bundle, row.delivery_time_step, Commodity[]))
+        bundle = get!(bundles, bundle_hash(row), Bundle(supplierNode, customerNode, length(bundles)+1))
+        order = get!(orders, order_hash(row), Order(bundle, row.delivery_time_step))
         # If the order is new we have to add it to the bundle
-        if !haskey(orders, orderKey) 
-            push!(bundle.orders, order) 
-        end
+        haskey(orders, orderKey) || push!(bundle.orders, order) 
         # Creating commodity (to be duplicated)
         commodity = Commodity(order, row.part_number, round(Int, max(1, row.size*100)), row.lead_time_cost)
         # Duplicating commodity by quantity
         append!(order.content, [commodity for _ in 1:row.quantity])
         comCount += row.quantity
+        comUnique += 1
         # Is it a new time step ?
         deliveryDate = Date(row.delivery_date)
         push!(allDates, deliveryDate)
@@ -98,7 +104,7 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     bundleVector = collect(values(bundles))
     # Ordering the time horizon
     dateHorizon = sort(collect(allDates))
-    println("Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities " * 
+    println("Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) " * 
             "on a $(length(dateHorizon)) steps time horizon\n")
     return bundleVector, dateHorizon
 end

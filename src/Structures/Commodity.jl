@@ -5,13 +5,17 @@
 struct Commodity
     order :: Order           # order of the commodity
     partNumber :: String     # part number of the commodity
+    partNumHash :: UInt      # hashing part number for efficient equality comparison
     size :: Int              # size of one package in m3 / 100 
     leadTimeCost :: Float64  # lead time cost of the commodity
 end
 
+function Commodity(order::Order, partNumber::String, size::Int, leadTimeCost::Float64)
+    return Commodity(order, partNumber, hash(partNumber), size, leadTimeCost)
+end
+
 # Methods
 
-# TODO : think about data structures for fast equality computation of objects
 function Base.:(==)(com1::Commodity, com2::Commodity)
     return (com1.order == com2.order) && (ord1.partNumber == ord2.partNumber)
 end
