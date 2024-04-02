@@ -94,6 +94,7 @@ function bin_packing_improvement!(timeSpaceGraph::TimeSpaceGraph; sorted::Bool=f
         # Gathering all commodities
         allCommodities = reduce(vcat, arcBins)
         # Computing new bins
+        # TODO : parrallelize the recomputations with the different heuristics
         newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities, sorted=sorted)
         bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities, sorted=sorted)
         length(newBins) > length(bfdBins) && (newBins = bfdBins)

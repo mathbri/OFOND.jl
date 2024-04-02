@@ -28,6 +28,7 @@ function shortest_delivery_heuristic(instance::Instance)
         custNode = travelTimeUtils.bundleEndNodes[bundleIdx]
         # Computing shortest path
         shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
+        remove_shotcuts!(shortestPath, travelTimeGraph)
         # Adding shortest path to all bundle paths
         push!(bundlePaths, get_path_nodes(shortestPath))
         # Updating the bins for each order of the bundle

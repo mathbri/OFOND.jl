@@ -50,6 +50,7 @@ function greedy_heuristic(instance::Instance)
         update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundleUpdateNodes, bundle, travelTimeUtils.bundleEndNodes[bundleIdx], bundleUtil, timeSpaceUtils)
         # Computing shortest path
         shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
+        remove_shotcuts!(shortestPath, travelTimeGraph)
         # TODO : If path not elementary, dividing opening cot of trucks by 2
         # if !is_path_elementary(shortestPath)
         #     update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)

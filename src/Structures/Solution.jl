@@ -69,6 +69,26 @@ end
 
 # Detect all infeasibility in a solution
 
+# Compute arc cost with respect to the bins on it
+function compute_arc_cost(arcBins::Vector{Bin}, arcData::NetworkArc, destNode::NetworkNode)
+    cost = 0.
+    # Computing useful quantities
+    arcVolume = sum(arcData.capacity - bin.availableCapacity for bin in arcBins) / VOLUME_FACTOR
+    arcLeadTimeCost = sum(sum(commodity.leadTimeCost for commodity in bin) for bin in arcBins)
+    # Node cost 
+    cost += destNode.volumeCost * arcVolume
+    # Transport cost 
+    if arcData.isLinear
+        cost += (arcVolume / arcData.capacity) * arcData.unitCost
+    else
+        cost += length(arcBins) * arcData.unitCost
+    end
+    # Carbon cost 
+    cost += length(arcBins) * arcData.carbonCost
+    # Commodity cost
+    cost += arcData.distance * arcLeadTimeCost
+end
+
 # Compute the cost of a solution : node cost + arc cost + commodity cost
 function compute_cost(solution::Solution)
     totalCost = 0.
@@ -76,23 +96,8 @@ function compute_cost(solution::Solution)
         arcBins = solution.travelTimeGraph.bins[src(arc), dst(arc)]
         # If there is no bins, skipping arc
         length(arcBins) == 0 && continue
-        # Accesing and computing useful informations
-        destNode = solution.travelTimeGraph.networkNodes[dst(arc)]
-        arcData = solution.travelTimeGraph.networkArcs[src(arc), dst(arc)]
-        arcVolume = sum(arcData.capacity - bin.availableCapacity for bin in arcBins) / VOLUME_FACTOR
-        arcLeadTimeCost = sum(sum(commodity.leadTimeCost for commodity in bin) for bin in arcBins)
-        # Node cost 
-        totalCost += destNode.volumeCost * arcVolume
-        # Transport cost 
-        if arcData.isLinear
-            totalCost += (arcVolume / arcData.capacity) * arcData.unitCost
-        else
-            totalCost += length(arcBins) * arcData.unitCost
-        end
-        # Carbon cost 
-        totalCost += length(arcBins) * arcData.carbonCost
-        # Commodity cost
-        totalCost += arcData.distance * arcLeadTimeCost
+        # Arc cost
+        totalCost += compute_arc_cost(arcBins, arcData, destNode)
     end
     return totalCost
 end

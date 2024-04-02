@@ -58,3 +58,20 @@ function update_cost_matrix!(travelTimeUtils::TravelTimeUtils, travelTimeGraph::
         end
     end
 end
+
+function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
+    firstNode = 1
+    for (src, dst) in partition(path, 2, 1)
+        if travelTimeGraph.networkArcs[src, dst].type == :shortcut
+            firstNode += 1
+        else
+            break
+        end
+    end
+    deleteat!(path, 1:(firstNode-1))
+end
+
+function remove_shotcuts!(path::Vector{Edge}, travelTimeGraph::TravelTimeGraph)
+    firstEdge = findfirst(edge -> travelTimeGraph.networkArcs[edge.src, edge.dst].type != :shortcut, path)
+    deleteat!(path, 1:(firstEdge-1))
+end
