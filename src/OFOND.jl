@@ -48,6 +48,7 @@ include("Algorithms/Greedy/greedy.jl")
 # Lower Bound computation and heuristic
 include("Algorithms/Lower Bound/semi_linear_bound.jl") 
 # Local search heuristic
+include("Algorithms/Local Search/ls_utils.jl")
 include("Algorithms/Local Search/bundle_reintroduction.jl")
 include("Algorithms/Local Search/two_node_incremental.jl")
 include("Algorithms/Local Search/local_search.jl")
