@@ -34,20 +34,28 @@ function get_customer(order::Order)
     return order.bundle.customer
 end
 
-function get_transport_units(order::Order, arcData::NetworkArc; giant::Bool=false, force_linear::Bool=false)
-    (arcData.isLinear || force_linear) && return (order.volume / arcData.capacity)
-    giant && return ceil(order.volume / arcData.capacity)
+function get_lb_transport_units(order::Order, arcData::NetworkArc)
+    # If the arc is shared
+    arcData.type != :direct && return (order.volume / arcData.capacity)
+    # If the arc is direct
+    return ceil(order.volume / arcData.capacity)
+end
+
+function get_transport_units(order::Order, arcData::NetworkArc)
+    # If the arc has linear cost
+    arcData.isLinear && return (order.volume / arcData.capacity)
+    # If the arc is consolidated
     return get(order.bpUnits, arcData.type, 0)
 end
 
+# Add useful properties to the order
 function add_properties(order::Order, bin_packing::Function)
     volume = sum(com -> com.size, order.content)
     for arcType in BP_ARC_TYPES
         capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
         bpUnits[arcType] = bin_packing(Bin[], capacity, order.content)
-        giantUnits[arcType] = ceil(Int, volume / capacity)
     end
     minPackSize = minimum(com -> com.size, order.content)
-    leadTimeCost = sum(com -> com.leadTimeCost, order.content)
+    leadTimeCost = sum(com -> get_lead_time_cost(com), order.content)
     return Order(order.bundle, order.deliveryDate, order.content, volume, bpUnits, minPackSize, leadTimeCost)
 end

@@ -73,7 +73,16 @@ function order_hash(row::CSV.Row)
     return hash(row.delivery_time_step, bundle_hash(row))
 end
 
+function com_size(row::CSV.Row)
+    return round(Int, max(1, row.size*100))
+end
+
+function com_data_hash(row::CSV.Row)
+    return hash(row.part_number, hash(com_size(row), hash(row.lead_time_cost)))
+end
+
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
+    comDatas = Dict{UInt, CommodityData}()
     orders = Dict{UInt, Order}()
     bundles = Dict{UInt, Bundle}()
     comCount, comUnique = 0, 0
@@ -86,13 +95,14 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     for (i, row) in enumerate(csv_reader)
         supplierNode = networkGraph[hash(row.supplier_account, :supplier)]
         customerNode = networkGraph[hash(row.customer_account, :plant)]
-        # Getting bundle and order
+        # Getting bundle, order and commodity data
         bundle = get!(bundles, bundle_hash(row), Bundle(supplierNode, customerNode, length(bundles)+1))
         order = get!(orders, order_hash(row), Order(bundle, row.delivery_time_step))
+        comData = get!(comDatas, com_data_hash(row), CommodityData(row.part_number, com_size(row), row.lead_time_cost))
         # If the order is new we have to add it to the bundle
         haskey(orders, orderKey) || push!(bundle.orders, order) 
         # Creating commodity (to be duplicated)
-        commodity = Commodity(order, row.part_number, round(Int, max(1, row.size*100)), row.lead_time_cost)
+        commodity = Commodity(order, comData)
         # Duplicating commodity by quantity
         append!(order.content, [commodity for _ in 1:row.quantity])
         comCount += row.quantity
@@ -101,7 +111,10 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         deliveryDate = Date(row.delivery_date)
         push!(allDates, deliveryDate)
     end
+    # Transforming dictionnaries into vectors
     bundleVector = collect(values(bundles))
+    # Ordering the vector so that the idx field correspond to the actual idx in the vector
+    sort!(bundleVector, by = bundle -> bundle.idx)
     # Ordering the time horizon
     dateHorizon = sort(collect(allDates))
     println("Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) " * 
