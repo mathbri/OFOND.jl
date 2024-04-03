@@ -1,6 +1,7 @@
 # Utils function for local search neighborhoods
 
 # TODO : adapt to multiple removals to avoid recomputaions 
+# TODO : adapt to last changes in greedy utils
 
 # Store previous bins before removing commodities from them
 function save_previous_bins(timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTimeGraph, bundle::Bundle, path::Vector{Int})

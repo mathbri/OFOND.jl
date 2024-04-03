@@ -131,6 +131,7 @@ function update_cost_matrix!(
     end
 end
 
+# Specialized version of the previous for the current cost
 function update_cost_matrix!(
     travelTimeGraph::TravelTimeGraph, 
     timeSpaceGraph::TimeSpaceGraph,
