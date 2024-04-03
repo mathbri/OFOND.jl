@@ -2,19 +2,20 @@
 
 # Time Space Graph
 struct TimeSpaceGraph
-    graph :: DiGraph
+    # Core fields
+    graph :: SimpleDiGraph
     timeHorizon :: Int
     networkNodes :: Vector{NetworkNode}
     timeSteps :: Vector{Int}
     networkArcs :: SparseMatrixCSC{NetworkArc, Int}
     bins :: SparseMatrixCSC{Vector{Bin}, Int}
+    # Properties
     travelTimeLink :: Dict{UInt, Int}                # dict to easily recover nodes from travel time to time space
-end
-
-struct TimeSpaceUtils
     currentCost :: SparseMatrixCSC{Float64, Int}   # used by slope scaling
     binLoads :: SparseMatrixCSC{Vector{Int}, Int}  # bin loads on this arc (used for fastier computation)
 end
+
+# Methods
 
 # TODO : put all major block in functions
 function build_time_space_and_utils(network::NetworkGraph, timeHorizon::Int)
@@ -74,8 +75,16 @@ function time_space_projector(travelTimeGraph::TravelTimeGraph, timeSpaceGraph::
     timeSpaceDate < 1 && timeSpaceDate += timeSpaceGraph.timeHorizon
     # Using travel time link dict to return the right node idx
     return timeSpaceGraph.travelTimeLink[
-        hash(timeSpaceDate, hash(travelTimeGraph.networkNodes[travelTimeNode]))
+        hash(timeSpaceDate, travelTimeGraph.networkNodes[travelTimeNode].hash)
     ]    
+end
+
+# Project a arc of the travel time graph on the time space graph for a specific delivery date 
+function time_space_projector(travelTimeGraph::TravelTimeGraph, timeSpaceGraph::TimeSpaceGraph, travelTimeSource::Int, travelTimeDest::Int, deliveryDate::Int)
+    return (
+        time_space_projector(travelTimeGraph, timeSpaceGraph, travelTimeSource, deliveryDate), 
+        time_space_projector(travelTimeGraph, timeSpaceGraph, travelTimeDest, deliveryDate)
+    )
 end
 
 function is_path_elementary(path::Vector{UInt})
