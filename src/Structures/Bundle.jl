@@ -22,7 +22,7 @@ function Base.hash(bundle::Bundle)
 end
 
 function Base.:(==)(bun1::Bundle, bun2::Bundle)
-    return (bun1.supplier == bun2.supplier) && (bun1.customer == bun2.customer)
+    return bun1.hash == bun2.hash
 end
 
 # Methods

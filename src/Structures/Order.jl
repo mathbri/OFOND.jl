@@ -10,14 +10,13 @@ struct Order
     content :: Vector{Commodity}  # order content in packages
     # Properties
     volume :: Int                 # total volume of the order
-    bpUnits :: Dict{Symbol, Int}  # number of trucks used with ffd loading and base capacity
-    giantUnits :: Dict{Symbol, Int}  # number of trucks used with giant container loading
+    bpUnits :: Dict{Symbol, Int}  # number of trucks used with bin packing function given
     minPackSize :: Int            # size of the smallest commodity in the order
     leadTimeCost :: Float64       # total lead time cost of the order
 end
 
 function Order(bundle::Bundle, deliveryDate::Int)
-    return Order(bundle, deliveryDate, Commodity[], 0, Dict{Symbol, Int}(), Dict{Symbol, Int}(), 0, 0.)
+    return Order(bundle, deliveryDate, Commodity[], 0, Dict{Symbol, Int}(), 0, 0.)
 end
 
 
@@ -35,9 +34,9 @@ function get_customer(order::Order)
     return order.bundle.customer
 end
 
-function get_transport_units(order::Order, arcData::NetworkArc, giant::Bool=false)
-    arcData.isLinear && return (order.volume / arcData.capacity)
-    giant && return get(order.giantUnits, arcData.type, 0)
+function get_transport_units(order::Order, arcData::NetworkArc; giant::Bool=false, force_linear::Bool=false)
+    (arcData.isLinear || force_linear) && return (order.volume / arcData.capacity)
+    giant && return ceil(order.volume / arcData.capacity)
     return get(order.bpUnits, arcData.type, 0)
 end
 
@@ -50,5 +49,5 @@ function add_properties(order::Order, bin_packing::Function)
     end
     minPackSize = minimum(com -> com.size, order.content)
     leadTimeCost = sum(com -> com.leadTimeCost, order.content)
-    return Order(order.bundle, order.deliveryDate, order.content, volume, bpUnits, giantUnits, minPackSize, leadTimeCost)
+    return Order(order.bundle, order.deliveryDate, order.content, volume, bpUnits, minPackSize, leadTimeCost)
 end
