@@ -2,15 +2,15 @@
 
 # TODO : a lot of commodities so maybe use the most lightwieght data structures like string15 and Int8 if memory problems occurs
 struct CommodityData
-    partNumber :: String     # part number of the commodity
-    size :: Int              # size of one package in m3 / 100 
-    leadTimeCost :: Float64  # lead time cost of the commodity
+    partNumber::String     # part number of the commodity
+    size::Int              # size of one package in m3 / 100 
+    leadTimeCost::Float64  # lead time cost of the commodity
 end
 
 struct Commodity
-    order :: Order         # order of the commodity
-    partNumHash :: UInt    # hashing part number for efficient equality comparison
-    data :: CommodityData  # (shared) data of the commodity
+    order::Order         # order of the commodity
+    partNumHash::UInt    # hashing part number for efficient equality comparison
+    data::CommodityData  # (shared) data of the commodity
 end
 
 function Commodity(order::Order, data::CommodityData)

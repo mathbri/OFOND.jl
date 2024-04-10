@@ -1,20 +1,19 @@
 # Bundle structure (group of orders with the same origin and destination)
 
-# TODO : fuse objects and utils and try at best to put utils at the object level (like idx that is widely used afterall) 
-
 struct Bundle
     # Core fields
-    supplier :: NetworkNode  # supplier node
-    customer :: NetworkNode  # customer node
-    orders :: Vector{Order}  # vector of order
+    supplier::NetworkNode  # supplier node
+    customer::NetworkNode  # customer node
+    orders::Vector{Order}  # vector of order
     # Properties
-    idx :: Int               # index in the instance vector (fast and easy retrieval of informations)
-    hash :: UInt             # hash of the bundle (fast and easy retrieval of informations)
-    maxPackSize :: Int       # size of the largest commodity in the bundle
+    idx::Int               # index in the instance vector (fast and easy retrieval of informations)
+    hash::UInt             # hash of the bundle (fast and easy retrieval of informations)
+    maxPackSize::Int       # size of the largest commodity in the bundle
+    maxDelTime::Int        # maximum number of steps for delivery authorized
 end
 
 function Bundle(supplier::NetworkNode, customer::NetworkNode, idx::Int)
-    return Bundle(supplier, customer, Order[], idx, hash(supplier, hash(customer)), 0)
+    return Bundle(supplier, customer, Order[], idx, hash(supplier, hash(customer)), 0, 0)
 end
 
 function Base.hash(bundle::Bundle)
@@ -27,7 +26,17 @@ end
 
 # Methods
 
-function add_properties(bundle::Bundle)
+# TODO : like travel and time space creation, maybe a need to put this into another file to have structures defines before the function itself
+function add_properties(bundle::Bundle, network::NetworkGraph)
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
-    return Bundle(bundle.supplier, bundle.customer, bundle.orders, bundle.idx, bundle.hash, maxPackSize)
+    maxDelTime = 1 + network.graph[suppHash, custHash].travelTime
+    return Bundle(
+        bundle.supplier,
+        bundle.customer,
+        bundle.orders,
+        bundle.idx,
+        bundle.hash,
+        maxPackSize,
+        maxDelTime,
+    )
 end

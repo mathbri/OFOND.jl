@@ -5,25 +5,25 @@
 
 struct Order
     # Core fields
-    bundle :: Bundle              # bundle to which the order belongs
-    deliveryDate :: Int           # delivery date index in instance time horizon
-    content :: Vector{Commodity}  # order content in packages
+    bundle::Bundle              # bundle to which the order belongs
+    deliveryDate::Int           # delivery date index in instance time horizon
+    content::Vector{Commodity}  # order content in packages
     # Properties
-    volume :: Int                 # total volume of the order
-    bpUnits :: Dict{Symbol, Int}  # number of trucks used with bin packing function given
-    minPackSize :: Int            # size of the smallest commodity in the order
-    leadTimeCost :: Float64       # total lead time cost of the order
+    volume::Int                 # total volume of the order
+    bpUnits::Dict{Symbol,Int}  # number of trucks used with bin packing function given
+    minPackSize::Int            # size of the smallest commodity in the order
+    leadTimeCost::Float64       # total lead time cost of the order
 end
 
 function Order(bundle::Bundle, deliveryDate::Int)
-    return Order(bundle, deliveryDate, Commodity[], 0, Dict{Symbol, Int}(), 0, 0.)
+    return Order(bundle, deliveryDate, Commodity[], 0, Dict{Symbol,Int}(), 0, 0.0)
 end
-
 
 # Methods
 
 function Base.:(==)(ord1::Order, ord2::Order)
-    return (ord1.bundle.hash == ord2.bundle.hash) && (ord1.deliveryDate == ord2.deliveryDate)
+    return (ord1.bundle.hash == ord2.bundle.hash) &&
+           (ord1.deliveryDate == ord2.deliveryDate)
 end
 
 function get_supplier(order::Order)
@@ -57,5 +57,13 @@ function add_properties(order::Order, bin_packing::Function)
     end
     minPackSize = minimum(com -> com.size, order.content)
     leadTimeCost = sum(com -> get_lead_time_cost(com), order.content)
-    return Order(order.bundle, order.deliveryDate, order.content, volume, bpUnits, minPackSize, leadTimeCost)
+    return Order(
+        order.bundle,
+        order.deliveryDate,
+        order.content,
+        volume,
+        bpUnits,
+        minPackSize,
+        leadTimeCost,
+    )
 end
