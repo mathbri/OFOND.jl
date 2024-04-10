@@ -2,121 +2,218 @@
 
 # TODO : change name to delivery graph to avoid confusion with arc travel times ?
 
-# TODO : add field description
 # Travel Time Graph
 struct TravelTimeGraph
-    graph :: DiGraph
-    networkNodes :: Vector{NetworkNode}
-    networkArcs :: SparseMatrixCSC{NetworkArc, Int}
-    stepToDel :: Vector{Int}
+    # Core fields
+    graph::SimpleDiGraph # graph structure
+    networkNodes::Vector{NetworkNode} # nodes data
+    networkArcs::SparseMatrixCSC{NetworkArc,Int} # arcs data 
+    stepToDel::Vector{Int} # nodes time step until delivery step
+    # Properties
+    costMatrix::SparseMatrixCSC{Float64,Int} # cost matrix used for path computation
+    commonNodes::Vector{Int} # common nodes of the graph
+    bundleStartNodes::Vector{Int} # start nodes for bundles
+    bundleEndNodes::Vector{Int} # end nodes for bundles
+    hashToIdx::Dict{UInt,Int} # dict to easily recover nodes from time space to travel time
 end
 
-struct TravelTimeUtils
-    costMatrix :: SparseMatrixCSC{Float64, Int}
-    commonNodes :: Vector{Int}
-    bundleStartNodes :: Vector{Int}
-    bundleEndNodes :: Vector{Int}
-    bundlesOnNode :: Dict{Int, Vector{Bundle}} 
+function TravelTimeGraph()
+    return TravelTimeGraph(
+        SimpleDiGraph(),
+        NetworkNode[],
+        SparseMatrixCSC{NetworkArc,Int}(),
+        Int[],
+        sparse(zeros(Float64, 0, 0)),
+        Int[],
+        Int[],
+        Int[],
+        Dict{UInt,Int}(),
+    )
 end
 
-# For networkNodes and networkArcs creation : pre-allocating memory (or pushing) stores only a shallow copy of objects 
+function TravelTimeGraph(
+    travelTimeGraph::TravelTimeGraph,
+    I::Vector{Int},
+    J::Vector{Int},
+    arcs::Vector{NetworkArc},
+    costs::Vector{Float64},
+)
+    return TravelTimeGraph(
+        travelTimeGraph.graph,
+        travelTimeGraph.networkNodes,
+        sparse(I, J, arcs),
+        travelTimeGraph.stepToDel,
+        sparse(I, J, costs),
+        travelTimeUtils.commonNodes,
+        travelTimeUtils.bundleStartNodes,
+        travelTimeUtils.bundleEndNodes,
+        travelTimeUtils.bundleOnNodes,
+    )
+end
 
 # Methods
 
-# TODO : put all major block in functions
-function build_travel_time_and_utils(network::NetworkGraph, bundles::Vector{Bundle})
-    # Computing for each node which bundles starts and which bundles end at this node 
-    bundlesOnSupplier = Dict{UInt, Vector{Bundle}}()
-    bundlesOnCustomer = Dict{UInt, Vector{Bundle}}()
-    bundlesMaxDelTime = Dict{UInt, Int}()
-    bundleIndexes = Dict{UInt, Int}()
-    for (idx, bundle) in enumerate(bundles)
+function get_bundle_on_supp_cust(bundles::Vector{Bundle})
+    bundlesOnSupplier = Dict{UInt,Vector{Bundle}}()
+    bundlesOnCustomer = Dict{UInt,Vector{Bundle}}()
+    for bundle in bundles
         suppHash = hash(bundle.supplier)
-        supplierBundles = get!(bundlesOnSupplier, suppHash, Bundle[])
+        supplierBundles = get!(bundlesOnSupplier, suppHash, Int[])
         push!(supplierBundles, bundle)
         custHash = hash(bundle.customer)
-        customerBundles = get!(bundlesOnCustomer, custHash, Bundle[])
+        customerBundles = get!(bundlesOnCustomer, custHash, Int[])
         push!(customerBundles, bundle)
-        bundleMaxTime[hash(bundle)] = 1 + network[suppHash, custHash].travelTime
-        bundlesIndexes[hash(bundle)] = idx
     end
-    overallMaxDelTime = maximum(values(bundleMaxTime))
-    # Initializing structures
-    travelTimeGraph = TravelTimeGraph(DiGraph(), NetworkNode[], sparse(zeros(Int, 0, 0)), Int[])
-    travelTimeUtils = TravelTimeUtils(sparse(zeros(Float64, 0, 0)), Int[], zeros(Int, length(bundles)), zeros(Int, length(bundles)), Dict{Int, Vector{Bundle}}())
+    return bundlesOnSupplier, bundlesOnCustomer
+end
+
+function get_node_extra_copies(
+    nodeData::NetworkNode, bundlesOnSupplier::Dict{UInt,Vector{Bundle}}, maxTime::Int
+)
+    if nodeData.type == :plant
+        return 0
+    elseif nodeData.type == :supplier
+        return maximum(bundle -> bundle.maxDelTime, bundlesOnSupplier[nodeHash]) - 1
+    else
+        return maxTime - 1
+    end
+end
+
+function add_timed_node!(
+    travelTimeGraph::TravelTimeGraph, nodeData::NetworkNode, stepToDel::Int
+)
+    add_vertex!(travelTimeGraph.graph)
+    push!(travelTimeGraph.networkNodes, nodeData)
+    return push!(travelTimeGraph.stepToDel, stepToDel)
+end
+
+function add_timed_supplier!(
+    travelTimeGraph::TravelTimeGraph,
+    nodeData::NetworkNode,
+    stepToDel::Int,
+    bundlesOnSupplier::Dict{UInt,Vector{Bundle}},
+)
+    add_timed_node!(travelTimeGraph, nodeData, stepToDel)
+    nodeIdx = nv(travelTimeGraph.graph)
+    startOnNode = filter(
+        bundle -> bundle.maxDelTime == stepToDel, bundlesOnSupplier[nodeData.hash]
+    )
+    for bundle in startOnNode
+        travelTimeGraph.bundleStartNodes[bundle.idx] = nodeIdx
+    end
+end
+
+function add_timed_customer!(
+    travelTimeGraph::TravelTimeGraph,
+    nodeData::NetworkNode,
+    stepToDel::Int,
+    bundlesOnCustomer::Dict{UInt,Vector{Bundle}},
+)
+    add_timed_node!(travelTimeGraph, nodeData, stepToDel)
+    nodeIdx = nv(travelTimeGraph.graph)
+    for (h, bundle) in bundlesOnCustomer
+        travelTimeGraph.bundleEndNodes[bundle.idx] = nodeIdx
+    end
+end
+
+function add_timed_platform!(
+    travelTimeGraph::TravelTimeGraph, nodeData::NetworkNode, stepToDel::Int
+)
+    add_timed_node!(travelTimeGraph, nodeData, stepToDel)
+    return push!(travelTimeGraph.commonNodes, nv(travelTimeGraph.graph))
+end
+
+function add_network_node!(
+    travelTimeGraph::TravelTimeGraph,
+    nodeData::NetworkNode,
+    bundlesOnSupplier::Dict{UInt,Vector{Bundle}},
+    bundlesOnCustomer::Dict{UInt,Vector{Bundle}},
+    maxTime::Int,
+)
+    # Computing the number of times we have to add a timed copy of the node 
+    # plant = 0, suppliers = max of bundle del time, platforms = overall max del time (done with init cond in max)
+    nodeExtraCopies = get_node_extra_copies(nodeData, bundlesOnSupplier, maxTime)
+    for stepToDel in 0:nodeExtraCopies
+        if nodeData.type == :supplier
+            add_timed_supplier!(travelTimeGraph, nodeData, stepToDel, bundlesOnSupplier)
+        elseif nodeData.type == :plant
+            add_timed_customer!(travelTimeGraph, nodeData, stepToDel, bundlesOnCustomer)
+        else
+            add_timed_platform!(travelTimeGraph, nodeData, stepToDel)
+        end
+    end
+end
+
+function add_arc_to_vectors!(
+    vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
+    travelTimeGraph::TravelTimeGraph,
+    sourceNodeIdx::Int,
+    destNodeIdx::Int,
+    arcData::NetworkArc,
+)
+    if travelTimeGraph.stepToDel[sourceNodeIdx] - arcData.travelTime ==
+        travelTimeGraph.stepToDel[destNodeIdx]
+        I, J, arcs, costs = vectors
+        push!(I, sourceNodeIdx)
+        push!(J, destNodeIdx)
+        push!(arcs, arcData)
+        push!(costs, EPS)
+    end
+end
+
+function add_arc_and_shortcut!(
+    vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
+    travelTimeGraph::TravelTimeGraph,
+    sourceNodeIdxs::Vector{Int},
+    destNodeIdxs::Vector{Int},
+    arcData::NetworkArc,
+)
+    # I add an arc when source step to del - arc travel time = dest step to del
+    for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in destNodeIdxs
+        add_arc_to_vectors!(vectors, travelTimeGraph, sourceNodeIdx, destNodeIdx, arcData)
+    end
+    # Also add shortcut
+    arcData = NetworkArc(:shortcut, EPS, 1, false, 0.0, false, 0.0, 0)
+    for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in sourceNodeIdxs
+        add_arc_to_vectors!(vectors, travelTimeGraph, sourceNodeIdx, destNodeIdx, arcData)
+    end
+end
+
+# TODO : put all major block in functions
+function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
+    # Computing for each node which bundles starts and which bundles end at this node 
+    bundlesOnSupplier, bundlesOnCustomer = get_bundle_on_supp_cust(bundles)
+    maxTime = maximum(bundle -> bundle.maxDelTime, bundles)
+    # Initializing structure
+    travelTimeGraph = TravelTimeGraph()
     # Adding all nodes from the network graph
     for nodeHash in labels(network)
         nodeData = network[nodeHash]
-        # Computing the number of times we have to add a timed copy of the node 
-        # plant = 0, suppliers = max of bundle del time, platforms = overall max del time (done with init cond in max)
-        nodeExtraCopies = nodeData.type == :plant ? 0 : maximum(bundleMaxTime[hash(bundle)] for bundle in bundlesOnSupplier[nodeHash], init=overallMaxDelTime) - 1
-        for stepToDel in 0:nodeExtraCopies
-            # Adding timed copy to the graph
-            add_vertex!(travelTimeGraph.graph)
-            nodeIdx = nv(travelTimeGraph.graph)
-            push!(travelTimeGraph.networkNodes, nodeData)
-            push!(travelTimeGraph.stepToDel, stepToDel)
-            # if supplier, checking if bundles with maxDelTime corresponds
-            if nodeData.type == :supplier
-                startOnNode = filter(bundle -> bundleMaxTime[hash(bundle)] == stepToDel, bundlesOnSupplier[nodeHash])
-                for bundle in startOnNode
-                    travelTimeUtils.bundleStartNodes[bundleIndexes[hash(bundle)]] = nodeIdx
-                end
-                continue
-            end
-            # if plant, adding corresponding bundles
-            if nodeData.type == :plant
-                for bundle in bundlesOnSupplier[nodeHash]
-                    travelTimeUtils.bundleEndNodes[bundleIndexes[hash(bundle)]] = nodeIdx
-                end
-                continue
-            end
-            # else its a platform, adding to common nodes
-            push!(travelTimeUtils.commonNodes, nodeIdx)
-        end
+        add_network_node!(
+            travelTimeGraph, nodeData, bundlesOnSupplier, bundlesOnCustomer, maxTime
+        )
     end
     # Initializing vectors for sparse matrices
-    I, J = Int[], Int[]
-    arcs, costs = NetworkArc[], Float64[]
+    I, J, arcs, costs = Int[], Int[], NetworkArc[], Float64[]
     nodesHash = hash.(travelTimeGraph.networkNodes)
     # Adding all arcs form the network graph
     for (sourceHash, destHash) in edge_labels(network)
         arcData = network[sourceHash, destHash]
         # I get all source node copies and dest node copies (via hash)
-        sourceNodeIdxs = findall(nodeHash -> nodeHash == sourceHash, nodesHash)
-        destNodeIdxs = findall(nodeHash -> nodeHash == destHash, nodesHash)
-        # I add an arc when source step to del - arc travel time = dest step to del
-        for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in destNodeIdxs
-            if travelTimeGraph.stepToDel[sourceNodeIdx] - arcData.travelTime == travelTimeGraph.stepToDel[destNodeIdx]
-                push!(I, sourceNodeIdx)
-                push!(J, destNodeIdx)
-                push!(arcs, arcData)
-                push!(costs, EPS)
-            end
-        end
-        # Also add shortcut
-        for sourceNodeIdx1 in sourceNodeIdxs, sourceNodeIdx2 in sourceNodeIdxs
-            if travelTimeGraph.stepToDel[sourceNodeIdx1] - 1 == travelTimeGraph.stepToDel[sourceNodeIdx2]
-                push!(I, sourceNodeIdx1)
-                push!(J, sourceNodeIdx2)
-                push!(arcs, NetworkArc(:shortcut, EPS, 1, false, 0., false, 0., 0))
-                push!(costs, EPS)
-            end
-        end
+        sourceNodeIdxs = findall(h -> h == sourceHash, nodesHash)
+        destNodeIdxs = findall(h -> h == destHash, nodesHash)
+        add_arc_and_shortcut!(
+            (I, J, arcs, costs), travelTimeGraph, sourceNodeIdxs, destNodeIdxs, arcData
+        )
     end
-    # Building sparse matrix
-    arcMatrix = sparse(I, J, arcs)
-    costMatrix = sparse(I, J, costs)
-    # Creating final structures
-    finalTravelTime = TravelTimeGraph(travelTimeGraph.graph, travelTimeGraph.networkNodes, arcMatrix, travelTimeGraph.stepToDel)
-    finalTravelTimeUtils = TravelTimeUtils(costMatrix, travelTimeUtils.commonNodes, travelTimeUtils.bundleStartNodes, travelTimeUtils.bundleEndNodes, travelTimeUtils.bundleOnNodes)
-    return finalTravelTime, finalTravelTimeUtils
+    # Creating final structures (because of sparse matrices)
+    return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
 end
 
 function is_path_elementary(path::Vector{UInt})
     if length(path) >= 4
         for (nodeIdx, nodeHash) in enumerate(path)
-            if nodeHash in path[nodeIdx+1:end]
+            if nodeHash in path[(nodeIdx + 1):end]
                 # println("Non elementary path found : $path")
                 return false
             end
@@ -125,94 +222,82 @@ function is_path_elementary(path::Vector{UInt})
     return true
 end
 
-# TODO : adapt from here
+# Project a node of the time space graph on the travel time graph for a specific bundle
+# Returns a vector of travel-time node for corresponding orders in the bundle, -1 of no corresponding node for the order
+# function travel_time_projector(
+#     travelTimeGraph::TravelTimeGraph,
+#     timeSpaceGraph::TimeSpaceGraph,
+#     timeSpaceNode::Int,
+#     bundle::Bundle,
+# )
+#     travelTimeNodes = Vector{Int}(undef, length(bundle.orders))
+#     timeSpaceStep = timeSpaceGraph.timeSteps[timeSpaceNode]
+#     # For each order of the bundle, computing the steps to delivery to know which travel time node should be used for the order
+#     for (idx, order) in enumerate(bundle.orders)
+#         stepToDel = order.deliveryDate - timeSpaceStep
+#         # If the step to delivery is negative, adding the time horizon to it
+#         stepToDel < 0 && (stepToDel += timeSpaceGraph.timeHorizon)
+#         # If the step to delivery is greater than the max delivery time of the bundle, return -1
+#         stepToDel > order.deliveryDate && (travelTimeNodes[idx] = -1; continue)
+#         # Using time space link dict to return the right node idx
+#         travelTimeNodes[idx] = travelTimeGraph.timeSpaceLink[hash(
+#             stepToDel, timeSpaceGraph.networkNodes[timeSpaceNode].hash
+#         )]
+#     end
+#     return travelTimeNodes
+# end
 
-# Add node to the travel time graph
-function add_node!(travelTimeGraph::TravelTimeGraph, node::TravelTimeNode)
-    
+# function travel_time_projector(
+#     travelTimeGraph::TravelTimeGraph,
+#     timeSpaceGraph::TimeSpaceGraph,
+#     timeSpaceSource::Int,
+#     timeSpaceDest::Int,
+#     bundle::Bundle,
+# )
+#     return (
+#         travel_time_projector(travelTimeGraph, timeSpaceGraph, timeSpaceSource, bundle),
+#         travel_time_projector(travelTimeGraph, timeSpaceGraph, timeSpaceDest, bundle),
+#     )
+# end
+
+function get_node_step_to_delivery(
+    timeSpaceGraph::TimeSpaceGraph, timeSpaceNode::Int, order::Order
+)
+    # Computing the steps to delivery to know which travel time node should be used for the order
+    stepToDel = order.deliveryDate - timeSpaceGraph.timeSteps[timeSpaceNode]
+    # If the step to delivery is negative, adding the time horizon to it
+    stepToDel < 0 && (stepToDel += timeSpaceGraph.timeHorizon)
+    return stepToDel
 end
 
-# Add arc to the travel time graph
-function add_arc!(travelTimeGraph::TravelTimeGraph, source::TravelTimeNode, destination::TravelTimeNode, cost::Float64)
-    
+# Project a node of the time space graph on the travel time graph for a specific order
+# return -1 if the node time step is after the order delivery date or if the step to delivery is greater than the maximum delivery time 
+function travel_time_projector(
+    travelTimeGraph::TravelTimeGraph,
+    timeSpaceGraph::TimeSpaceGraph,
+    timeSpaceNode::Int,
+    order::Order,
+)
+    # If the time step is after the order delivery date, return -1
+    timeSpaceGraph.timeSteps[timeSpaceNode] > order.deliveryDate && return -1
+    # If the step to delivery is greater than the max delivery time, return -1
+    stepToDel = get_node_step_to_delivery(timeSpaceGraph, timeSpaceNode, order)
+    stepToDel > order.bundle.maxDeliveryTime && return -1
+    # Using time space link dict to return the right node idx
+    return travelTimeGraph.hashToIdx[hash(
+        stepToDel, timeSpaceGraph.networkNodes[timeSpaceNode].hash
+    )]
 end
 
-# Create travel-time graph from network graph
-function TravelTimeGraph(network::NetworkGraph)
-    # Computing time horizon of the travel time graph
-    maxDelTime = maximum(arcLabel -> network[arcLabel].travelTime, values(edge_labels(network)))
-    # Buidling empty MetaGraph with only free legs (they will be updated for each bundle)
-    travelTimeGraph = TravelTimeGraph(maxDelTime)
-    println("Building travel time graph...")
-    # Adding timed copies of nodes
-    for nodeHash in labels(network)
-        nodeData = network[nodeHash]
-        for stepToDel in 0:maxDelTime
-            # TODO : make shallow copy of nodeData data through a custom constructor
-            ttNode = TravelTimeNode(nodeData.account, nodeData.type, stepToDel, nodeData.isCommon)
-            travelTimeGraph[hash(ttNode)] = ttNode
-            @assert hash(ttNode) == hash(stepToDel, hash(nodeData))
-            # For plants, adding it only on the last time step
-            if nodeData.type == PLANT; break end
-        end
-        # Adding shortcut legs between supplier copies t+1 -> t
-        for (destStep, sourceStep) in partition(0:maxDelTime, 2, 1)
-            sourceHash, destHash = hash(sourceStep, nodeHash), hash(destStep, nodeHash)
-            travelTimeGraph[sourceHash, destHash] = EPS
-        end
-    end
-    # Adding all legs 
-    for (sourceHash, destHash) in edge_labels(network)
-        arcData = network[sourceHash, destHash]
-        # For delivery arcs, adding only to delivery step
-        if arcData.type == DELIVERY
-            ttSourceHash, ttDestHash = hash(0, sourceHash), hash(arcData.travelTime, destHash)
-            travelTimeGraph[ttSourceHash, ttDestHash] = EPS
-        end
-        # Linking (node, t) with (node, t + travelTime) for every possible step
-        for sourceStep in maxDelTime:-1:(1 + arcData.travelTime)
-            ttSourceHash = hash(sourceStep, sourceHash)
-            ttDestHash = hash(sourceStep + arcData.travelTime, destHash)
-            travelTimeGraph[ttSourceHash, ttDestHash] = EPS
-        end
-    end
-    # Also return the start / end node for each bundle
-    return travelTimeGraph
-end
-
-# Extract common nodes list from the travel-time graph
-function extract_common_nodes(travelTimeGraph::TravelTimeGraph)
-    # Storing common nodes
-    commonNodes = Int[]
-    maxDelTime = travelTimeGraph[]
-    # For each node, adding it to common nodes if it is common
-    for nodeHash in labels(travelTimeGraph)
-        nodeData = travelTimeGraph[nodeHash]
-        # For points not tagged as common in the network, skipping
-        if !(nodeData.isCommon); continue end
-        # For common points, adding all their timed copies
-        for stepToDel in 0:maxDelTime
-            push!(travelTimeCommonNodes, code_for(hash(stepToDel, nodeHash)))
-        end
-    end
-    return commonNodes
-end
-
-# Restrict the travel-time graph to a fixed amount of delivery steps (typically bundle.directArc.travelTime, + 1 for flexibility)
-function restrict_bundle_travel_time(bundleGraph::TravelTimeGraph, maxDelTime::Int)
-    nodesToExtract = Int[]
-    # Adding timed copies of nodes from 0 to maxDelTime 
-    for nodeHash in labels(bundleGraph)
-        nodeData = bundleGraph[nodeHash]
-        if nodeData.stepsToDelivery > maxDelTime; continue end
-        # If the timed copy is within range, adding it to nodes extracted
-        push!(nodesToExtract, code_for(nodeHash))
-    end
-    # Returning induced subgraph
-    return induced_subgraph(bundleGraph, nodesToExtract)
-end
-
-# Compute for each bundle the maximum delivery time allowed (for now : direct time + 1 week)
-function get_max_delivery_time(network::NetworkGraph)
-    
+function travel_time_projector(
+    travelTimeGraph::TravelTimeGraph,
+    timeSpaceGraph::TimeSpaceGraph,
+    timeSpaceSource::Int,
+    timeSpaceDest::Int,
+    order::Order,
+)
+    return (
+        travel_time_projector(travelTimeGraph, timeSpaceGraph, timeSpaceSource, order),
+        travel_time_projector(travelTimeGraph, timeSpaceGraph, timeSpaceDest, order),
+    )
 end
