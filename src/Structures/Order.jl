@@ -34,20 +34,6 @@ function get_customer(order::Order)
     return order.bundle.customer
 end
 
-function get_lb_transport_units(order::Order, arcData::NetworkArc)
-    # If the arc is shared
-    arcData.type != :direct && return (order.volume / arcData.capacity)
-    # If the arc is direct
-    return ceil(order.volume / arcData.capacity)
-end
-
-function get_transport_units(order::Order, arcData::NetworkArc)
-    # If the arc has linear cost
-    arcData.isLinear && return (order.volume / arcData.capacity)
-    # If the arc is consolidated
-    return get(order.bpUnits, arcData.type, 0)
-end
-
 # Add useful properties to the order
 function add_properties(order::Order, bin_packing::Function)
     volume = sum(com -> com.size, order.content)

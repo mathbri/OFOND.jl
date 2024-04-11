@@ -18,7 +18,7 @@ using SparseArrays
 # Project files
 
 include("Constants.jl")
-include("Utils.jl")
+include("utils.jl")
 
 # Structures 
 include("Structures/Network.jl")
@@ -30,6 +30,7 @@ include("Structures/TravelTime.jl")
 include("Structures/TimeSpace.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
+include("Structures/struct_utils.jl")
 
 # Import and Export of data
 include("Reading/read_instance.jl")
@@ -46,7 +47,7 @@ include("Algorithms/Benchmark/average_delivery.jl")
 include("Algorithms/Greedy/greedy_utils.jl")
 include("Algorithms/Greedy/greedy.jl")
 # Lower Bound computation and heuristic
-include("Algorithms/Lower Bound/semi_linear_bound.jl") 
+include("Algorithms/Lower Bound/semi_linear_bound.jl")
 # Local search heuristic
 include("Algorithms/Local Search/ls_utils.jl")
 include("Algorithms/Local Search/bundle_reintroduction.jl")
