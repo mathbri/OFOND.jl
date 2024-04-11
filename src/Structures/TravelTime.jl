@@ -101,6 +101,7 @@ function add_timed_supplier!(
     for bundle in startOnNode
         travelTimeGraph.bundleStartNodes[bundle.idx] = nodeIdx
     end
+    return travelTimeGraph.hashToIdx[hash(stepToDel, nodeData.hash)] = nodeIdx
 end
 
 function add_timed_customer!(
@@ -144,42 +145,51 @@ function add_network_node!(
     end
 end
 
+function add_network_arc!(
+    travelTimeGraph::TravelTimeGraph,
+    srcData::NetworkNode,
+    dstData::NetworkNode,
+    arcData::NetworkArc,
+)
+    maxTime = maximum(travelTimeGraph.stepToDel)
+    for stepToDel in 0:maxTime
+        # Adding timed copy of network arc
+        src = get(travelTimeGraph.hashToIdx, hash(stepToDel, srcData.hash), nothing)
+        dst = get(
+            travelTimeGraph.hashToIdx,
+            hash(stepToDel - arcData.travelTime, dstData.hash),
+            nothing,
+        )
+        if src !== nothing && dst !== nothing
+            add_edge!(travelTimeGraph.graph, src, dst)
+        end
+    end
+end
+
 function add_arc_to_vectors!(
     vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
     travelTimeGraph::TravelTimeGraph,
-    sourceNodeIdx::Int,
-    destNodeIdx::Int,
     arcData::NetworkArc,
 )
-    if travelTimeGraph.stepToDel[sourceNodeIdx] - arcData.travelTime ==
-        travelTimeGraph.stepToDel[destNodeIdx]
-        I, J, arcs, costs = vectors
-        push!(I, sourceNodeIdx)
-        push!(J, destNodeIdx)
-        push!(arcs, arcData)
-        push!(costs, EPS)
+    maxTime = maximum(travelTimeGraph.stepToDel)
+    for stepToDel in 0:maxTime
+        # Adding timed copy of network arc
+        src = get(travelTimeGraph.hashToIdx, hash(stepToDel, srcData.hash), nothing)
+        dst = get(
+            travelTimeGraph.hashToIdx,
+            hash(stepToDel - arcData.travelTime, dstData.hash),
+            nothing,
+        )
+        if src !== nothing && dst !== nothing
+            I, J, arcs, costs = vectors
+            push!(I, src)
+            push!(J, dst)
+            push!(arcs, arcData)
+            push!(costs, EPS)
+        end
     end
 end
 
-function add_arc_and_shortcut!(
-    vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
-    travelTimeGraph::TravelTimeGraph,
-    sourceNodeIdxs::Vector{Int},
-    destNodeIdxs::Vector{Int},
-    arcData::NetworkArc,
-)
-    # I add an arc when source step to del - arc travel time = dest step to del
-    for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in destNodeIdxs
-        add_arc_to_vectors!(vectors, travelTimeGraph, sourceNodeIdx, destNodeIdx, arcData)
-    end
-    # Also add shortcut
-    arcData = NetworkArc(:shortcut, EPS, 1, false, 0.0, false, 0.0, 0)
-    for sourceNodeIdx in sourceNodeIdxs, destNodeIdx in sourceNodeIdxs
-        add_arc_to_vectors!(vectors, travelTimeGraph, sourceNodeIdx, destNodeIdx, arcData)
-    end
-end
-
-# TODO : put all major block in functions
 function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
     # Computing for each node which bundles starts and which bundles end at this node 
     bundlesOnSupplier, bundlesOnCustomer = get_bundle_on_supp_cust(bundles)
@@ -195,16 +205,13 @@ function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
     end
     # Initializing vectors for sparse matrices
     I, J, arcs, costs = Int[], Int[], NetworkArc[], Float64[]
-    nodesHash = hash.(travelTimeGraph.networkNodes)
     # Adding all arcs form the network graph
-    for (sourceHash, destHash) in edge_labels(network)
-        arcData = network[sourceHash, destHash]
-        # I get all source node copies and dest node copies (via hash)
-        sourceNodeIdxs = findall(h -> h == sourceHash, nodesHash)
-        destNodeIdxs = findall(h -> h == destHash, nodesHash)
-        add_arc_and_shortcut!(
-            (I, J, arcs, costs), travelTimeGraph, sourceNodeIdxs, destNodeIdxs, arcData
-        )
+    for (srcHash, dstHash) in edge_labels(network)
+        srcData, dstData, arcData = network[srcHash],
+        network[dstHash],
+        network[srcHash, dstHash]
+        add_network_arc!(travelTimeGraph, srcData, dstData, arcData)
+        add_arc_to_vectors!((I, J, arcs, costs), travelTimeGraph, arcData)
     end
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
