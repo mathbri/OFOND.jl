@@ -53,18 +53,15 @@ end
 
 # Methods
 
-function get_bundle_on_supp_cust(bundles::Vector{Bundle})
-    bundlesOnSupplier = Dict{UInt,Vector{Bundle}}()
-    bundlesOnCustomer = Dict{UInt,Vector{Bundle}}()
+function get_bundle_on_nodes(bundles::Vector{Bundle})
+    bundlesOnNodes = Dict{UInt,Vector{Bundle}}()
     for bundle in bundles
-        suppHash = hash(bundle.supplier)
-        supplierBundles = get!(bundlesOnSupplier, suppHash, Int[])
+        supplierBundles = get!(bundlesOnNodes, bundle.supplier.hash, Bundle[])
         push!(supplierBundles, bundle)
-        custHash = hash(bundle.customer)
-        customerBundles = get!(bundlesOnCustomer, custHash, Int[])
+        customerBundles = get!(bundlesOnNodes, bundle.customer.hash, Bundle[])
         push!(customerBundles, bundle)
     end
-    return bundlesOnSupplier, bundlesOnCustomer
+    return bundlesOnNodes
 end
 
 function get_node_extra_copies(
@@ -127,18 +124,19 @@ end
 function add_network_node!(
     travelTimeGraph::TravelTimeGraph,
     nodeData::NetworkNode,
-    bundlesOnSupplier::Dict{UInt,Vector{Bundle}},
-    bundlesOnCustomer::Dict{UInt,Vector{Bundle}},
-    maxTime::Int,
+    bundlesOnNodes::Dict{UInt,Vector{Bundle}},
 )
     # Computing the number of times we have to add a timed copy of the node 
-    # plant = 0, suppliers = max of bundle del time, platforms = overall max del time (done with init cond in max)
-    nodeExtraCopies = get_node_extra_copies(nodeData, bundlesOnSupplier, maxTime)
+    # plant = 0, suppliers = max of bundle del time, platforms = overall max del time
+    maxTime = maximum(
+        bundles -> maximum(bundle -> bundle.maxDelTime, bundles), values(bundlesOnNodes)
+    )
+    nodeExtraCopies = get_node_extra_copies(nodeData, bundlesOnNodes, maxTime)
     for stepToDel in 0:nodeExtraCopies
         if nodeData.type == :supplier
-            add_timed_supplier!(travelTimeGraph, nodeData, stepToDel, bundlesOnSupplier)
+            add_timed_supplier!(travelTimeGraph, nodeData, stepToDel, bundlesOnNodes)
         elseif nodeData.type == :plant
-            add_timed_customer!(travelTimeGraph, nodeData, stepToDel, bundlesOnCustomer)
+            add_timed_customer!(travelTimeGraph, nodeData, stepToDel, bundlesOnNodes)
         else
             add_timed_platform!(travelTimeGraph, nodeData, stepToDel)
         end
@@ -169,6 +167,8 @@ end
 function add_arc_to_vectors!(
     vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
     travelTimeGraph::TravelTimeGraph,
+    srcData::NetworkNode,
+    dstData::NetworkNode,
     arcData::NetworkArc,
 )
     maxTime = maximum(travelTimeGraph.stepToDel)
@@ -192,16 +192,13 @@ end
 
 function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
     # Computing for each node which bundles starts and which bundles end at this node 
-    bundlesOnSupplier, bundlesOnCustomer = get_bundle_on_supp_cust(bundles)
+    bundlesOnNodes = get_bundle_on_nodes(bundles)
     maxTime = maximum(bundle -> bundle.maxDelTime, bundles)
     # Initializing structure
     travelTimeGraph = TravelTimeGraph()
     # Adding all nodes from the network graph
     for nodeHash in labels(network)
-        nodeData = network[nodeHash]
-        add_network_node!(
-            travelTimeGraph, nodeData, bundlesOnSupplier, bundlesOnCustomer, maxTime
-        )
+        add_network_node!(travelTimeGraph, network[nodeHash], bundlesOnNodes)
     end
     # Initializing vectors for sparse matrices
     I, J, arcs, costs = Int[], Int[], NetworkArc[], Float64[]
@@ -211,7 +208,7 @@ function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
         network[dstHash],
         network[srcHash, dstHash]
         add_network_arc!(travelTimeGraph, srcData, dstData, arcData)
-        add_arc_to_vectors!((I, J, arcs, costs), travelTimeGraph, arcData)
+        add_arc_to_vectors!((I, J, arcs, costs), travelTimeGraph, srcData, dstData, arcData)
     end
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
