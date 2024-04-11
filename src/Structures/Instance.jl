@@ -5,6 +5,10 @@
 struct Instance
     # Network 
     networkGraph :: NetworkGraph
+    # Travel time graph
+    travelTimeGraph :: TravelTimeGraph
+    # Time space graph
+    timeSpaceGraph :: TimeSpaceGraph
     # Commodities ordered in bundles
     bundles :: Vector{Bundle}
     # Time Horizon 

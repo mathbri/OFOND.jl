@@ -29,7 +29,7 @@ end
 # TODO : like travel and time space creation, maybe a need to put this into another file to have structures defines before the function itself
 function add_properties(bundle::Bundle, network::NetworkGraph)
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
-    maxDelTime = 1 + network.graph[suppHash, custHash].travelTime
+    maxDelTime = 1 + network.graph[bundle.supplier.hash, bundle.customer.hash].travelTime
     return Bundle(
         bundle.supplier,
         bundle.customer,
