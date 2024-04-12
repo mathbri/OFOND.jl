@@ -27,3 +27,11 @@ function get_transport_units(order::Order, arcData::NetworkArc)
     # If the arc is consolidated
     return get(order.bpUnits, arcData.type, 0)
 end
+
+function sort_order_content!(instance::Instance)
+    for bundle in instance.bundles
+        for order in bundle.orders
+            sort!(order.content; by=com -> com.size, rev=true)
+        end
+    end
+end

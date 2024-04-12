@@ -21,69 +21,71 @@
 
 # TODO : add heuristic like linear unit cost for a_star and see if the results are better
 
-function greedy_heuristic(instance::Instance)
-    startTime = time()
-    
-    # Build travel time and time space graphs from instance
-    travelTimeGraph, travelTimeUtils = build_travel_time_and_utils(instance.networkGraph, instance.bundles)
-    timeSpaceGraph, timeSpaceUtils = build_time_space_and_utils(instance.networkGraph, instance.timeHorizon)
-    bundlePaths = Vector{Vector{Int}}()
-    # Computing bundles, orders, and commodities utils
-    bundleUtils = [BundleUtils(bundle, first_fit_decreasing, LAND_CAPACITY) for bundle in instance.bundles]
+function greedy_insertion(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    suppNode::Int,
+    custNode::Int,
+)
+    dijkstraState = dijkstra_shortest_paths(TTGraph, suppNode, travelTimeUtils.costMatrix)
+    shortestPath = enumerate_paths(dijkstraState, custNode)
+
+    # If recomputation needed ?
+    if is_new_path_needed(TTGraph, shortestPath)
+        update_cost_matrix!(
+            solution,
+            TTGraph,
+            TSGraph,
+            bundle;
+            sorted=true,
+            use_bins=true,
+            opening_factor=0.5,
+        )
+        dijkstraState = dijkstra_shortest_paths(
+            TTGraph, suppNode, travelTimeUtils.costMatrix
+        )
+        shortestPath = enumerate_paths(dijkstraState, custNode)
+
+        if is_new_path_needed(TTGraph, shortestPath)
+            update_cost_matrix!(
+                solution, TTGraph, TSGraph, bundle; sorted=true, use_bins=false
+            )
+            dijkstraState = dijkstra_shortest_paths(
+                TTGraph, suppNode, travelTimeUtils.costMatrix
+            )
+            shortestPath = enumerate_paths(dijkstraState, custNode)
+        end
+    end
+    pathCost = dijkstraState.dists[custNode]
+    return shortestPath, pathCost
+end
+
+function greedy!(solution::Solution, instance::Instance)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
-    sortedBundleIdxs = sortperm(bundleUtils, by=bun->bun.maxPackSize, rev=true)
-    
-    # Saving pre-solve time
-    preSolveTime = round((time() - startTime) * 1000) / 1000
-    println("Pre-solve time : $preSolveTime s")
-    
+    sortedBundleIdxs = sortperm(bundles; by=bun -> bun.maxPackSize, rev=true)
     # Computing the greedy delivery possible for each bundle
     for bundleIdx in sortedBundleIdxs
         bundle = instance.bundles[bundleIdx]
-        bundleUtil = bundleUtils[bundleIdx]
+        update_cost_matrix!(solution, TTGraph, TSGraph, bundle; sorted=true, use_bins=true)
+
         # Retrieving bundle start and end nodes
-        suppNode = travelTimeUtils.bundleStartNodes[bundleIdx]
-        custNode = travelTimeUtils.bundleEndNodes[bundleIdx]
-        # Updating cost matrix 
-        bundleUpdateNodes = get_bundle_update_nodes(travelTimeUtils, travelTimeGraph, bundleIdx)
-        update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundleUpdateNodes, bundle, travelTimeUtils.bundleEndNodes[bundleIdx], bundleUtil, timeSpaceUtils)
+        suppNode = TTGraph.bundleStartNodes[bundleIdx]
+        custNode = TTGraph.bundleEndNodes[bundleIdx]
         # Computing shortest path
-        shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
+        shortestPath, pathCost = greedy_insertion(
+            solution, TTGraph, TSGraph, bundle, suppNode, custNode
+        )
+
+        # Adding path to solution
         remove_shotcuts!(shortestPath, travelTimeGraph)
-        # TODO : If path not elementary, dividing opening cot of trucks by 2
-        # if !is_path_elementary(shortestPath)
-        #     update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
-        #     shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
-        #     # If path not elementary, not taking into account current solution
-        #     if !is_path_elementary(shortestPath)
-        #         update_cost_matrix!(travelTimeUtils, travelTimeGraph, bundle, timeSpaceUtils)
-        #         shortestPath = a_star(travelTimeGraph, suppNode, custNode, travelTimeUtils.costMatrix)
-        #     end
-        # end
-        # Adding shortest path to all bundle paths
-        push!(bundlePaths, get_path_nodes(shortestPath))
-        # Updating the loads for each order of the bundle
+        add_path!(solution, bundle, shortestPath)
+        # Updating the bins for each order of the bundle
         for order in bundle.orders
-            update_loads!(timeSpaceUtils, timeSpaceGraph, travelTimeGraph, shortestPath, order)
+            update_bins!(solution, TSGraph, TTGraph, shortestPath, order; sorted=true)
         end
     end
-
-    # Computing the actual bin packing 
-    # Done here because its cheaper to compute tentative packings on vectors of int than vectors of bins
-    for bundleIdx in sortedBundleIdxs
-        bundle = instance.bundles[bundleIdx]
-        for order in bundle.orders
-            update_bins!(timeSpaceGraph, travelTimeGraph, shortestPath, order)
-        end
-    end
-
-    # Saving solve time
-    solveTime = round((time() - preSolveTime) * 1000) / 1000
-    println("solve time : $solveTime s")
-    solution = Solution(travelTimeGraph, bundlePaths, timeSpaceGraph)
-    println("Feasible : $(is_feasible(instance, solution))")
-    println("Total Cost : $(compute_cost(solution))")
-
-    return solution 
 end

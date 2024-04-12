@@ -28,3 +28,7 @@ function shortest_delivery_heuristic(instance::Instance)
 end
 
 # Missing slot for average delivery heuristic
+
+function greedy_heuristic(instance::Instance)
+    return run_heuristic(instance, greedy!)
+end

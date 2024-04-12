@@ -1,12 +1,6 @@
 # Utils function only used in greedy
 
-function sort_order_content!(instance::Instance)
-    for bundle in instance.bundles
-        for order in bundle.orders
-            sort!(order.content; by=com -> com.size, rev=true)
-        end
-    end
-end
+# TODO : when solution struct updated, replace paths with solution and get path with the bundle idx
 
 # Check whether the arc is fit for a cost update
 function is_update_candidate(arcData::NetworkArc, dst::Int, bundleDst::Int)
@@ -17,15 +11,15 @@ function is_update_candidate(arcData::NetworkArc, dst::Int, bundleDst::Int)
     return true
 end
 
-function get_order_node_com_cost(TTGraph::TravelTimeGraph, dst::Int, order::Order)
-    arcData = TTGraph.networkArcs[timedSrc, timedDst]
-    # Node volume cost 
-    arcBundleCost += TTGraph.networkNodes[dst].volumeCost * order.volume
-    # Commodity cost 
-    return arcBundleCost += arcData.distance * order.leadTimeCost
+function get_order_node_com_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
+    arcData = TTGraph.networkArcs[src, dst]
+    dstData = TTGraph.networkNodes[dst]
+    # Node volume cost + Commodity last time cost  
+    return dstData.volumeCost * order.volume + arcData.distance * order.leadTimeCost
 end
 
 function get_order_transport_units(
+    solution::Solution,
     TSGraph::TimeSpaceGraph,
     timedSrc::Int,
     timedDst::Int,
@@ -38,10 +32,11 @@ function get_order_transport_units(
     arcOrderTrucks = get_transport_units(order, arcData)
     # If we take into account the current solution
     if use_bins
+        loads = solution.binLoads[timedSrc, timedDst]
         # If the arc is not empty, computing a tentative first fit 
-        if length(TSGraph.binLoads[timedSrc, timedDst]) > 0
+        if length(loads) > 0
             arcOrderTrucks = first_fit_decreasing(
-                binOrLoad, arcData.capacity, order.content; sorted=sorted
+                loads, arcData.capacity, order.content; sorted=sorted
             )
         end
     end
@@ -51,12 +46,13 @@ end
 function get_transport_cost(
     TSGraph::TimeSpaceGraph, timedSrc::Int, timedDst::Int; current_cost::Bool
 )
-    arcData = TSGraph.networkArcs[timedSrc, timedDst]
     current_cost && return TSGraph.currentCost[timedSrc, timedDst]
+    arcData = TSGraph.networkArcs[timedSrc, timedDst]
     return (arcData.unitCost + arcData.carbonCost)
 end
 
 function get_arc_update_cost(
+    solution::Solution,
     TTGraph::TravelTimeGraph,
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
@@ -79,11 +75,17 @@ function get_arc_update_cost(
             TTGraph, TSGraph, src, dst, order.deliveryDate
         )
         # Node volume cost 
-        arcBundleCost += get_order_node_com_cost(TTGraph, dst, order)
+        arcBundleCost += get_order_node_com_cost(TTGraph, src, dst, order)
         # Arc transport cost 
         arcBundleCost +=
             get_order_transport_units(
-                TSGraph, timedSrc, timedDst, order; sorted=sorted, use_bins=use_bins
+                solution,
+                TSGraph,
+                timedSrc,
+                timedDst,
+                order;
+                sorted=sorted,
+                use_bins=use_bins,
             ) *
             get_transport_cost(TSGraph, timedSrc, timedDst; current_cost=current_cost) *
             opening_factor
@@ -113,8 +115,14 @@ function get_all_start_nodes(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
     return startNodes
 end
 
-# Updating cost matrix on the travel time graph for a specific bundle using predefined list of nodes to go through
+# TODO : moving order loop to the most outer one allow to directly project src node before looping over dst node
+# Once the src node is projected, doesn't need to project dst, just looping over outneighbors of projected node
+# How do i get the dst in the TTGraph for the cost update ?
+# How do I handle the fact that the final arc cost will be known at the end of the order loop ?
+
+# Updating cost matrix on the travel time graph for a specific bundle 
 function update_cost_matrix!(
+    solution::Solution,
     travelTimeGraph::TravelTimeGraph,
     timeSpaceGraph::TimeSpaceGraph,
     bundle::Bundle;
@@ -128,6 +136,7 @@ function update_cost_matrix!(
         vcat(get_all_start_nodes(travelTimeGraph, bundle), travelTimeGraph.commonNodes)
         for dst in outneighbors(travelTimeGraph, src)
             travelTimeGraph.costMatrix[src, dst] = get_arc_update_cost(
+                solution,
                 travelTimeGraph,
                 timeSpaceGraph,
                 bundle,
@@ -140,6 +149,13 @@ function update_cost_matrix!(
             )
         end
     end
+end
+
+# Check whether the path of the bundle needs to be recomputed
+function is_new_path_needed(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
+    # Not elementary
+    return is_path_elementary(travelTimeGraph, path)
+    # Too long ? Too many node ?
 end
 
 function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
