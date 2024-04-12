@@ -31,6 +31,7 @@ include("Structures/TimeSpace.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
 include("Structures/struct_utils.jl")
+include("Structures/projectors.jl")
 
 # Import and Export of data
 include("Reading/read_instance.jl")
@@ -58,7 +59,6 @@ include("Algorithms/LNS/lns_utils.jl")
 include("Algorithms/LNS/two_node.jl")
 include("Algorithms/LNS/attract_reduce.jl")
 include("Algorithms/LNS/single_plant.jl")
-include("Algorithms/LNS/slope_scaling_mechanism.jl")
 include("Algorithms/LNS/lns.jl")
 
 # Functions / Structures to be made public

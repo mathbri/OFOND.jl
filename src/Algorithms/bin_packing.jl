@@ -1,9 +1,15 @@
 # Bin packing functions
 
-function first_fit_decreasing!(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+# TODO : add other bin packing computations to improve this neighborhood
+
+# TODO : corrolate bins and loads !
+
+function first_fit_decreasing!(
+    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+)
     # Sorting commodities in decreasing order of size (if not already done)
     if !sorted
-        sort!(commodities, by=com -> com.size, rev=true)        
+        sort!(commodities; by=com -> com.size, rev=true)
     end
     # Adding commodities on top of others
     for commodity in commodities
@@ -11,176 +17,235 @@ function first_fit_decreasing!(bins::Vector{Bin}, capacity::Int, commodities::Ve
         for bin in bins
             add!(bin, commodity) && (added = true; break)
         end
-        added || push!(bins, Bin(capacity - commodity.size, [commodity]))
+        added || push!(bins, Bin(fullCapacity - commodity.size, [commodity]))
     end
 end
 
 # First fit decreasing but returns a copy of the bins instead of modifying it
-function first_fit_decreasing(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+function first_fit_decreasing(
+    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+)
     newBins = deepcopy(bins)
-    first_fit_decreasing!(newBins, capacity, commodities; sorted=sorted)
+    first_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
     return newBins
 end
 
 # First fit decreasing to update loads
-function first_fit_decreasing!(loads::Vector{Int}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+function first_fit_decreasing!(
+    loads::Vector{Int},
+    fullCapacity::Int,
+    commodities::Vector{Commodity};
+    sorted::Bool=false,
+)
     # Sorting commodities in decreasing order of size (if not already done)
     if !sorted
-        sort!(commodities, by=com -> com.size, rev=true)        
+        sort!(commodities; by=com -> com.size, rev=true)
     end
     # Adding commodities on top of others
     for commodity in commodities
         added = false
         for (idxL, load) in enumerate(loads)
-            (capacity - load >= commodity.size) && (added = true; loads[idxL] += commodity.size; break)
+            (fullCapacity - load >= commodity.size) &&
+                (added = true; loads[idxL] += commodity.size; break)
         end
-        added || push!(loads, capacity - commodity.size)
+        added || push!(loads, fullCapacity - commodity.size)
     end
 end
 
-function first_fit_decreasing(loads::Vector{Int}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+function first_fit_decreasing(
+    loads::Vector{Int},
+    fullCapacity::Int,
+    commodities::Vector{Commodity};
+    sorted::Bool=false,
+)
     newLoads = deepcopy(loads)
-    first_fit_decreasing!(newBins, capacity, commodities; sorted=sorted)
+    first_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
     return length(newLoads) - length(loads)
 end
 
-function best_fit_decreasing!(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+# Only useful for best fit decreasing computation of best bin
+function get_capacity_left(bin::Bin, commodity::Commodity)
+    capcity_after = bin.capacity - commodity.size
+    capcity_after < 0 && return INFINITY
+    return capcity_after
+end
+
+# Best fit decreasing heuristic for bin packing
+function best_fit_decreasing!(
+    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+)
     # Sorting commodities in decreasing order of size (if not already done)
-    if !sorted
-        sort!(commodities, by=com -> com.size, rev=true)        
-    end
-    # Storing last size seen to avoid recomputing possible bins
-    lastSizeSeen = commodities[1].size
-    possibleBins = filter(bin -> bin.availableCapacity - commodity.size >= 0, bins)
+    sorted || sort!(commodities; by=com -> com.size, rev=true)
     # Adding commodities on top of others
     for commodity in commodities
-        # Filtering bins with enough space (if needed)
-        if commodity.size != lastSizeSeen
-            possibleBins = filter(bin -> bin.availableCapacity - commodity.size >= 0, bins)
-            lastSizeSeen = commodity.size
-        end
-        # If no bins, adding one and continuing to the next commodity
-        length(possibleBins) == 0 && (push!(bins, Bin(capacity - commodity.size, [commodity])); continue)
         # Selecting best bin
-        _, bestBin = findmin(bin -> bin.availableCapacity - commodity.size, possibleBins)
+        bestCapa, bestBin = findmin(bin -> get_capacity_left(bin, commodity), possibleBins)
+        # If the best bin is full, adding a bin
+        bestCapa == INFINITY &&
+            (push!(bins, Bin(fullCapacity - commodity.size, [commodity])); continue)
+        # Otherwise, adding it to the best bin
         add!(bin[bestBin], commodity)
     end
 end
 
 # Best fit decreasing but returns a copy of the bins instead of modifying it
-function best_fit_decreasing(bins::Vector{Bin}, capacity::Int, commodities::Vector{Commodity}; sorted::Bool=false)
+function best_fit_decreasing(
+    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+)
     newBins = deepcopy(bins)
-    best_fit_decreasing!(newBins, capacity, commodities; sorted=sorted)
+    best_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
     return newBins
 end
 
-# TODO : copy from Louis
-function milp_packing()
-    #
+# Milp model for adding commodities on top
+function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
+    n = length(commodities)
+    loads = map(bin -> fullCapacity - bin.capacity, bins)
+    B = length(first_fit_decreasing(loads, fullCapacity, commodities))
+    # Model
+    model = Model(HiGHS.Optimizer)
+    # Variables
+    @variable(model, x[1:n, 1:B], Bin)
+    @variable(model, y[1:B], Bin)
+    # Constraints
+    @constraint(model, inBin[i=1:n], sum(x[i, :]) == 1)
+    @constraint(
+        model,
+        fitInBin[b=1:B],
+        fullCapacity * y[b] >= sum(x[i, b] * commodities[i].size for i in 1:n) + loads[b]
+    )
+    # Objective
+    @objective(model, Min, sum(y))
+    # Solve
+    optimize!(model)
+    # Get variables value
+    yval = value.(model[:y])
+    xval = value.(model[:x])
+    # Add new bins if necessary
+    for b in length(bins):B
+        yval[b] == 1 && push!(bins, Bin(fullCapacity))
+    end
+    # Add commodities to bins
+    for i in 1:n, b in 1:B
+        xval[i, b] == 1 && add!(bins[b], commodities[i])
+    end
 end
 
-# Improving all bin packings if possible
-function bin_packing_improvement!(timeSpaceGraph::TimeSpaceGraph; sorted::Bool=false, skipLinear::Bool=true)
-    costImprov = 0.
-    for arc in edges(timeSpaceGraph)
-        arcBins = timeSpaceGraph.bins[src(arc), dst(arc)]
-        # If there is no bins, one bin or the arc is linear, skipping arc
-        length(arcBins) <= 1 && continue
-        arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
-        skipLinear && arcData.isLinear && continue
-        # If there is no gap with the lower bound, skipping arc
-        arcVolume = sum(arcData.capacity - bin.availableCapacity for bin in arcBins)
-        ceil(arcVolume / arcData.capacity) == length(arcBins) && continue
-        # Gathering all commodities
-        allCommodities = reduce(vcat, arcBins)
-        # Computing new bins
-        # TODO : parrallelize the recomputations with the different heuristics
-        newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities, sorted=sorted)
-        bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities, sorted=sorted)
-        length(newBins) > length(bfdBins) && (newBins = bfdBins)
-        # If the number of bins did not change, skipping next
-        length(newBins) >= length(arcBins) && continue
-        # Computing cost improvement
-        costImprov += (arcData.unitCost + arcData.carbonCost) * (length(arcBins) - length(newBins))
+function milp_packing(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
+    newBins = deepcopy(bins)
+    milp_packing!(newBins, fullCapacity, commodities)
+    return newBins
+end
+
+function update_bins!(
+    solution::Solution,
+    timeSpaceGraph::TimeSpaceGraph,
+    travelTimeGraph::TravelTimeGraph,
+    path::Vector{Int},
+    order::Order;
+    sorted::Bool=false,
+    bin_packing::Function=first_fit_decreasing!,
+)
+    # Projecting path on the time space graph
+    timedPath = time_space_projector(
+        travelTimeGraph, timeSpaceGraph, path, order.deliveryDate
+    )
+    for (timedSrc, timedDst) in partition(timedPath, 2, 1)
+        fullCapa = timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity
         # Updating bins
-        timeSpaceGraph.bins[src(arc), dst(arc)] = newBins
+        bin_packing(
+            solution.bins[timedSrc, timedDst], fullCapa, order.content; sorted=sorted
+        )
+        # Updating loads
+        # TODO : Is it more effcient to do a first fit again or to map the new available capacities ?
+        solution.binLoads[timedSrc, timedDst] = map(
+            bin -> bin.availableCapacity, solution.bins[timedSrc, timedDst]
+        )
     end
-    return costImprov
 end
 
-# Running bin packing improvement with analysis logging and no change in data
-function bin_packing_improvement_analysis(timeSpaceGraph::TimeSpaceGraph)
-    costImprov = 0.
-    oneBinCount, linearCount, boudReachedCount = 0, 0, 0
-    bfdBetterCount, bfdSavedBins, newBetterCount = 0, 0, 0
-    for arc in edges(timeSpaceGraph)
-        arcBins = timeSpaceGraph.bins[src(arc), dst(arc)]
-        # If there is no bins, one bin or the arc is linear, skipping arc
-        if length(arcBins) <= 1
-            oneBinCount += 1
-            continue
-        end
-        arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
-        if arcData.isLinear
-            linearCount += 1
-            continue
-        end
-        # If there is no gap with the lower bound, skipping arc
-        arcVolume = sum(arcData.capacity - bin.availableCapacity for bin in arcBins)
-        if ceil(arcVolume / arcData.capacity) == length(arcBins)
-            boudReachedCount += 1
-            continue
-        end
-        # Gathering all commodities
-        allCommodities = reduce(vcat, arcBins)
-        # Computing new bins
-        newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities, sorted=sorted)
-        bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities, sorted=sorted)
-        if length(newBins) > length(bfdBins) 
-            bfdSavedBins = length(newBins) - length(bfdBins)
-            newBins = bfdBins
-            bfdBetterCount += 1
-        end
-        # If the number of bins dir not change, skipping next
-        if length(newBins) >= length(arcBins) 
-            continue
-        end
-        newBetterCount += 1
-        # Computing cost improvement
-        costImprov += (arcData.unitCost + arcData.carbonCost) * (length(arcBins) - length(newBins))
-    end
-    println("One bin count: $oneBinCount")
-    println("Linear count: $linearCount")
-    println("Bound reached count: $boudReachedCount")
-    println("Best fit decrease better count: $bfdBetterCount")
-    println("Best fit decrease saved bins: $bfdSavedBins")
-    println("New better count: $newBetterCount")
-    return costImprov
+function update_bins!(
+    solution::Solution,
+    timeSpaceGraph::TimeSpaceGraph,
+    travelTimeGraph::TravelTimeGraph,
+    path::Vector{Edge},
+    order::Order;
+    sorted::Bool=false,
+)
+    return update_bins!(
+        solution,
+        timeSpaceGraph,
+        travelTimeGraph,
+        get_path_nodes(path),
+        order;
+        sorted=sorted,
+    )
 end
 
-function update_bins!(timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTimeGraph, path::Vector{Int}, order::Order; sorted::Bool=false)
+function refill_bins!(
+    bins::Vector{Bin}, fullCapacity::Int; bin_packing::Function=first_fit_decreasing!
+)
+    allCommodities = reduce(vcat, bins)
+    empty!(bins)
+    # Filling it back again
+    return bin_packing(bins, fullCapacity, allCommodities; sorted=false)
+end
+
+function refill_bins!(solution::Solution, timedSrc::Int, timedDst::Int, arcData::NetworkArc)
+    # Filling bins again
+    refill_bins!(solution.bins[timedSrc, timedDst], arcData.capacity)
+    # Updating loads
+    return solution.binLoads[timedSrc, timedDst] = map(
+        bin -> bin.availableCapacity, solution.bins[timedSrc, timedDst]
+    )
+end
+
+# Remove order content from solution truck loads
+function remove_order!(
+    solution::Solution,
+    timeSpaceGraph::TimeSpaceGraph,
+    travelTimeGraph::TravelTimeGraph,
+    path::Vector{Int},
+    order::Order;
+)
+    timedPath = time_space_projector(
+        travelTimeGraph, timeSpaceGraph, path, order.deliveryDate
+    )
+    orderUniqueCom = unique(order.content)
     # For all arcs in the path, updating the right bins
-    for (src, dst) in partition(path, 2, 1)
-        timedSrc = time_space_projector(travelTimeGraph, timeSpaceGraph, src, order.deliveryDate)
-        timedDst = time_space_projector(travelTimeGraph, timeSpaceGraph, dst, order.deliveryDate)
-        first_fit_decreasing!(timeSpaceGraph.bins[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
+    for (timedSrc, timedDst) in partition(timedPath, 2, 1)
+        for bin in solution.bins[timedSrc, timedDst]
+            filter!(com -> com in orderUniqueCom, bin.content)
+        end
     end
 end
 
-function update_bins!(timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTimeGraph, path::Vector{Edge}, order::Order; sorted::Bool=false)
-    # For all arcs in the path, updating the right bins
-    for (src, dst) in path
-        timedSrc = time_space_projector(travelTimeGraph, timeSpaceGraph, src, order.deliveryDate)
-        timedDst = time_space_projector(travelTimeGraph, timeSpaceGraph, dst, order.deliveryDate)
-        first_fit_decreasing!(timeSpaceGraph.bins[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
+function update_loads!(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int})
+    # Efficient iteration over sparse matrices
+    rows = rowvals(workingArcs)
+    for timedDst in 1:size(workingArcs, 2)
+        for srcIdx in nzrange(workingArcs, timedDst)
+            timedSrc = rows[srcIdx]
+            solution.binLoads[timedSrc, timedDst] = map(
+                bin -> bin.availableCapacity, solution.bins[timedSrc, timedDst]
+            )
+        end
     end
 end
 
-function update_loads!(timeSpaceUtils::TimeSpaceUtils, timeSpaceGraph::TimeSpaceGraph, travelTimeGraph::TravelTimeGraph, path::Vector{Int}, order::Order; sorted::Bool=false)
-    # For all arcs in the path, updating the right bins
-    for (src, dst) in partition(path, 2, 1)
-        timedSrc = time_space_projector(travelTimeGraph, timeSpaceGraph, src, order.deliveryDate)
-        timedDst = time_space_projector(travelTimeGraph, timeSpaceGraph, dst, order.deliveryDate)
-        first_fit_decreasing!(timeSpaceUtils.loads[timedSrc, timedDst], timeSpaceGraph.networkArcs[timedSrc, timedDst].capacity, order.content, sorted=sorted)
+function remove_bundles!(
+    solution::Solution,
+    timeSpaceGraph::TimeSpaceGraph,
+    travelTimeGraph::TravelTimeGraph,
+    bundles::Vector{Bundle},
+    paths::Vector{Vector{Int}},
+    workingArcs::SparseMatrixCSC{Bool,Int},
+)
+    for (bundle, path) in zip(bundles, paths)
+        for order in bundle.orders
+            remove_order!(solution, timeSpaceGraph, travelTimeGraph, path, order)
+        end
     end
+    # Update load after removing all commodities from bins
+    return update_loads!(solution, workingArcs)
 end
