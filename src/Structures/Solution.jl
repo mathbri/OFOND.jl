@@ -1,103 +1,210 @@
 # Solution structure
 
+# Updating bins and loads in bin packing file
+
 struct Solution
-    # Travel time graph (on which paths are computed)
-    travelTimeGraph :: TravelTimeGraph
     # Paths used for delivery
-    bundlePaths :: Vector{Vector{Int}}
+    bundlePaths::Vector{Vector{Int}}
+    bundlesOnNode::Dict{Int,Vector{Bundle}} # bundles on each node of the travel-time common graph + plants
     # Transport units completion through time 
-    timeSpaceGraph :: TimerSpaceGraph
+    bins::SparseMatrixCSC{Vector{Bin},Int}
+    binLoads::SparseMatrixCSC{Vector{Int},Int}  # bin loads on arcs (used for fastier computation)
+end
+
+function Solution(
+    travelTimeGraph::TravelTimeGraph,
+    timeSpaceGraph::TimeSpaceGraph,
+    bundles::Vector{Bundle},
+)
+    plants = findall(node -> node.type == :plant, travelTimeGraph.networkNodes)
+    keys = vcat(travelTimeGraph.commonNodes, plants)
+    I, J, V = findnz(timeSpaceGraph.networkArcs)
+    bins = [Bin[] for _ in I]
+    loads = [Int[] for _ in I]
+    return Solution(
+        Vector{Vector{Int}}(undef, length(bundles)),
+        Dict{Int,Vector{Bundle}}(zip(keys, [Bundle[] for _ in keys])),
+        sparse(I, J, bins),
+        sparse(I, J, loads),
+    )
 end
 
 # Methods
 
+function add_bundle_path!(
+    solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int, dst::Int
+)
+    if src != -1 && dst != -1
+        oldPath = solution.bundlePaths[bundle.idx]
+        srcIdx = findfirst(node -> node == src, oldPath)
+        dstIdx = findlast(node -> node == dst, oldPath)
+        path = vcat(oldPath[1:srcIdx], path[2:(end - 1)], oldPath[dstIdx:end])
+    end
+    return solution.bundlePaths[bundle.idx] = path
+end
+
+function update_bundle_on_nodes!(
+    solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int=-1, dst::Int=-1
+)
+    if src != -1 && dst != -1
+        path = path[2:(end - 1)]
+    end
+    for node in path
+        push!(solution.bundlesOnNode[node], bundle)
+    end
+end
+
+# Add / Replace the path of the bundle in the solution with the path given as argument 
+# If src and dst are referenced, replace the src-dst part of the current path with the new one
+function add_path!(
+    solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int=-1, dst::Int=-1
+)
+    add_bundle_path!(solution, bundle, path; src=src, dst=dst)
+    return update_bundle_on_nodes!(solution, bundle, path; src=src, dst=dst)
+end
+
+# Remove the path of the bundle in the solution
+function remove_path!(solution::Solution, bundle::Bundle)
+    for node in solution.bundlePaths[bundle.idx]
+        filter!(bun -> bun != bundle, solution.bundlesOnNode[node])
+    end
+    return empty!(solution.bundlePaths[bundle.idx])
+end
+
 # Plot some of the paths on a map ?
 # Compute some import statistics ? (the ones in solution indicators for ex)
-function analyze_solution()
-    
+function analyze_solution() end
+
+# Checking the number of paths
+function check_enough_paths(instance::Instance, solution::Solution; verbose::Bool)
+    if length(instance.bundles) != length(solution.bundlePaths)
+        verbose &&
+            @warn "Infeasible solution : $(length(instance.bundles)) bundles and $(length(solution.bundlePaths)) paths"
+        return false
+    end
+    return true
+end
+
+# Checking the supplier is correct
+function check_supplier(instance::Instance, bundle::Bundle, pathSrc::Int; verbose::Bool)
+    pathSupplier = instance.travelTimeGraph.networkNodes[pathSrc]
+    if bundle.supplier != pathSupplier
+        verbose &&
+            @warn "Infeasible solution : bundle $(bundle.idx) has supplier $(bundle.supplier) and its path starts at $(pathSupplier)"
+        return false
+    end
+end
+
+# Checking the customer is correct
+function check_customer(instance::Instance, bundle::Bundle, pathDst::Int; verbose::Bool)
+    pathCustomer = instance.travelTimeGraph.networkNodes[pathDst]
+    if bundle.customer != pathCustomer
+        verbose &&
+            @warn "Infeasible solution : bundle $(bundle.idx) has customer $(bundle.customer) and its path ends at $(pathCustomer)"
+        return false
+    end
+end
+
+function get_routed_commodities(
+    solution::Solution, order::Order, timedSrc::Int, timedDst::Int
+)
+    allArcCommodities = reduce(vcat, solution.bins[timedSrc, timedDst])
+    orderUniqueCom = unique(order.content)
+    return sort(filter(com -> com in orderUniqueCom, allArcCommodities))
+end
+
+function check_quantities(
+    instance::Instance, solution::Solution, src::Int, dst::Int, order::Order; verbose::Bool
+)
+    timedSrc, timedDst = time_space_projector(
+        instance.travelTimeGraph, instance.timeSpaceGraph, src, dst, order.deliveryDate
+    )
+    # Checking quantities in this arc
+    routedCommodities = get_routed_commodities(solution, order, timedSrc, timedDst)
+    if sort(order.content) != routedCommodities
+        verbose &&
+            @warn "Infeasible solution : order $order misses quantities on arc ($timedSrc-$timedDst)" :inOrder =
+                order.content :onArc = routedCommodities
+        return false
+    end
+    return true
 end
 
 # Check whether a solution is feasible or not 
 function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false)
-    # There is enough paths : one for every bundle
-    if length(instance.bundles) != length(solution.bundlePaths)
-        verbose && @warn "Infeasible solution : $(length(instance.bundles)) bundles and $(length(solution.bundlePaths)) paths"
-        return false
-    end
+    check_enough_paths(instance, solution; verbose=verbose) || return false
     # All commodities are delivered : start from supplier with right quantities, and arrives at customer, with right quantities
-    for (idxB, bundle) in enumerate(instance.bundles)
-        bundlePath = solution.bundlePaths[idxB]
-        pathSupplier = solution.travelTimeGraph.networkNodes[bundlePath[1]]
-        pathCustomer = solution.travelTimeGraph.networkNodes[bundlePath[end]]
-        # Checking supplier
-        if bundle.supplier != pathSupplier
-            verbose && @warn "Infeasible solution : bundle $idxB has supplier $(bundle.supplier) and its path starts at $(pathSupplier)"
-            return false
-        end
-        # Checking customer
-        if bundle.customer != pathCustomer
-            verbose && @warn "Infeasible solution : bundle $idxB has customer $(bundle.customer) and its path ends at $(pathCustomer)"
-            return false
-        end
+    for bundle in instance.bundles
+        bundlePath = solution.bundlePaths[bundle.idx]
+        pathSrc, pathDst = bundlePath[1], bundlePath[end]
+        check_supplier(instance, bundle, pathSrc; verbose=verbose) || return false
+        check_customer(instance, bundle, pathDst; verbose=verbose) || return false
         # Checking that the right quantities are associated
-        for order in bundle.orders 
-            # Getting the timed first arc
-            timedSourceIdx = time_space_projector(solution.travelTimeGraph, solution.timeSpaceGraph, bundlePath[1], order.deliveryDate)
-            timedDestIdx = time_space_projector(solution.travelTimeGraph, solution.timeSpaceGraph, bundlePath[2], order.deliveryDate)
-            # Checking quantities in this arc
-            allArcCommodities = reduce(vcat, solution.timeSpaceGraph.bins[timedSourceIdx, timedDestIdx])
-            orderUniqueCom = unique(order.content)
-            routedCommodities = sort(filter(com -> com in orderUniqueCom, allArcCommodities))
-            if sort(order.content) != routedCommodities
-                verbose && @warn "Infeasible solution : order $order (bundle $idxB) misses quantities on the first arc ($timedSourceIdx-$timedDestIdx)" :inOrder=order.content :onArc=routedCommodities
-                return false    
-            end
-            # Getting the timed last arc
-            timedSourceIdx = time_space_projector(solution.travelTimeGraph, solution.timeSpaceGraph, bundlePath[end-1], order.deliveryDate)
-            timedDestIdx = time_space_projector(solution.travelTimeGraph, solution.timeSpaceGraph, bundlePath[end], order.deliveryDate)
-            # Checking quantities in this arc
-            allArcCommodities = reduce(vcat, solution.timeSpaceGraph.bins[timedSourceIdx, timedDestIdx])
-            orderUniqueCom = unique(order.content)
-            routedCommodities = sort(filter(com -> com in orderUniqueCom, allArcCommodities))
-            if sort(order.content) != routedCommodities
-                verbose && @warn "Infeasible solution : order $order (bundle $idxB) misses quantities on the last arc ($timedSourceIdx-$timedDestIdx)" :inOrder=order.content :onArc=routedCommodities
-                return false    
-            end
+        for order in bundle.orders
+            pathOutSrc, pathInDst = bundlePath[2], bundlePath[end - 1]
+            check_quantities(
+                instance, solution, pathSrc, pathOutSrc, order; verbose=verbose
+            ) || return false
+            check_quantities(
+                instance, solution, pathInDst, pathDst, order; verbose=verbose
+            ) || return false
         end
     end
+    return true
 end
 
 # Detect all infeasibility in a solution
 
-# Compute arc cost with respect to the bins on it
-function compute_arc_cost(arcBins::Vector{Bin}, arcData::NetworkArc, destNode::NetworkNode)
-    cost = 0.
-    # Computing useful quantities
-    arcVolume = sum(arcData.capacity - bin.availableCapacity for bin in arcBins) / VOLUME_FACTOR
-    arcLeadTimeCost = sum(sum(commodity.leadTimeCost for commodity in bin) for bin in arcBins)
-    # Node cost 
-    cost += destNode.volumeCost * arcVolume
-    # Transport cost 
-    if arcData.isLinear
-        cost += (arcVolume / arcData.capacity) * arcData.unitCost
-    else
-        cost += length(arcBins) * arcData.unitCost
+function detect_infeasibility(instance::Instance, solution::Solution)
+    check_enough_paths(instance, solution; verbose=true)
+    # All commodities are delivered : start from supplier with right quantities, and arrives at customer, with right quantities
+    for bundle in instance.bundles
+        bundlePath = solution.bundlePaths[bundle.idx]
+        pathSrc, pathDst = bundlePath[1], bundlePath[end]
+        check_supplier(instance, bundle, pathSrc; verbose=true)
+        check_customer(instance, bundle, pathDst; verbose=true)
+        # Checking that the right quantities are associated
+        for order in bundle.orders
+            pathOutSrc, pathInDst = bundlePath[2], bundlePath[end - 1]
+            check_quantities(instance, solution, pathSrc, pathOutSrc, order; verbose=true)
+            check_quantities(instance, solution, pathInDst, pathDst, order; verbose=true)
+        end
     end
-    # Carbon cost 
-    cost += length(arcBins) * arcData.carbonCost
+end
+
+# Compute arc cost with respect to the bins on it
+function compute_arc_cost(
+    TSGraph::TimeSpaceGraph, bins::Vector{Bin}, src::Int, dst::Int; current_cost::Bool
+)
+    dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
+    # Computing useful quantities
+    arcVolume = sum(arcData.capacity - bin.capacity for bin in bins) / VOLUME_FACTOR
+    arcLeadTimeCost = sum(sum(com.leadTimeCost for com in bin) for bin in bins)
+    # Node cost 
+    cost = dstData.volumeCost * arcVolume
+    # Transport cost 
+    transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : length(bins)
+    transportCost = if current_cost
+        TSGraph.currentCost[src, dst]
+    else
+        (arcData.unitCost + arcData.carbonCost)
+    end
+    cost += transportUnits * transportCost
     # Commodity cost
-    cost += arcData.distance * arcLeadTimeCost
+    return cost += arcData.distance * arcLeadTimeCost
 end
 
 # Compute the cost of a solution : node cost + arc cost + commodity cost
-function compute_cost(solution::Solution)
-    totalCost = 0.
-    for arc in edges(solution.travelTimeGraph)
-        arcBins = solution.travelTimeGraph.bins[src(arc), dst(arc)]
+function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
+    totalCost = 0.0
+    for arc in edges(instance.timeSpaceGraph)
+        arcBins = solution.bins[src(arc), dst(arc)]
         # If there is no bins, skipping arc
         length(arcBins) == 0 && continue
         # Arc cost
-        totalCost += compute_arc_cost(arcBins, arcData, destNode)
+        totalCost += compute_arc_cost(
+            instance.timeSpaceGraph, arcBins, src(arc), dst(arc); current_cost=current_cost
+        )
     end
     return totalCost
 end
