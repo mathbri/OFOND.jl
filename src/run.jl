@@ -12,13 +12,19 @@ function run_heuristic(instance::Instance, heuristic::Function)
     println("Pre-solve time : $preSolveTime s")
 
     # Run the corresponding heuristic
-    heuristic(instance, solution)
+    heuristic(solution, instance)
 
     # Saving solve time
     solveTime = round((time() - preSolveTime) * 1000) / 1000
     println("solve time : $solveTime s")
     println("Feasible : $(is_feasible(instance, solution))")
-    println("Total Cost : $(compute_cost(solution))")
+    println("Total Cost : $(compute_cost(instance, solution))")
 
     return instance, solution
 end
+
+function shortest_delivery_heuristic(instance::Instance)
+    return run_heuristic(instance, shortest_delivery!)
+end
+
+# Missing slot for average delivery heuristic

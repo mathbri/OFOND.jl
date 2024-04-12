@@ -42,8 +42,7 @@ include("Writing/write_solution.jl")
 # Algorithms
 include("Algorithms/bin_packing.jl")
 # Benchmarks heuristics
-include("Algorithms/Benchmark/shortest_delivery.jl")
-include("Algorithms/Benchmark/average_delivery.jl")
+include("Algorithms/benchmarks.jl")
 # Greedy heuristic
 include("Algorithms/Greedy/greedy_utils.jl")
 include("Algorithms/Greedy/greedy.jl")

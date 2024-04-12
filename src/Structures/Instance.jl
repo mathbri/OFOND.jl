@@ -38,5 +38,4 @@ function add_properties(instance::Instance, bin_packing::Function)
     )
 end
 
-function analyze_instance()
-end
+function analyze_instance() end
