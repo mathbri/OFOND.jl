@@ -61,6 +61,8 @@ include("Algorithms/LNS/attract_reduce.jl")
 include("Algorithms/LNS/single_plant.jl")
 include("Algorithms/LNS/lns.jl")
 
+include("run.jl")
+
 # Functions / Structures to be made public
 # With the following export, you can test the different benchmark and heuristic developped (and play with a little) 
 

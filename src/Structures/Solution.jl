@@ -29,6 +29,10 @@ function Solution(
     )
 end
 
+function Solution(instance::Instance)
+    return Solution(instance.travelTimeGraph, instance.timeSpaceGraph, instance.bundles)
+end
+
 # Methods
 
 function add_bundle_path!(
