@@ -158,6 +158,14 @@ function is_path_admissible(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
     # Too long ? Too many node ? To be difined
 end
 
+function get_path_cost(path::Vector{Int}, costMatrix::SparseMatrixCSC{Float64,Int})
+    cost = 0.0
+    for (i, j) in partition(path, 2, 1)
+        cost += costMatrix[i, j]
+    end
+    return cost
+end
+
 function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
     firstNode = 1
     for (src, dst) in partition(path, 2, 1)

@@ -76,7 +76,8 @@ function greedy_insertion(
     )
     # If the path is not admissible, re-computing it
     if !is_path_admissible(TTGraph, shortestPath)
-        # First trying to halve cost
+        # First trying to halve cost for the path computation
+        costMatrix = deepcopy(TTGraph.costMatrix)
         shortestPath, pathCost = greedy_path(
             solution,
             TTGraph,
@@ -89,6 +90,7 @@ function greedy_insertion(
             opening_factor=0.5,
             current_cost=current_cost,
         )
+        pathCost = get_path_cost(shortestPath, costMatrix)
         if !is_path_admissible(TTGraph, shortestPath)
             # Then not taking into account the current solution
             shortestPath, pathCost = greedy_path(
