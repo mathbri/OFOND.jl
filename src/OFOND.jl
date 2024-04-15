@@ -44,8 +44,8 @@ include("Algorithms/bin_packing.jl")
 # Benchmarks heuristics
 include("Algorithms/benchmarks.jl")
 # Greedy heuristic
-include("Algorithms/Greedy/greedy_utils.jl")
-include("Algorithms/Greedy/greedy.jl")
+include("Algorithms/Utils/greedy_utils.jl")
+include("Algorithms/greedy.jl")
 # Lower Bound computation and heuristic
 include("Algorithms/Lower Bound/semi_linear_bound.jl")
 # Local search heuristic
