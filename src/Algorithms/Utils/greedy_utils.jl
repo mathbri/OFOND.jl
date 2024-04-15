@@ -115,6 +115,42 @@ function get_all_start_nodes(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
     return startNodes
 end
 
+# TODO : moving order loop to the most outer one allow to directly project src node before looping over dst node
+# Once the src node is projected, doesn't need to project dst, just looping over outneighbors of projected node
+# How do i get the dst in the TTGraph for the cost update ?
+# How do I handle the fact that the final arc cost will be known at the end of the order loop ?
+
+# Updating cost matrix on the travel time graph for a specific bundle 
+function update_cost_matrix!(
+    solution::Solution,
+    travelTimeGraph::TravelTimeGraph,
+    timeSpaceGraph::TimeSpaceGraph,
+    bundle::Bundle;
+    sorted::Bool=false,
+    use_bins::Bool=true,
+    opening_factor::Float64=1.0,
+    current_cost::Bool=false,
+)
+    # Iterating through outneighbors of the start nodes and common nodes
+    for src in
+        vcat(get_all_start_nodes(travelTimeGraph, bundle), travelTimeGraph.commonNodes)
+        for dst in outneighbors(travelTimeGraph, src)
+            travelTimeGraph.costMatrix[src, dst] = get_arc_update_cost(
+                solution,
+                travelTimeGraph,
+                timeSpaceGraph,
+                bundle,
+                src,
+                dst;
+                sorted=sorted,
+                use_bins=use_bins,
+                opening_factor=opening_factor,
+                current_cost=current_cost,
+            )
+        end
+    end
+end
+
 # Check whether the path of the bundle needs to be recomputed
 function is_path_admissible(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
     # Checking elementarity on network
