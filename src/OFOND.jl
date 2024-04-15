@@ -47,7 +47,8 @@ include("Algorithms/benchmarks.jl")
 include("Algorithms/Utils/greedy_utils.jl")
 include("Algorithms/greedy.jl")
 # Lower Bound computation and heuristic
-include("Algorithms/Lower Bound/semi_linear_bound.jl")
+include("Algorithms/Utils/lb_utils.jl")
+include("Algorithms/lower_bound.jl")
 # Local search heuristic
 include("Algorithms/Local Search/ls_utils.jl")
 include("Algorithms/Local Search/bundle_reintroduction.jl")

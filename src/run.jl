@@ -32,3 +32,7 @@ end
 function greedy_heuristic(instance::Instance)
     return run_heuristic(instance, greedy!)
 end
+
+function lower_bound_heuristic(instance::Instance)
+    return run_heuristic(instance, lower_bound!)
+end
