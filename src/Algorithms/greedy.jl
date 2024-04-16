@@ -104,6 +104,7 @@ function greedy_insertion(
                 use_bins=false,
                 current_cost=current_cost,
             )
+            pathCost = get_path_cost(shortestPath, costMatrix)
         end
     end
     return shortestPath, pathCost

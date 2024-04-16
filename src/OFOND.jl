@@ -50,10 +50,8 @@ include("Algorithms/greedy.jl")
 include("Algorithms/Utils/lb_utils.jl")
 include("Algorithms/lower_bound.jl")
 # Local search heuristic
-include("Algorithms/Local Search/ls_utils.jl")
-include("Algorithms/Local Search/bundle_reintroduction.jl")
-include("Algorithms/Local Search/two_node_incremental.jl")
-include("Algorithms/Local Search/local_search.jl")
+include("Algorithms/Utils/ls_utils.jl")
+include("Algorithms/local_search.jl")
 # Large Neighborhood Search
 include("Algorithms/LNS/lns_utils.jl")
 include("Algorithms/LNS/two_node.jl")
