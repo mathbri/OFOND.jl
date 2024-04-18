@@ -20,8 +20,13 @@
 #         For all arc in the path, update timed arcs loading with the corresponding bundle order content
 
 # TODO : add heuristic like linear unit cost for a_star and see if the results are better
+# Using this heuristic to prune nodes already encountered in the search space would be a good idea
+# a star implementation relatively easy so can be re-implemented
+
 # TODO : add regul cost ? carbon cost already linear in distance and volume
 # Discuss both with axel ? Maybe just testing it on the world instance
+
+# TODO : if update cost matrix is really expensive, do it once with every option and store all option results in different objects
 
 # Compute path and cost for the greedy insertion of a bundle, not handling path admissibility
 function greedy_path(
@@ -76,6 +81,7 @@ function greedy_insertion(
     )
     # If the path is not admissible, re-computing it
     if !is_path_admissible(TTGraph, shortestPath)
+        # TODO : store this path cost matrix in travel time graph if the recomputation is needed numerous times 
         # First trying to halve cost for the path computation
         costMatrix = deepcopy(TTGraph.costMatrix)
         shortestPath, pathCost = greedy_path(

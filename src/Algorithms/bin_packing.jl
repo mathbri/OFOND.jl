@@ -2,8 +2,6 @@
 
 # TODO : add other bin packing computations to improve this neighborhood
 
-# TODO : corrolate bins and loads !
-
 function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )

@@ -2,6 +2,8 @@
 
 # TODO : change name to delivery graph to avoid confusion with arc travel times ?
 
+# TODO : question the usage of sparse matrices because thay have slower getting times but uses less memory
+
 # Travel Time Graph
 struct TravelTimeGraph
     # Core fields

@@ -84,8 +84,10 @@ function refill_bins!(
     for timedDst in 1:size(workingArcs, 2)
         for srcIdx in nzrange(workingArcs, timedDst)
             timedSrc = rows[srcIdx]
-            bins = solution.bins[timedSrc, timedDst]
             arcData = timeSpaceGraph.networkArcs[timedSrc, timedDst]
+            # No need to refill bins on linear arcs
+            arcData.isLinear && continue
+            bins = solution.bins[timedSrc, timedDst]
             refill_bins!(bins, arcData)
             # Adding new arc cost
             costAfterRefill += compute_arc_cost(

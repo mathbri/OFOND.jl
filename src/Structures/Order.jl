@@ -3,6 +3,10 @@
 # TODO : check whether the size of the vector of commodity will be a problem 
 # TODO : add unique commodity vector to order ?
 
+# Maybe it would be more efficient to store commodities and quantities in different vector 
+# It would therefore need to differentiate between ffd for a vector of commodities -> refilling bins 
+# and ffd for an order as the implementation would not be the same -> filling bins
+
 struct Order
     # Core fields
     bundle::Bundle              # bundle to which the order belongs
