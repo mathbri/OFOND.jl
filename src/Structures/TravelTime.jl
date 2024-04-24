@@ -14,8 +14,8 @@ struct TravelTimeGraph
     # Properties
     costMatrix::SparseMatrixCSC{Float64,Int} # cost matrix used for path computation
     commonNodes::Vector{Int} # common nodes of the graph
-    bundleStartNodes::Vector{Int} # start nodes for bundles
-    bundleEndNodes::Vector{Int} # end nodes for bundles
+    bundleSrc::Vector{Int} # start nodes for bundles
+    bundleDst::Vector{Int} # end nodes for bundles
     hashToIdx::Dict{UInt,Int} # dict to easily recover nodes from time space to travel time
 end
 
@@ -98,7 +98,7 @@ function add_timed_supplier!(
         bundle -> bundle.maxDelTime == stepToDel, bundlesOnSupplier[nodeData.hash]
     )
     for bundle in startOnNode
-        travelTimeGraph.bundleStartNodes[bundle.idx] = nodeIdx
+        travelTimeGraph.bundleSrc[bundle.idx] = nodeIdx
     end
     return travelTimeGraph.hashToIdx[hash(stepToDel, nodeData.hash)] = nodeIdx
 end
@@ -112,7 +112,7 @@ function add_timed_customer!(
     add_timed_node!(travelTimeGraph, nodeData, stepToDel)
     nodeIdx = nv(travelTimeGraph.graph)
     for (h, bundle) in bundlesOnCustomer
-        travelTimeGraph.bundleEndNodes[bundle.idx] = nodeIdx
+        travelTimeGraph.bundleDst[bundle.idx] = nodeIdx
     end
 end
 

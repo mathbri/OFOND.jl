@@ -23,3 +23,7 @@ end
 function Base.:(==)(bun1::Bundle, bun2::Bundle)
     return bun1.hash == bun2.hash
 end
+
+function idx(bundles::Vector{Bundle})
+    return map(bundle -> bundle.idx, bundles)
+end

@@ -65,7 +65,7 @@ function get_arc_update_cost(
 )
     arcData = TTGraph.networkArcs[src, dst]
     # If the arc doesn't need an update, skipping
-    is_update_candidate(arcData, dst, TTGraph.bundleEndNodes[bundle.idx]) ||
+    is_update_candidate(arcData, dst, TTGraph.bundleDst[bundle.idx]) ||
         return TTGraph.costMatrix[src, dst]
     # Otherwise, computing the new cost
     arcBundleCost = EPS
@@ -102,7 +102,7 @@ end
 
 # Creating start node vector
 function get_all_start_nodes(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
-    src = travelTimeGraph.bundleStartNodes[bundle.idx]
+    src = travelTimeGraph.bundleSrc[bundle.idx]
     startNodes = Int[src]
     # Iterating through outneighbors of the start node
     otherSrc = find_other_src_node(travelTimeGraph, src)

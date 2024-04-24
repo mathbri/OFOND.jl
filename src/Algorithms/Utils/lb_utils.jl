@@ -38,7 +38,7 @@ function get_arc_lb_cost(
 )
     arcData = TTGraph.networkArcs[src, dst]
     # If the arc doesn't need an update, skipping
-    is_update_candidate(arcData, dst, TTGraph.bundleEndNodes[bundle.idx]) ||
+    is_update_candidate(arcData, dst, TTGraph.bundleDst[bundle.idx]) ||
         return TTGraph.costMatrix[src, dst]
     # Otherwise, computing the new cost
     arcBundleCost = EPS

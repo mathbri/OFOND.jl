@@ -11,6 +11,10 @@
 #    - a simple solution is to exclude bundles use oversea arcs
 # Bin packing neighborhood does not change
 
+# Other question : 
+# Instead of computing greedy and lower boud paths, would it be better to divide it into two different operators ?
+# Like reintroduce ann bundles with greedy path and then reintroduce all bundles with lower bound paths ?
+
 # Improving all bin packings if possible
 # The idea is to put skip linear to false just before returning the solution to get a more compact solution but it does not affect the cost
 function bin_packing_improvement!(
@@ -49,8 +53,6 @@ function bundle_reintroduction!(
     # compute greedy insertion and lower bound insertion and take the best one ?
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     bundles, paths = [bundle], [solution.bundlePaths[bundle.idx]]
-    # Getting all timed arcs concerned
-    bundleTSArcs = get_bundles_time_space_arcs(TSGraph, TTGraph, bundles, paths)
     # Saving previous solution state 
     previousBins, costRemoved = save_and_remove_bundle!(
         solution, TSGraph, TTGraph, bundles, paths; current_cost=current_cost
