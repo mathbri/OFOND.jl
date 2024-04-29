@@ -4,6 +4,8 @@
 
 # TODO : question the usage of sparse matrices because thay have slower getting times but uses less memory
 
+# TODO : overload all graphs function used to not have to do TTGraph.graph ?
+
 # Travel Time Graph
 struct TravelTimeGraph
     # Core fields

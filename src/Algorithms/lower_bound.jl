@@ -105,3 +105,8 @@ function lower_bound!(solution::Solution, instance::Instance)
     end
     return lowerBound
 end
+
+# TODO : use this heuristic as a filtering operation on the instance ?
+# I run the lower bound heuristic : it splits my instance between directs and non-directs 
+# Because the cost is lower bound, the directs are sure to be one ?
+# Than I can just consider the non-directs for the LNS

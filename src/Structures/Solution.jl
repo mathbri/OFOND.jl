@@ -2,6 +2,10 @@
 
 # Updating bins and loads in bin packing file
 
+# TODO : add a cost field that is updated when the solution is with a get cost function
+# TODO : add an update solution function that updates paths and bins and cost, 
+# with remove option to remove path and commodities from bins so that you have a unified API to Solution
+
 struct Solution
     # Paths used for delivery
     bundlePaths::Vector{Vector{Int}}

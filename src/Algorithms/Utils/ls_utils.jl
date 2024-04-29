@@ -20,30 +20,6 @@ function compute_new_bins(
     return newBins
 end
 
-# Combine all bundles paths in arguments into a sparse matrix indicating the arcs to work with
-function get_bundles_time_space_arcs(
-    timeSpaceGraph::TimeSpaceGraph,
-    travelTimeGraph::TravelTimeGraph,
-    bundles::Vector{Bundle},
-    paths::Vector{Vector{Int}},
-)
-    I, J = Int[], Int[]
-    # For every bundle path and every order in the bundle, adding the timed nodes in the matrix indices
-    for (bundle, path) in zip(bundles, paths)
-        for order in bundle.orders
-            timedPath = time_space_projector(
-                travelTimeGraph, timeSpaceGraph, path, order.deliveryDate
-            )
-            # Without checking overlapping as the combine function will take care of it
-            append!(I, timedPath[1:(end - 1)])
-            append!(J, timedPath[2:end])
-        end
-    end
-    V = ones(Bool, length(I))
-    # Combine function for bools is | by default
-    return sparse(I, J, V)
-end
-
 # Store previous bins before removing commodities from them
 function save_previous_bins(
     solution::Solution,
@@ -71,33 +47,6 @@ function save_previous_bins(
     return sparse(I, J, oldBins), previousCost
 end
 
-# Refill bins on the working arcs, to be used after bundle removal
-function refill_bins!(
-    solution::Solution,
-    timeSpaceGraph::TimeSpaceGraph,
-    workingArcs::SparseMatrixCSC{Bool,Int};
-    current_cost::Bool,
-)
-    costAfterRefill = 0.0
-    # Efficient iteration over sparse matrices
-    rows = rowvals(workingArcs)
-    for timedDst in 1:size(workingArcs, 2)
-        for srcIdx in nzrange(workingArcs, timedDst)
-            timedSrc = rows[srcIdx]
-            arcData = timeSpaceGraph.networkArcs[timedSrc, timedDst]
-            # No need to refill bins on linear arcs
-            arcData.isLinear && continue
-            bins = solution.bins[timedSrc, timedDst]
-            refill_bins!(bins, arcData)
-            # Adding new arc cost
-            costAfterRefill += compute_arc_cost(
-                timeSpaceGraph, bins, timedSrc, timedDst; current_cost=current_cost
-            )
-        end
-    end
-    return costAfterRefill
-end
-
 # Revert the bin loading the the vector of bins given
 function revert_bins!(solution::Solution, previousBins::SparseMatrixCSC{Vector{Bin},Int})
     # Efficient iteration over sparse matrices
@@ -121,7 +70,7 @@ function save_and_remove_bundle!(
     current_cost::Bool,
 )
     # Getting all timed arcs concerned
-    workingArcs = get_bundles_time_space_arcs(TSGraph, TTGraph, bundles, paths)
+    workingArcs = get_bins_updated(TSGraph, TTGraph, bundles, paths)
     # Saving previous solution state 
     previousBins, previousCost = save_previous_bins(
         solution, TSGraph, workingArcs; current_cost=current_cost
@@ -187,10 +136,10 @@ function best_reinsertion(
 end
 
 function select_two_nodes(travelTimeGraph::TravelTimeGraph)
-    node1 = rand(keys(travelTimeGraph.bundlesOnNodes))
-    node2 = rand(keys(travelTimeGraph.bundlesOnNodes))
+    node1 = rand(keys(travelTimeGraph.commonNodes))
+    node2 = rand(keys(travelTimeGraph.commonNodes))
     while node1 == node2
-        node2 = rand(keys(travelTimeGraph.bundlesOnNodes))
+        node2 = rand(keys(travelTimeGraph.commonNodes))
     end
     return node1, node2
 end
