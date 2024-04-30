@@ -39,26 +39,35 @@ end
 
 # Methods
 
-function add_bundle_path!(
+function update_bundle_path!(
     solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int, dst::Int
 )
+    oldPath = deepcopy(solution.bundlePaths[bundle.idx])
     if src != -1 && dst != -1
-        oldPath = solution.bundlePaths[bundle.idx]
         srcIdx = findfirst(node -> node == src, oldPath)
         dstIdx = findlast(node -> node == dst, oldPath)
         path = vcat(oldPath[1:srcIdx], path[2:(end - 1)], oldPath[dstIdx:end])
     end
-    return solution.bundlePaths[bundle.idx] = path
+    solution.bundlePaths[bundle.idx] = path
+    return oldPath
 end
 
 function update_bundle_on_nodes!(
-    solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int=-1, dst::Int=-1
+    solution::Solution,
+    bundle::Bundle,
+    path::Vector{Int};
+    partial::Bool=false,
+    remove::Bool=false,
 )
-    if src != -1 && dst != -1
+    if partial
         path = path[2:(end - 1)]
     end
     for node in path
-        push!(solution.bundlesOnNode[node], bundle)
+        if remove
+            filter!(bun -> bun != bundle, solution.bundlesOnNode[node])
+        else
+            push!(solution.bundlesOnNode[node], bundle)
+        end
     end
 end
 
@@ -67,16 +76,16 @@ end
 function add_path!(
     solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int=-1, dst::Int=-1
 )
-    add_bundle_path!(solution, bundle, path; src=src, dst=dst)
-    return update_bundle_on_nodes!(solution, bundle, path; src=src, dst=dst)
+    update_bundle_path!(solution, bundle, path; src=src, dst=dst)
+    return update_bundle_on_nodes!(solution, bundle, path; partial=(src != -1 && dst != -1))
 end
 
 # Remove the path of the bundle in the solution
-function remove_path!(solution::Solution, bundle::Bundle)
-    for node in solution.bundlePaths[bundle.idx]
-        filter!(bun -> bun != bundle, solution.bundlesOnNode[node])
-    end
-    return empty!(solution.bundlePaths[bundle.idx])
+function remove_path!(solution::Solution, bundle::Bundle; src::Int=-1, dst::Int=-1)
+    oldPart = update_bundle_path!(solution, bundle, Int[]; src=src, dst=dst)
+    return update_bundle_on_nodes!(
+        solution, bundle, oldPart; partial=(src != -1 && dst != -1), remove=true
+    )
 end
 
 # Plot some of the paths on a map ?
