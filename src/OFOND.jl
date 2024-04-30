@@ -41,6 +41,8 @@ include("Writing/write_solution.jl")
 
 # Algorithms
 include("Algorithms/bin_packing.jl")
+include("Algorithms/bin_updating.jl")
+include("Algorithms/solution_updating.jl")
 # Benchmarks heuristics
 include("Algorithms/benchmarks.jl")
 # Greedy heuristic
