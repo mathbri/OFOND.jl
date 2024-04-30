@@ -1,5 +1,11 @@
 # Updating functions for the solution
 
+function is_path_partial(TTGraph::TravelTimeGraph, bundle::Bundle, path::Vector{Int};)
+    bundle.supplier != TTGraph.networkNodes[path[1]] && return true
+    bundle.customer != TTGraph.networkNodes[path[end]] && return true
+    return false
+end
+
 function add_bundle!(
     solution::Solution,
     instance::Instance,
@@ -12,7 +18,11 @@ function add_bundle!(
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
     # Adding the bundle to the solution
     remove_shortcuts!(path, TTGraph)
-    add_path!(solution, bundle, path)
+    if is_path_partial(TTGraph, bundle, path)
+        add_path!(solution, bundle, path; src=path[1], dst=path[end])
+    else
+        add_path!(solution, bundle, path)
+    end
     # Updating the bins
     return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
 end
@@ -20,8 +30,8 @@ end
 # TODO : consider BitArray as it contains only boolean values
 # Combine all bundles paths in arguments into a sparse matrix indicating the arcs to work with
 function get_bins_updated(
-    timeSpaceGraph::TimeSpaceGraph,
-    travelTimeGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    TTGraph::TravelTimeGraph,
     bundles::Vector{Bundle},
     paths::Vector{Vector{Int}},
 )
@@ -29,9 +39,7 @@ function get_bins_updated(
     # For every bundle path and every order in the bundle, adding the timed nodes in the matrix indices
     for (bundle, path) in zip(bundles, paths)
         for order in bundle.orders
-            timedPath = time_space_projector(
-                travelTimeGraph, timeSpaceGraph, path, order.deliveryDate
-            )
+            timedPath = time_space_projector(TTGraph, TSGraph, path, order.deliveryDate)
             # Without checking overlapping as the combine function will take care of it
             append!(I, timedPath[1:(end - 1)])
             append!(J, timedPath[2:end])
@@ -85,7 +93,11 @@ function remove_bundle!(
     sorted::Bool=false,
 )
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
-    remove_path!(solution, bundle; src=path[1], dst=path[end])
+    if length(path) == 0
+        remove_path!(solution, bundle)
+    else
+        remove_path!(solution, bundle; src=path[1], dst=path[end])
+    end
     return update_bins!(
         solution, TSGraph, TTGraph, bundle, path; sorted=sorted, remove=true
     )
@@ -100,6 +112,7 @@ function update_solution!(
     paths::Vector{Vector{Int}}=[Int[] for _ in 1:length(bundles)];
     remove::Bool=false,
     sorted::Bool=false,
+    skipRefill::Bool=false,
 )
     costAdded = 0.0
     if !remove
@@ -112,6 +125,8 @@ function update_solution!(
         for (bundle, path) in zip(bundles, paths)
             costAdded += remove_bundle!(solution, instance, bundle, path; sorted=sorted)
         end
+        # If skipRefill than no recomputation
+        skipRefill && return costAdded
         # Than refilling the bins
         binsUpdated = get_bins_updated(
             instance.timeSpaceGraph, instance.travelTimeGraph, bundles, paths

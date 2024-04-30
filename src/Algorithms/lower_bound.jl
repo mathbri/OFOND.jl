@@ -95,15 +95,21 @@ function lower_bound!(solution::Solution, instance::Instance)
             solution, TTGraph, TSGraph, bundle, suppNode, custNode;
         )
         lowerBound += pathCost
-        # Adding path to solution
-        remove_shotcuts!(shortestPath, travelTimeGraph)
-        add_path!(solution, bundle, shortestPath)
-        # Updating the bins for each order of the bundle
-        for order in bundle.orders
-            update_bins!(solution, TSGraph, TTGraph, shortestPath, order; sorted=true)
-        end
+        # Adding to solution
+        update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
     end
-    return lowerBound
+    return println("Lower Bound Computed : $lowerBound")
+end
+
+function parrallel_lower_bound!(solution::Solution, instance::Instance)
+    lowerBound = 0.0
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Sorting commodities in orders and bundles between them
+    sort_order_content!(instance)
+    # Computing the lower bound delivery for each bundle
+    # TODO : parrallelize here with native @threads
+    # cut the instance by bundles and merge them at the end
+    return println("Lower Bound Computed : $lowerBound")
 end
 
 # TODO : use this heuristic as a filtering operation on the instance ?

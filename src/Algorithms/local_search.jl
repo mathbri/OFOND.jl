@@ -77,14 +77,10 @@ function bundle_reintroduction!(
     )
     # Updating path if it improves the cost
     if pathCost < costRemoved
-        remove_path!(solution, bundle)
-        # Adding path to solution
-        remove_shotcuts!(bestPath, travelTimeGraph)
-        add_path!(solution, bundle, bestPath)
-        # Updating the bins for each order of the bundle
-        for order in bundle.orders
-            update_bins!(solution, TSGraph, TTGraph, bestPath, order; sorted=true)
-        end
+        # Adding to solution
+        updateCost = update_solution!(solution, instance, [bundle], [bestPath]; sorted=true)
+        # verification
+        @assert isapprox(bestCost, updateCost) "Path cost and Update cost don't match, check the error"
         return nothing
     else
         return revert_bins!(solution, previousBins)
@@ -103,7 +99,6 @@ function two_node_incremental!(
     twoNodeBundles = get_bundles_to_update(solution, src, dst)
     twoNodePaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
     # Saving previous solution state 
-    previousPaths = [solution.bundlePaths[bundle.idx] for bundle in twoNodeBundles]
     previousBins, costRemoved = save_and_remove_bundle!(
         solution, TSGraph, TTGraph, bundles, twoNodePaths; current_cost=current_cost
     )
@@ -121,20 +116,15 @@ function two_node_incremental!(
             current_cost=current_cost,
         )
         addedCost += bestCost
-        # Adding path to solution
-        remove_shotcuts!(bestPath, travelTimeGraph)
-        add_path!(solution, bundle, bestPath; src=src, dst=dst)
-        # Updating the bins for each order of the bundle
-        for order in bundle.orders
-            update_bins!(solution, TSGraph, TTGraph, bestPath, order; sorted=sorted)
-        end
+        # Adding to solution
+        updateCost = update_solution!(solution, instance, [bundle], [bestPath]; sorted=true)
+        # verification
+        @assert isapprox(bestCost, updateCost) "Path cost and Update cost don't match, check the error"
     end
     # Solution already updated so if it didn't improve, reverting to old state
     if addedCost < costRemoved
-        for (idx, bundle) in enumerate(twoNodeBundles)
-            remove_path!(solution, bundle)
-            add_path!(solution, bundle, previousPaths[idx])
-        end
+        update_solution!(solution, instance, twoNodeBundles, twoNodePaths; remove=true)
+        update_solution!(solution, instance, twoNodeBundles, twoNodePaths; skipRefill=true)
         return revert_bins!(solution, previousBins)
     end
 end
@@ -144,7 +134,6 @@ function local_search!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     sort_order_content!(instance)
     # First, bundle reintroduction to change whole paths
-    # TODO : just on the direct shipments ?
     for bundle in instance.bundles
         bundle_reintroduction!(solution, instance, bundle; sorted=true)
     end

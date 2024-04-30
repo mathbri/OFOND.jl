@@ -21,18 +21,14 @@ function shortest_delivery!(solution::Solution, instance::Instance)
         suppNode = TTGraph.bundleStartNodes[bundle.idx]
         custNode = TTGraph.bundleEndNodes[bundle.idx]
         # Computing shortest path
-        shortestPath = a_star(TTGraph.graph, suppNode, custNode, TTGraph.costMatrix)
-        remove_shotcuts!(shortestPath, travelTimeGraph)
-        # Adding path to solution
-        add_path!(solution, bundle, shortestPath)
-        # Updating the bins for each order of the bundle
-        for order in bundle.orders
-            update_bins!(solution, TSGraph, TTGraph, shortestPath, order; sorted=true)
-        end
+        shortestPath = enumerate_paths(
+            dijkstra_shortest_paths(TTGraph.graph, suppNode, TTGraph.costMatrix), custNode
+        )
+        # Adding to solution
+        update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
     end
 end
 
 # Average orders volume and either create solution from lower bound solve idea or from milp solve idea
 
-function average_delivery_heuristic()
-end
+function average_delivery_heuristic() end

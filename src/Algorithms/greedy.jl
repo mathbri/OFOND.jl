@@ -124,7 +124,6 @@ function greedy!(solution::Solution, instance::Instance)
     # Computing the greedy delivery possible for each bundle
     for bundleIdx in sortedBundleIdxs
         bundle = instance.bundles[bundleIdx]
-
         # Retrieving bundle start and end nodes
         suppNode = TTGraph.bundleStartNodes[bundleIdx]
         custNode = TTGraph.bundleEndNodes[bundleIdx]
@@ -132,13 +131,11 @@ function greedy!(solution::Solution, instance::Instance)
         shortestPath, pathCost = greedy_insertion(
             solution, TTGraph, TSGraph, bundle, suppNode, custNode; sorted=true
         )
-
-        # Adding path to solution
-        remove_shotcuts!(shortestPath, travelTimeGraph)
-        add_path!(solution, bundle, shortestPath)
-        # Updating the bins for each order of the bundle
-        for order in bundle.orders
-            update_bins!(solution, TSGraph, TTGraph, shortestPath, order; sorted=true)
-        end
+        # Adding to solution
+        updateCost = update_solution!(
+            solution, instance, [bundle], [shortestPath]; sorted=true
+        )
+        # verification
+        @assert isapprox(pathCost, updateCost) "Path cost and Update cost don't match, check the error"
     end
 end
