@@ -3,12 +3,23 @@
 # TODO : when solution struct updated, replace paths with solution and get path with the bundle idx
 
 # Check whether the arc is fit for a cost update
-function is_update_candidate(arcData::NetworkArc, dst::Int, bundleDst::Int)
+function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
+    arcData = TTGraph.networkArcs[src, dst]
     # If it is a shortcut leg, cost alredy set to EPS
     arcData.type == :shortcut && return false
+    bundleDst = TTGraph.bundleDst[bundle.idx]
     # If the destination is not the right plant, not updating cost
     (arcData.type == :delivery && dst != bundleDst) && return false
     return true
+end
+
+# Check whether the arc is forbidden for the bundle
+function is_forbidden(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
+    # If it is an inland bundle, I want to avoid ports
+    inlandBundle = (bundle.customer.continent == bundle.supplier.continent)
+    srcIsPort = TTGraph.networkNodes[src].type in [:port_l, :port_d]
+    dstIsPort = TTGraph.networkNodes[dst].type in [:port_l, :port_d]
+    return (inlandBundle && (srcIsPort || dstIsPort))
 end
 
 function get_order_node_com_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
@@ -63,10 +74,8 @@ function get_arc_update_cost(
     opening_factor::Float64,
     current_cost::Bool,
 )
-    arcData = TTGraph.networkArcs[src, dst]
-    # If the arc doesn't need an update, skipping
-    is_update_candidate(arcData, dst, TTGraph.bundleDst[bundle.idx]) ||
-        return TTGraph.costMatrix[src, dst]
+    # If the arc is forbidden for the bundle, returning INF
+    is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
     # Otherwise, computing the new cost
     arcBundleCost = EPS
     for order in bundle.orders
@@ -123,8 +132,8 @@ end
 # Updating cost matrix on the travel time graph for a specific bundle 
 function update_cost_matrix!(
     solution::Solution,
-    travelTimeGraph::TravelTimeGraph,
-    timeSpaceGraph::TimeSpaceGraph,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
     bundle::Bundle;
     sorted::Bool=false,
     use_bins::Bool=true,
@@ -132,13 +141,15 @@ function update_cost_matrix!(
     current_cost::Bool=false,
 )
     # Iterating through outneighbors of the start nodes and common nodes
-    for src in
-        vcat(get_all_start_nodes(travelTimeGraph, bundle), travelTimeGraph.commonNodes)
-        for dst in outneighbors(travelTimeGraph, src)
-            travelTimeGraph.costMatrix[src, dst] = get_arc_update_cost(
+    for src in vcat(get_all_start_nodes(TTGraph, bundle), TTGraph.commonNodes)
+        for dst in outneighbors(TTGraph, src)
+            # If the arc doesn't need an update, skipping
+            is_update_candidate(TTGraph, src, dst, bundle) || continue
+            # Otherwise, computing the new cost
+            TTGraph.costMatrix[src, dst] = get_arc_update_cost(
                 solution,
-                travelTimeGraph,
-                timeSpaceGraph,
+                TTGraph,
+                TSGraph,
                 bundle,
                 src,
                 dst;

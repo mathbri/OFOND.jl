@@ -36,10 +36,8 @@ function get_arc_lb_cost(
     current_cost::Bool,
     giant::Bool,
 )
-    arcData = TTGraph.networkArcs[src, dst]
-    # If the arc doesn't need an update, skipping
-    is_update_candidate(arcData, dst, TTGraph.bundleDst[bundle.idx]) ||
-        return TTGraph.costMatrix[src, dst]
+    # If the arc is forbidden for the bundle, returning INF
+    is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
     # Otherwise, computing the new cost
     arcBundleCost = EPS
     for order in bundle.orders
@@ -72,6 +70,9 @@ function update_lb_cost_matrix!(
     for src in
         vcat(get_all_start_nodes(travelTimeGraph, bundle), travelTimeGraph.commonNodes)
         for dst in outneighbors(travelTimeGraph, src)
+            # If the arc doesn't need an update, skipping
+            is_update_candidate(TTGraph, src, dst, bundle) || continue
+            # Otherwise, computing the new cost
             travelTimeGraph.costMatrix[src, dst] = get_arc_lb_cost(
                 solution,
                 travelTimeGraph,
