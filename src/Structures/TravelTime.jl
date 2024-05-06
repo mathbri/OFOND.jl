@@ -221,3 +221,11 @@ end
 function is_path_elementary(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
     return is_path_elementary(hash.(travelTimeGraph.networkNodes[path]))
 end
+
+function is_port(travelTimeGraph::TravelTimeGraph, node::Int)
+    return travelTimeGraph.networkNodes[node].type in [:port_l, :port_d]
+end
+
+function is_platform(travelTimeGraph::TravelTimeGraph, node::Int)
+    return travelTimeGraph.networkNodes[node].type in [:xdock, :iln]
+end

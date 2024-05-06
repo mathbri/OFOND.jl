@@ -27,7 +27,6 @@ function save_previous_bins(
     workingArcs::SparseMatrixCSC{Bool,Int};
     current_cost::Bool,
 )
-    previousCost = 0.0
     I, J, _ = findnz(workingArcs)
     oldBins = Vector{Vector{Bin}}(undef, length(workingArcs))
     # Efficient iteration over sparse matrices
@@ -35,16 +34,11 @@ function save_previous_bins(
     for timedDst in 1:size(workingArcs, 2)
         for srcIdx in nzrange(workingArcs, timedDst)
             timedSrc = rows[srcIdx]
-            bins = solution.bins[timedSrc, timedDst]
-            # Adding previous arc cost
-            previousCost += compute_arc_cost(
-                timeSpaceGraph, bins, timedSrc, timedDst; current_cost=current_cost
-            )
             # Storing old bins
-            oldBins[srcIdx] = deepcopy(bins)
+            oldBins[srcIdx] = deepcopy(solution.bins[timedSrc, timedDst])
         end
     end
-    return sparse(I, J, oldBins), previousCost
+    return sparse(I, J, oldBins)
 end
 
 # Revert the bin loading the the vector of bins given
@@ -63,25 +57,22 @@ end
 
 function save_and_remove_bundle!(
     solution::Solution,
-    TSGraph::TimeSpaceGraph,
-    TTGraph::TravelTimeGraph,
+    instance::Instance,
     bundles::Vector{Bundle},
     paths::Vector{Vector{Int}};
     current_cost::Bool,
+    sorted::Bool,
 )
     # Getting all timed arcs concerned
     workingArcs = get_bins_updated(TSGraph, TTGraph, bundles, paths)
     # Saving previous solution state 
-    previousBins, previousCost = save_previous_bins(
+    previousBins = save_previous_bins(
         solution, TSGraph, workingArcs; current_cost=current_cost
     )
-    # Remove the bundle from the current solution 
-    remove_bundles!(solution, TSGraph, TTGraph, bundles, paths, workingArcs)
-    # Adpat the bins to this removal
-    costAfterRefill = refill_bins!(
-        solution, TSGraph, workingArcs; current_cost=current_cost
+    costRemoved = update_solution!(
+        solution, instance, bundles, paths; remove=true, sorted=sorted
     )
-    return previousBins, previousCost - costAfterRefill
+    return previousBins, costRemoved
 end
 
 function best_reinsertion(
@@ -142,6 +133,12 @@ function select_two_nodes(travelTimeGraph::TravelTimeGraph)
         node2 = rand(keys(travelTimeGraph.commonNodes))
     end
     return node1, node2
+end
+
+function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
+    src == dst && return false
+    is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
+    return true
 end
 
 # Return a vector of bundles to update 

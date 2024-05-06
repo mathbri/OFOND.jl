@@ -12,6 +12,7 @@ function add_bundle!(
     bundle::Bundle,
     path::Vector{Int};
     sorted::Bool=false,
+    skipFill::Bool=false,
 )
     # If nothing to do, returns nothing
     length(path) == 0 && return costAdded
@@ -24,6 +25,7 @@ function add_bundle!(
         add_path!(solution, bundle, path)
     end
     # Updating the bins
+    skipFill && return 0.0
     return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
 end
 
@@ -118,7 +120,9 @@ function update_solution!(
     if !remove
         # If remove = false, adding the bundle to the solution
         for (bundle, path) in zip(bundles, paths)
-            costAdded += add_bundle!(solution, instance, bundle, path; sorted=sorted)
+            costAdded += add_bundle!(
+                solution, instance, bundle, path; sorted=sorted, skipFill=skipRefill
+            )
         end
     else
         # If remove = true, removing the bundle from the solution
