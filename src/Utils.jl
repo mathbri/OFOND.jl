@@ -17,3 +17,13 @@ function is_path_elementary(path::Vector{UInt})
     end
     return true
 end
+
+function init_counters(labels::Vector{String})
+    return Dict{String,Int}(labels .=> 0)
+end
+
+function print_counters(counters::Dict{String,Int})
+    for (key, value) in pairs(counters)
+        println("$key : $value")
+    end
+end
