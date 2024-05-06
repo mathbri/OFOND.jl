@@ -373,7 +373,7 @@ function two_node_incremental_analysis!(sol::Solution, inst::Instance)
 
     for src in TTGraph.commonNodes, dst in TTGraph.commonNodes
         if !are_nodes_candidate(TTGraph, src, dst)
-            src != dst && counters["Filtered"] += 1
+            src != dst && (counters["Filtered"] += 1)
             continue
         end
         twoNodeBundles = get_bundles_to_update(sol, src, dst)
