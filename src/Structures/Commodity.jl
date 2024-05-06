@@ -8,41 +8,19 @@ struct CommodityData
 end
 
 struct Commodity
-    order::Order         # order of the commodity
+    orderHash::UInt      # hash of the order the commodity belongs
     partNumHash::UInt    # hashing part number for efficient equality comparison
     data::CommodityData  # (shared) data of the commodity
-end
-
-function Commodity(order::Order, data::CommodityData)
-    return Commodity(order, hash(data.partNumber), data)
 end
 
 # Methods
 
 function Base.:(==)(com1::Commodity, com2::Commodity)
-    return (com1.order == com2.order) && (ord1.partNumHash == ord2.partNumHash)
+    return (com1.orderHash == com2.orderHash) && (ord1.partNumHash == ord2.partNumHash)
 end
 
-function get_supplier(commodity::Commodity)
-    return commodity.order.bundle.supplier
-end
+part_number(commodity::Commodity) = commodity.data.partNumber
 
-function get_customer(commodity::Commodity)
-    return commodity.order.bundle.customer
-end
+size(commodity::Commodity) = commodity.data.size
 
-function get_delivery_date(commodity::Commodity)
-    return commodity.order.deliveryDate
-end
-
-function get_part_number(commodity::Commodity)
-    return commodity.data.partNumber
-end
-
-function get_size(commodity::Commodity)
-    return commodity.data.size
-end
-
-function get_lead_time_cost(commodity::Commodity)
-    return commodity.data.leadTimeCost
-end
+lead_time_cost(commodity::Commodity) = commodity.data.leadTimeCost
