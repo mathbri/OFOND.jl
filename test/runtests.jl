@@ -1,6 +1,11 @@
 using OFOND
 using Test
+using Graphs
+
+println("Testing OFO Network Design Package")
 
 @testset "OFOND.jl" begin
-    # Write your tests here.
+    @testset "utils.jl" begin
+        include("test_utils.jl")
+    end
 end

@@ -2,8 +2,8 @@
 
 # These functions are made to be used across the whole project and are not specifically made for a stucture or specific algorithm
 
-function get_path_nodes(path::Vector{Edge})
-    return vcat([src(e) for e in path], [dst(path[1])])
+function get_path_nodes(path::Vector{T}) where {T<:AbstractEdge}
+    return vcat([src(e) for e in path], [dst(path[end])])
 end
 
 function is_path_elementary(path::Vector{UInt})
