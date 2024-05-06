@@ -148,8 +148,8 @@ function update_counters!(
 )
     prefix = "Bin"
     lowerBound && (prefix = "Giant")
-    recomputed && counters["Recomputed"] += 1
-    binUsedBetter && counters["$prefix Used Better"] += 1
+    recomputed && (counters["Recomputed"] += 1)
+    binUsedBetter && (counters["$prefix Used Better"] += 1)
     if binUsedBetter
         counters["$prefix Used Diff"] += binUsedDiff
     else
@@ -272,7 +272,7 @@ function bundle_reintroduction_analysis!(sol::Solution, inst::Instance)
         bundles, paths = [bundle], [sol.bundlePaths[bundle.idx]]
         # Saving previous solution state 
         previousBins, costRemoved = save_and_remove_bundle!(
-            sol, TSGraph, TTGraph, bundles, paths; current_cost=false
+            sol, inst, bundles, paths; current_cost=false
         )
         # If the cost removed is negative or null, no chance of improving 
         if costRemoved <= 0
@@ -315,14 +315,14 @@ function bundle_reintroduction_analysis!(sol::Solution, inst::Instance)
         if pathCost < costRemoved
             costImprov += costRemoved - pathCost
             improvCharac["Total"] += 1
-            length(paths[1]) == 2 && improvCharac["On Direct"] += 1
+            length(paths[1]) == 2 && (improvCharac["On Direct"] += 1)
             improvCharac["Mean Orders"] += length(bundle.orders)
             improvCharac["Mean Commo"] += sum(o -> length(o.content), bundle.orders)
             improvCharac["Mean Volume"] += sum(o -> o.volume, bundle.orders)
             update_solution!(solution, instance, bundles, [bestPath]; sorted=true)
         else
             counters["No Improv"] += 1
-            paths[1] == bestPath && counters["Same Path"] += 1
+            paths[1] == bestPath && (counters["Same Path"] += 1)
             update_solution!(
                 solution, instance, bundles, paths; remove=true, skipRefill=true
             )
@@ -376,15 +376,15 @@ function two_node_incremental_analysis!(sol::Solution, inst::Instance)
             src != dst && counters["Filtered"] += 1
             continue
         end
-        twoNodeBundles = get_bundles_to_update(solution, src, dst)
+        twoNodeBundles = get_bundles_to_update(sol, src, dst)
         if length(twoNodeBundles) == 0
             counters["No Bundles"] += 1
             continue
         end
-        twoNodePaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
+        twoNodePaths = get_paths_to_update(sol, twoNodeBundles, src, dst)
         # Saving previous solution state 
         previousBins, costRemoved = save_and_remove_bundle!(
-            solution, TSGraph, TTGraph, bundles, twoNodePaths; current_cost=current_cost
+            sol, inst, bundles, twoNodePaths; current_cost=current_cost
         )
         # Inserting it back
         mixSol, lbSol = deepcopy(sol), deepcopy(sol)
@@ -399,9 +399,7 @@ function two_node_incremental_analysis!(sol::Solution, inst::Instance)
                 lbSol, TTGraph, TSGraph, bundle, src, dst; use_bins=true
             )
             # Computing real cost of lbPath
-            update_cost_matrix!(
-                solution, TTGraph, TSGraph, bundle; sorted=sorted, use_bins=true
-            )
+            update_cost_matrix!(sol, TTGraph, TSGraph, bundle; sorted=sorted, use_bins=true)
             lbCost = get_path_cost(lbPath, TTGraph.costMatrix)
 
             gAddedCost += gCost
@@ -439,7 +437,7 @@ function two_node_incremental_analysis!(sol::Solution, inst::Instance)
             update_solution!(
                 sol, inst, twoNodeBundles, twoNodePaths; remove=true, skipRefill=true
             )
-            return revert_bins!(solution, previousBins)
+            return revert_bins!(sol, previousBins)
         end
     end
 

@@ -1,6 +1,6 @@
 # Functions used for lower bound computation
 
-function get_order_transport_units(
+function get_order_lb_transport_units(
     solution::Solution,
     TSGraph::TimeSpaceGraph,
     timedSrc::Int,
@@ -49,7 +49,7 @@ function get_arc_lb_cost(
         arcBundleCost += get_order_node_com_cost(TTGraph, src, dst, order)
         # Arc transport cost 
         arcBundleCost +=
-            get_order_transport_units(
+            get_order_lb_transport_units(
                 solution, TSGraph, timedSrc, timedDst, order; use_bins=use_bins, giant=giant
             ) * get_transport_cost(TSGraph, timedSrc, timedDst; current_cost=current_cost)
     end

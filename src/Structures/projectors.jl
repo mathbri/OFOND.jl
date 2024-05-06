@@ -52,7 +52,7 @@ function time_space_projector(
     # Computing the time step from the delivery date and the steps from delivery
     timeSpaceDate = deliveryDate - travelTimeGraph.stepToDel[travelTimeNode]
     # If it goes out of the horizon, rolling it back to the top
-    timeSpaceDate < 1 && timeSpaceDate += timeSpaceGraph.timeHorizon
+    timeSpaceDate < 1 && (timeSpaceDate += timeSpaceGraph.timeHorizon)
     # Using travel time link dict to return the right node idx
     nodeData = travelTimeGraph.networkNodes[travelTimeNode]
     return timeSpaceGraph.hashToIdx[hash(timeSpaceDate, nodeData.hash)]
