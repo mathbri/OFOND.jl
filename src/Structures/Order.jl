@@ -26,10 +26,18 @@ function Order(bunH::UInt, delDate::Int)
     )
 end
 
+function Order(bunH::UInt, delDate::Int, content::Vector{Commodity})
+    return Order(bunH, delDate, content, hash(delDate, bunH), 0, Dict{Symbol,Int}(), 0, 0.0)
+end
+
 # Methods
 
 function Base.:(==)(ord1::Order, ord2::Order)
     return (ord1.bundleHash == ord2.bundleHash) && (ord1.deliveryDate == ord2.deliveryDate)
+end
+
+function Base.hash(order::Order)
+    return hash(order.deliveryDate, order.bundleHash)
 end
 
 # Add useful properties to the order
