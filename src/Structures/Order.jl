@@ -45,17 +45,17 @@ function add_properties(order::Order, bin_packing::Function)
     volume = sum(com -> size(com), order.content)
     for arcType in BP_ARC_TYPES
         capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
-        bpUnits[arcType] = bin_packing(Bin[], capacity, order.content)
+        order.bpUnits[arcType] = bin_packing(Bin[], capacity, order.content)
     end
     minPackSize = minimum(com -> size(com), order.content)
     leadTimeCost = sum(com -> lead_time_cost(com), order.content)
     return Order(
-        order.bundle,
+        order.bundleHash,
         order.deliveryDate,
         order.content,
         order.hash,
         volume,
-        bpUnits,
+        order.bpUnits,
         minPackSize,
         leadTimeCost,
     )

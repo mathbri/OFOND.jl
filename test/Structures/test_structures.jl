@@ -7,10 +7,14 @@ end
     include("test_order.jl")
 end
 # Bundle
-# @testset "Bundle" begin
-#     include("struct/test_bundle.jl")
-# end
+@testset "Bundle" begin
+    include("test_bundle.jl")
+end
 # Bin
+@testset "Bin" begin
+    include("test_bin.jl")
+end
+
 # Network
 # Travel Time
 # Time Space 

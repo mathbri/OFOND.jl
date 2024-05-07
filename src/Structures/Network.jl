@@ -29,7 +29,7 @@ struct NetworkNode
         return new(
             account,
             type,
-            hash(account, type),
+            hash(account, hash(type)),
             name,
             coordinates,
             country,
@@ -65,7 +65,7 @@ function Base.:(==)(node1::NetworkNode, node2::NetworkNode)
 end
 
 function Base.hash(node::NetworkNode)
-    return hash(node.account, node.type)
+    return hash(node.account, hash(node.type))
 end
 
 function Base.show(node::NetworkNode)

@@ -1,5 +1,9 @@
 # Commodity structure to store corresponding metadata
 
+# This contruction makes the commodity mutable, which may impede performance
+# Maybe an option is to hash directly the partNumber and keep a dictionnary for the reverse function at writing time 
+# TODO : to test
+
 # TODO : a lot of commodities so maybe use the most lightwieght data structures like string15 and Int8 if memory problems occurs
 struct CommodityData
     partNumber::String     # part number of the commodity
@@ -16,7 +20,7 @@ end
 # Methods
 
 function Base.:(==)(com1::Commodity, com2::Commodity)
-    return (com1.orderHash == com2.orderHash) && (ord1.partNumHash == ord2.partNumHash)
+    return (com1.orderHash == com2.orderHash) && (com1.partNumHash == com2.partNumHash)
 end
 
 part_number(commodity::Commodity) = commodity.data.partNumber
