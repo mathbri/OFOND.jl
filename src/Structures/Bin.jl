@@ -62,7 +62,3 @@ end
 function Base.zero(::Type{Vector{Bin}})
     return Bin[]
 end
-
-function Base.zero(::Type{Vector{Int}})
-    return Int[]
-end

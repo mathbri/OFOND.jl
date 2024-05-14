@@ -27,3 +27,7 @@ function print_counters(counters::Dict{String,Int})
         println("$key : $value")
     end
 end
+
+function Base.zero(::Type{Vector{Int}})
+    return Int[]
+end

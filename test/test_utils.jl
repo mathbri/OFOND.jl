@@ -18,3 +18,7 @@ end
     counters = Dict("Label A" => 2, "Label B" => 1, "Label C" => 0)
     OFOND.print_counters(counters)
 end
+
+@testset "Testing zero" begin
+    @test OFOND.zero(Vector{Int}) == Int[]
+end

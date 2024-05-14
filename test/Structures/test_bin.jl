@@ -69,5 +69,4 @@ end
 
 @testset "Testing zero" begin
     @test OFOND.zero(Vector{OFOND.Bin}) == OFOND.Bin[]
-    @test OFOND.zero(Vector{Int}) == Int[]
 end
