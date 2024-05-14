@@ -2,6 +2,7 @@ using OFOND
 using Test
 using Graphs
 using Geodesy
+using MetaGraphsNext
 
 println("Testing OFO Network Design Package")
 

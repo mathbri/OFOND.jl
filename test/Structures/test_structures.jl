@@ -14,8 +14,11 @@ end
 @testset "Bin" begin
     include("test_bin.jl")
 end
-
 # Network
+@testset "Network" begin
+    include("test_network.jl")
+end
+
 # Travel Time
 # Time Space 
 # Instance
