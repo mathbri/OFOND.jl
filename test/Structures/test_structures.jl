@@ -22,8 +22,11 @@ end
 @testset "TravelTime" begin
     include("test_travel_time.jl")
 end
-
 # Time Space 
+@testset "TimeSpace" begin
+    include("test_time_space.jl")
+end
+
 # Instance
 # Solution
 # Struct utils

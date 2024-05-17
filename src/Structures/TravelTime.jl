@@ -157,7 +157,7 @@ function add_network_arc!(
     arcData::NetworkArc,
 )
     maxTime = maximum(travelTimeGraph.stepToDel)
-    I, J = Int[], Int[]
+    srcs, dsts = Int[], Int[]
     for stepToDel in 0:maxTime
         # Adding timed copy of network arc
         src = get(travelTimeGraph.hashToIdx, hash(stepToDel, srcData.hash), nothing)
@@ -168,11 +168,11 @@ function add_network_arc!(
         )
         if src !== nothing && dst !== nothing
             add_edge!(travelTimeGraph.graph, src, dst)
-            push!(I, src)
-            push!(J, dst)
+            push!(srcs, src)
+            push!(dsts, dst)
         end
     end
-    return I, J
+    return srcs, dsts
 end
 
 function add_arc_to_vectors!(

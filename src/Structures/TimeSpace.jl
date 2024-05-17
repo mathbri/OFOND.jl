@@ -20,7 +20,7 @@ function TimeSpaceGraph(timeHorizon::Int)
         timeHorizon,
         NetworkNode[],
         Int[],
-        SparseMatrixCSC{NetworkArc,Int}(),
+        sparse([], [], NetworkArc[]),
         Dict{UInt,Int}(),
         sparse(zeros(Float64, 0, 0)),
         Edge[],
@@ -69,64 +69,43 @@ function add_network_arc!(
     dstData::NetworkNode,
     arcData::NetworkArc,
 )
+    srcs, dsts = Int[], Int[]
     for timeStep in 1:(timeSpaceGraph.timeHorizon)
         # Adding timed copy of network arc
         src = get(timeSpaceGraph.hashToIdx, hash(timeStep, srcData.hash), nothing)
-        dst = get(
-            timeSpaceGraph.hashToIdx,
-            hash(timeStep + arcData.travelTime, dstData.hash),
-            nothing,
-        )
+        dstTimeStep = timeStep + arcData.travelTime
+        dstTimeStep > timeSpaceGraph.timeHorizon &&
+            (dstTimeStep -= timeSpaceGraph.timeHorizon)
+        dst = get(timeSpaceGraph.hashToIdx, hash(dstTimeStep, dstData.hash), nothing)
         if src !== nothing && dst !== nothing
             add_edge!(timeSpaceGraph.graph, src, dst)
+            push!(srcs, src)
+            push!(dsts, dst)
+            arcData.type in COMMON_ARC_TYPES &&
+                push!(timeSpaceGraph.commonArcs, Edge(src, dst))
         end
     end
-end
-
-function add_arc_to_vectors!(
-    vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
-    timeSpaceGraph::TimeSpaceGraph,
-    srcData::NetworkNode,
-    dstData::NetworkNode,
-    arcData::NetworkArc,
-)
-    for timeStep in 1:(timeSpaceGraph.timeHorizon)
-        # Adding timed copy of network arc
-        src = get(travelTimeGraph.hashToIdx, hash(timeStep, srcData.hash), nothing)
-        dst = get(
-            travelTimeGraph.hashToIdx,
-            hash(timeStep + arcData.travelTime, dstData.hash),
-            nothing,
-        )
-        if src !== nothing && dst !== nothing
-            I, J, arcs, costs = vectors
-            push!(I, src)
-            push!(J, dst)
-            push!(arcs, arcData)
-            push!(costs, EPS)
-        end
-    end
+    return srcs, dsts
 end
 
 function TimeSpaceGraph(network::NetworkGraph, timeHorizon::Int)
     # Initializing structures
-    timeSpaceGraph = TimeSpaceGraph()
+    timeSpaceGraph = TimeSpaceGraph(timeHorizon)
     # Adding all nodes from the network graph
-    for nodeHash in labels(network)
-        add_network_node!(timeSpaceGraph, network[nodeHash])
+    for nodeHash in labels(network.graph)
+        add_network_node!(timeSpaceGraph, network.graph[nodeHash])
     end
     # Initializing vectors for sparse matrices
     I, J, arcs, costs = Int[], Int[], NetworkArc[], Float64[]
     nodesHash = hash.(timeSpaceGraph.networkNodes)
     # Adding all arcs form the network graph (except shortcuts)
-    for (sourceHash, destHash) in edge_labels(network)
-        srcData, dstData, arcData = network[srcHash],
-        network[dstHash],
-        network[srcHash, dstHash]
+    for (srcHash, dstHash) in edge_labels(network.graph)
+        srcData, dstData = network.graph[srcHash], network.graph[dstHash]
+        arcData = network.graph[srcHash, dstHash]
         # Not adding shortcut arcs 
         arcData.type == :shortcut && continue
-        add_network_arc!(timeSpaceGraph, srcData, dstData, arcData)
-        add_arc_to_vectors!((I, J, arcs, costs), timeSpaceGraph, srcData, dstData, arcData)
+        srcs, dsts = add_network_arc!(timeSpaceGraph, srcData, dstData, arcData)
+        add_arc_to_vectors!((I, J, arcs, costs), srcs, dsts, arcData)
     end
     return TimeSpaceGraph(timeSpaceGraph, I, J, arcs, costs)
 end
