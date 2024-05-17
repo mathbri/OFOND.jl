@@ -55,6 +55,8 @@ struct NetworkArc
     capacity::Int        # transport unit capacity
 end
 
+const SHORTCUT = NetworkArc(:shortcut, EPS, 1, false, EPS, false, EPS, 1_000_000)
+
 # Network Graph
 struct NetworkGraph
     graph::MetaGraph
@@ -108,8 +110,7 @@ function add_node!(network::NetworkGraph, node::NetworkNode)
     network.graph[node.hash] = node
     # If its a supplier adding shortcut arc to the network 
     if node.type == :supplier
-        arc = NetworkArc(:shortcut, EPS, 1, false, EPS, false, EPS, 1_000_000)
-        add_arc!(network, node, node, arc)
+        add_arc!(network, node, node, SHORTCUT)
     end
 end
 
@@ -136,6 +137,6 @@ end
 
 # TODO : add a function to change arc or node data if needed
 
-function Base.zero(::Type{Vector{NetworkArc}})
-    return NetworkArc[]
+function Base.zero(::Type{NetworkArc})
+    return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end

@@ -18,8 +18,11 @@ end
 @testset "Network" begin
     include("test_network.jl")
 end
-
 # Travel Time
+@testset "TravelTime" begin
+    include("test_travel_time.jl")
+end
+
 # Time Space 
 # Instance
 # Solution

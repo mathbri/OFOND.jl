@@ -3,6 +3,7 @@ using Test
 using Graphs
 using Geodesy
 using MetaGraphsNext
+using SparseArrays
 
 println("Testing OFO Network Design Package")
 

@@ -107,5 +107,6 @@ end
 end
 
 @testset "Testing zero" begin
-    @test OFOND.zero(Vector{OFOND.NetworkArc}) == OFOND.NetworkArc[]
+    @test OFOND.zero(OFOND.NetworkArc) ==
+        OFOND.NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end

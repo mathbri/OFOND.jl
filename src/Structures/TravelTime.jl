@@ -25,12 +25,26 @@ function TravelTimeGraph()
     return TravelTimeGraph(
         SimpleDiGraph(),
         NetworkNode[],
-        SparseMatrixCSC{NetworkArc,Int}(),
+        sparse([], [], NetworkArc[]),
         Int[],
         sparse(zeros(Float64, 0, 0)),
         Int[],
         Int[],
         Int[],
+        Dict{UInt,Int}(),
+    )
+end
+
+function TravelTimeGraph(bundles::Vector{Bundle})
+    return TravelTimeGraph(
+        SimpleDiGraph(),
+        NetworkNode[],
+        sparse([], [], NetworkArc[]),
+        Int[],
+        sparse(zeros(Float64, 0, 0)),
+        Int[],
+        fill(-1, length(bundles)),
+        fill(-1, length(bundles)),
         Dict{UInt,Int}(),
     )
 end
@@ -48,10 +62,10 @@ function TravelTimeGraph(
         sparse(I, J, arcs),
         travelTimeGraph.stepToDel,
         sparse(I, J, costs),
-        travelTimeUtils.commonNodes,
-        travelTimeUtils.bundleStartNodes,
-        travelTimeUtils.bundleEndNodes,
-        travelTimeUtils.bundleOnNodes,
+        travelTimeGraph.commonNodes,
+        travelTimeGraph.bundleSrc,
+        travelTimeGraph.bundleDst,
+        travelTimeGraph.hashToIdx,
     )
 end
 
@@ -68,52 +82,39 @@ function get_bundle_on_nodes(bundles::Vector{Bundle})
     return bundlesOnNodes
 end
 
-function get_node_extra_copies(
-    nodeData::NetworkNode, bundlesOnSupplier::Dict{UInt,Vector{Bundle}}, maxTime::Int
-)
-    if nodeData.type == :plant
-        return 0
-    elseif nodeData.type == :supplier
-        return maximum(bundle -> bundle.maxDelTime, bundlesOnSupplier[nodeHash]) - 1
-    else
-        return maxTime - 1
-    end
-end
-
 function add_timed_node!(
     travelTimeGraph::TravelTimeGraph, nodeData::NetworkNode, stepToDel::Int
 )
     add_vertex!(travelTimeGraph.graph)
     push!(travelTimeGraph.networkNodes, nodeData)
-    return push!(travelTimeGraph.stepToDel, stepToDel)
+    push!(travelTimeGraph.stepToDel, stepToDel)
+    nodeIdx = nv(travelTimeGraph.graph)
+    travelTimeGraph.hashToIdx[hash(stepToDel, nodeData.hash)] = nodeIdx
+    return nodeIdx
 end
 
 function add_timed_supplier!(
     travelTimeGraph::TravelTimeGraph,
     nodeData::NetworkNode,
     stepToDel::Int,
-    bundlesOnSupplier::Dict{UInt,Vector{Bundle}},
+    bundlesOnNodes::Dict{UInt,Vector{Bundle}},
 )
-    add_timed_node!(travelTimeGraph, nodeData, stepToDel)
-    nodeIdx = nv(travelTimeGraph.graph)
+    nodeIdx = add_timed_node!(travelTimeGraph, nodeData, stepToDel)
     startOnNode = filter(
-        bundle -> bundle.maxDelTime == stepToDel, bundlesOnSupplier[nodeData.hash]
+        bundle -> bundle.maxDelTime == stepToDel, bundlesOnNodes[nodeData.hash]
     )
     for bundle in startOnNode
         travelTimeGraph.bundleSrc[bundle.idx] = nodeIdx
     end
-    return travelTimeGraph.hashToIdx[hash(stepToDel, nodeData.hash)] = nodeIdx
 end
 
 function add_timed_customer!(
     travelTimeGraph::TravelTimeGraph,
     nodeData::NetworkNode,
-    stepToDel::Int,
-    bundlesOnCustomer::Dict{UInt,Vector{Bundle}},
+    bundlesOnNodes::Dict{UInt,Vector{Bundle}},
 )
-    add_timed_node!(travelTimeGraph, nodeData, stepToDel)
-    nodeIdx = nv(travelTimeGraph.graph)
-    for (h, bundle) in bundlesOnCustomer
+    nodeIdx = add_timed_node!(travelTimeGraph, nodeData, 0)
+    for bundle in bundlesOnNodes[nodeData.hash]
         travelTimeGraph.bundleDst[bundle.idx] = nodeIdx
     end
 end
@@ -121,31 +122,33 @@ end
 function add_timed_platform!(
     travelTimeGraph::TravelTimeGraph, nodeData::NetworkNode, stepToDel::Int
 )
-    add_timed_node!(travelTimeGraph, nodeData, stepToDel)
-    return push!(travelTimeGraph.commonNodes, nv(travelTimeGraph.graph))
+    nodeIdx = add_timed_node!(travelTimeGraph, nodeData, stepToDel)
+    return push!(travelTimeGraph.commonNodes, nodeIdx)
 end
 
 function add_network_node!(
     travelTimeGraph::TravelTimeGraph,
     nodeData::NetworkNode,
     bundlesOnNodes::Dict{UInt,Vector{Bundle}},
+    maxTime::Int,
 )
-    # Computing the number of times we have to add a timed copy of the node 
+    # Number of times we have to add a timed copy of the node 
     # plant = 0, suppliers = max of bundle del time, platforms = overall max del time
-    maxTime = maximum(
-        bundles -> maximum(bundle -> bundle.maxDelTime, bundles), values(bundlesOnNodes)
-    )
-    nodeExtraCopies = get_node_extra_copies(nodeData, bundlesOnNodes, maxTime)
-    for stepToDel in 0:nodeExtraCopies
-        if nodeData.type == :supplier
+    if nodeData.type == :supplier
+        extraCopies = maximum(bundle -> bundle.maxDelTime, bundlesOnNodes[nodeData.hash])
+        for stepToDel in 0:extraCopies
             add_timed_supplier!(travelTimeGraph, nodeData, stepToDel, bundlesOnNodes)
-        elseif nodeData.type == :plant
-            add_timed_customer!(travelTimeGraph, nodeData, stepToDel, bundlesOnNodes)
-        else
+        end
+    elseif nodeData.type == :plant
+        add_timed_customer!(travelTimeGraph, nodeData, bundlesOnNodes)
+    else
+        for stepToDel in 0:maxTime
             add_timed_platform!(travelTimeGraph, nodeData, stepToDel)
         end
     end
 end
+
+# TODO : return the I and J used in sparse matrix from the add network arc !
 
 function add_network_arc!(
     travelTimeGraph::TravelTimeGraph,
@@ -154,6 +157,7 @@ function add_network_arc!(
     arcData::NetworkArc,
 )
     maxTime = maximum(travelTimeGraph.stepToDel)
+    I, J = Int[], Int[]
     for stepToDel in 0:maxTime
         # Adding timed copy of network arc
         src = get(travelTimeGraph.hashToIdx, hash(stepToDel, srcData.hash), nothing)
@@ -164,34 +168,24 @@ function add_network_arc!(
         )
         if src !== nothing && dst !== nothing
             add_edge!(travelTimeGraph.graph, src, dst)
+            push!(I, src)
+            push!(J, dst)
         end
     end
+    return I, J
 end
 
 function add_arc_to_vectors!(
     vectors::Tuple{Vector{Int},Vector{Int},Vector{NetworkArc},Vector{Float64}},
-    travelTimeGraph::TravelTimeGraph,
-    srcData::NetworkNode,
-    dstData::NetworkNode,
+    srcs::Vector{Int},
+    dsts::Vector{Int},
     arcData::NetworkArc,
 )
-    maxTime = maximum(travelTimeGraph.stepToDel)
-    for stepToDel in 0:maxTime
-        # Adding timed copy of network arc
-        src = get(travelTimeGraph.hashToIdx, hash(stepToDel, srcData.hash), nothing)
-        dst = get(
-            travelTimeGraph.hashToIdx,
-            hash(stepToDel - arcData.travelTime, dstData.hash),
-            nothing,
-        )
-        if src !== nothing && dst !== nothing
-            I, J, arcs, costs = vectors
-            push!(I, src)
-            push!(J, dst)
-            push!(arcs, arcData)
-            push!(costs, EPS)
-        end
-    end
+    I, J, arcs, costs = vectors
+    append!(I, srcs)
+    append!(J, dsts)
+    append!(arcs, fill(arcData, length(srcs)))
+    return append!(costs, fill(EPS, length(srcs)))
 end
 
 function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
@@ -199,20 +193,19 @@ function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
     bundlesOnNodes = get_bundle_on_nodes(bundles)
     maxTime = maximum(bundle -> bundle.maxDelTime, bundles)
     # Initializing structure
-    travelTimeGraph = TravelTimeGraph()
+    travelTimeGraph = TravelTimeGraph(bundles)
     # Adding all nodes from the network graph
-    for nodeHash in labels(network)
-        add_network_node!(travelTimeGraph, network[nodeHash], bundlesOnNodes)
+    for nodeHash in labels(network.graph)
+        add_network_node!(travelTimeGraph, network.graph[nodeHash], bundlesOnNodes, maxTime)
     end
     # Initializing vectors for sparse matrices
     I, J, arcs, costs = Int[], Int[], NetworkArc[], Float64[]
     # Adding all arcs form the network graph
-    for (srcHash, dstHash) in edge_labels(network)
-        srcData, dstData, arcData = network[srcHash],
-        network[dstHash],
-        network[srcHash, dstHash]
-        add_network_arc!(travelTimeGraph, srcData, dstData, arcData)
-        add_arc_to_vectors!((I, J, arcs, costs), travelTimeGraph, srcData, dstData, arcData)
+    for (srcHash, dstHash) in edge_labels(network.graph)
+        srcData, dstData = network.graph[srcHash], network.graph[dstHash]
+        arcData = network.graph[srcHash, dstHash]
+        srcs, dsts = add_network_arc!(travelTimeGraph, srcData, dstData, arcData)
+        add_arc_to_vectors!((I, J, arcs, costs), srcs, dsts, arcData)
     end
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
