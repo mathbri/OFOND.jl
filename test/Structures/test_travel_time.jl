@@ -32,14 +32,14 @@ OFOND.add_arc!(network, port_l, plant, port_to_plant)
 # Define bundles
 commodity1 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("B123", 10, 2.5))
 order1 = OFOND.Order(hash("C123"), 1, [commodity1, commodity1])
-bundle1 = OFOND.Bundle(supplier1, plant, [order1], 1, hash(supplier, hash(plant)), 10, 2)
+bundle1 = OFOND.Bundle(supplier1, plant, [order1], 1, hash(supplier1, hash(plant)), 10, 2)
 
 commodity2 = OFOND.Commodity(1, hash("B456"), OFOND.CommodityData("C456", 15, 3.5))
 order2 = OFOND.Order(hash("D456"), 1, [commodity2, commodity2])
 bundle2 = OFOND.Bundle(supplier2, plant, [order2], 2, hash(supplier2, hash(plant)), 15, 1)
 
 order3 = OFOND.Order(hash("E789"), 1, [commodity1, commodity2])
-bundle3 = OFOND.Bundle(supplier1, plant, [order3], 3, hash(supplier, hash(plant)), 10, 3)
+bundle3 = OFOND.Bundle(supplier1, plant, [order3], 3, hash(supplier1, hash(plant)), 10, 3)
 
 bundles = [bundle1, bundle2, bundle3]
 

@@ -28,10 +28,10 @@ include("Structures/Bundle.jl")
 include("Structures/Bin.jl")
 include("Structures/TravelTime.jl")
 include("Structures/TimeSpace.jl")
+include("Structures/projectors.jl")
+include("Structures/struct_utils.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
-include("Structures/struct_utils.jl")
-include("Structures/projectors.jl")
 
 # Import and Export of data
 include("Reading/read_instance.jl")

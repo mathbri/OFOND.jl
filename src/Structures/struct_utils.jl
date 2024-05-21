@@ -1,11 +1,13 @@
 # Useful functions using / connecting multiple structures
 
+# TODO : check whether these constructirs are still useful !
+
 function Order(bundle::Bundle, deliveryDate::Int)
     return Order(bundle.hash, deliveryDate)
 end
 
 function Commodity(order::Order, data::CommodityData)
-    return Commodity(order, hash(data.partNumber), data)
+    return Commodity(order.hash, hash(data.partNumber), data)
 end
 
 function add_properties(bundle::Bundle, network::NetworkGraph)
@@ -23,7 +25,7 @@ function add_properties(bundle::Bundle, network::NetworkGraph)
 end
 
 function get_lb_transport_units(order::Order, arcData::NetworkArc)
-    # If the arc is shared
+    # If the arc is shared or already linear
     arcData.type != :direct && return (order.volume / arcData.capacity)
     # If the arc is direct
     return ceil(order.volume / arcData.capacity)
@@ -34,12 +36,4 @@ function get_transport_units(order::Order, arcData::NetworkArc)
     arcData.isLinear && return (order.volume / arcData.capacity)
     # If the arc is consolidated
     return get(order.bpUnits, arcData.type, 0)
-end
-
-function sort_order_content!(instance::Instance)
-    for bundle in instance.bundles
-        for order in bundle.orders
-            sort!(order.content; by=com -> com.size, rev=true)
-        end
-    end
 end
