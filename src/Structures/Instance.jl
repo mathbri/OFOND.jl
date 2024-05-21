@@ -1,7 +1,5 @@
 # Instance structure to store problem metadata
 
-# TODO : put travel time and time space graph intot instance
-
 struct Instance
     # Network 
     networkGraph::NetworkGraph
@@ -36,6 +34,15 @@ function add_properties(instance::Instance, bin_packing::Function)
         instance.timeHorizon,
         instance.dateHorizon,
     )
+end
+
+# Sorting once and for all order contents
+function sort_order_content!(instance::Instance)
+    for bundle in instance.bundles
+        for order in bundle.orders
+            sort!(order.content; by=com -> com.size, rev=true)
+        end
+    end
 end
 
 function analyze_instance() end
