@@ -148,8 +148,6 @@ function add_network_node!(
     end
 end
 
-# TODO : return the I and J used in sparse matrix from the add network arc !
-
 function add_network_arc!(
     travelTimeGraph::TravelTimeGraph,
     srcData::NetworkNode,

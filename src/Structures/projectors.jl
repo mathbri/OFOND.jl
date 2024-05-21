@@ -1,44 +1,58 @@
 # Projectors fnctions between travel time and time space
 
-function get_node_step_to_delivery(
-    timeSpaceGraph::TimeSpaceGraph, timeSpaceNode::Int, order::Order
-)
-    # Computing the steps to delivery to know which travel time node should be used for the order
-    stepToDel = order.deliveryDate - timeSpaceGraph.timeSteps[timeSpaceNode]
+# Computing the steps to delivery to know which travel time node should be used for the order
+function get_node_step_to_delivery(TSGraph::TimeSpaceGraph, TSNode::Int, delDate::Int)
+    stepToDel = delDate - TSGraph.timeSteps[TSNode]
     # If the step to delivery is negative, adding the time horizon to it
-    stepToDel < 0 && (stepToDel += timeSpaceGraph.timeHorizon)
+    stepToDel < 0 && (stepToDel += TSGraph.timeHorizon)
     return stepToDel
 end
 
-# Project a node of the time space graph on the travel time graph for a specific order
-# return -1 if the node time step is after the order delivery date or if the step to delivery is greater than the maximum delivery time 
+# Project a node of the time space graph on the travel time graph for a specific delivery date
+# return -1 if the step to delivery is greater than the maximum delivery time 
 function travel_time_projector(
     travelTimeGraph::TravelTimeGraph,
     timeSpaceGraph::TimeSpaceGraph,
     timeSpaceNode::Int,
-    order::Order,
+    deliveryDate::Int,
+    maxDeliveryTime::Int,
 )
-    # If the time step is after the order delivery date, return -1
-    timeSpaceGraph.timeSteps[timeSpaceNode] > order.deliveryDate && return -1
-    # If the step to delivery is greater than the max delivery time, return -1
-    stepToDel = get_node_step_to_delivery(timeSpaceGraph, timeSpaceNode, order)
-    stepToDel > order.bundle.maxDeliveryTime && return -1
-    # Using time space link dict to return the right node idx
-    return travelTimeGraph.hashToIdx[hash(
-        stepToDel, timeSpaceGraph.networkNodes[timeSpaceNode].hash
-    )]
+    # Compute the step to delivery and corresponding node hash 
+    stepToDel = get_node_step_to_delivery(timeSpaceGraph, timeSpaceNode, deliveryDate)
+    # If greater than max delivery time, returning -1
+    stepToDel > maxDeliveryTime && return -1
+    ttNodeHash = hash(stepToDel, timeSpaceGraph.networkNodes[timeSpaceNode].hash)
+    # Using time space link dict to return the right node idx or -1
+    return get(travelTimeGraph.hashToIdx, ttNodeHash, -1)
 end
 
+# Wrapper for Order and Bundle objects
 function travel_time_projector(
-    travelTimeGraph::TravelTimeGraph,
-    timeSpaceGraph::TimeSpaceGraph,
-    timeSpaceSource::Int,
-    timeSpaceDest::Int,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    TSNode::Int,
     order::Order,
+    bundle::Bundle,
+)
+    # Fail safe if the order and bundle are unrelated
+    order.bundleHash != bundle.hash && return -1
+    return travel_time_projector(
+        TTGraph, TSGraph, TSNode, order.deliveryDate, bundle.maxDelTime
+    )
+end
+
+# Project an arc of the travel time graph on the time space graph for a specific delivery date
+function travel_time_projector(
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    TSSrc::Int,
+    TSDst::Int,
+    order::Order,
+    bundle::Bundle,
 )
     return (
-        travel_time_projector(travelTimeGraph, timeSpaceGraph, timeSpaceSource, order),
-        travel_time_projector(travelTimeGraph, timeSpaceGraph, timeSpaceDest, order),
+        travel_time_projector(TTGraph, TSGraph, TSSrc, order, bundle),
+        travel_time_projector(TTGraph, TSGraph, TSDst, order, bundle),
     )
 end
 
@@ -58,31 +72,29 @@ function time_space_projector(
     return timeSpaceGraph.hashToIdx[hash(timeSpaceDate, nodeData.hash)]
 end
 
-# Project an arc of the travel time graph on the time space graph for a specific delivery date 
+# Wrapper for Order object
 function time_space_projector(
-    travelTimeGraph::TravelTimeGraph,
-    timeSpaceGraph::TimeSpaceGraph,
-    travelTimeSource::Int,
-    travelTimeDest::Int,
-    deliveryDate::Int,
+    TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, TTNode::Int, order::Order
+)
+    return time_space_projector(TTGraph, TSGraph, TTNode, order.deliveryDate)
+end
+
+# Project an arc of the travel time graph on the time space graph for a specific order
+function time_space_projector(
+    TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, TTSrc::Int, TTDst::Int, order::Order
 )
     return (
-        time_space_projector(
-            travelTimeGraph, timeSpaceGraph, travelTimeSource, deliveryDate
-        ),
-        time_space_projector(travelTimeGraph, timeSpaceGraph, travelTimeDest, deliveryDate),
+        time_space_projector(TTGraph, TSGraph, TTSrc, order.deliveryDate),
+        time_space_projector(TTGraph, TSGraph, TTDst, order.deliveryDate),
     )
 end
 
-# Project a path of the travel time graph on the time space graph for a specific delivery date 
+# Project a path of the travel time graph on the time space graph for a specific order
 function time_space_projector(
-    travelTimeGraph::TravelTimeGraph,
-    timeSpaceGraph::TimeSpaceGraph,
-    travelTimePath::Vector{Int},
-    deliveryDate::Int,
+    TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, TTPath::Vector{Int}, order::Order
 )
     # Refs are used here to broadcat operation only on the path
     return time_space_projector.(
-        Ref(travelTimeGraph), Ref(timeSpaceGraph), travelTimePath, Ref(deliveryDate)
+        Ref(TTGraph), Ref(TSGraph), TTPath, Ref(order.deliveryDate)
     )
 end
