@@ -2,17 +2,12 @@
 
 # Updating bins and loads in bin packing file
 
-# TODO : add a cost field that is updated when the solution is with a get cost function
-# TODO : add an update solution function that updates paths and bins and cost, 
-# with remove option to remove path and commodities from bins so that you have a unified API to Solution
-
 struct Solution
     # Paths used for delivery
     bundlePaths::Vector{Vector{Int}}
     bundlesOnNode::Dict{Int,Vector{Bundle}} # bundles on each node of the travel-time common graph + plants
     # Transport units completion through time 
     bins::SparseMatrixCSC{Vector{Bin},Int}
-    binLoads::SparseMatrixCSC{Vector{Int},Int}  # bin loads on arcs (used for fastier computation)
 end
 
 function Solution(
@@ -24,12 +19,10 @@ function Solution(
     keys = vcat(travelTimeGraph.commonNodes, plants)
     I, J, V = findnz(timeSpaceGraph.networkArcs)
     bins = [Bin[] for _ in I]
-    loads = [Int[] for _ in I]
     return Solution(
-        Vector{Vector{Int}}(undef, length(bundles)),
+        fill([-1], length(bundles)),
         Dict{Int,Vector{Bundle}}(zip(keys, [Bundle[] for _ in keys])),
         sparse(I, J, bins),
-        sparse(I, J, loads),
     )
 end
 
@@ -40,12 +33,12 @@ end
 # Methods
 
 function update_bundle_path!(
-    solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int, dst::Int
+    solution::Solution, bundle::Bundle, path::Vector{Int}; partial::Bool
 )
     oldPath = deepcopy(solution.bundlePaths[bundle.idx])
-    if src != -1 && dst != -1
-        srcIdx = findfirst(node -> node == src, oldPath)
-        dstIdx = findlast(node -> node == dst, oldPath)
+    if partial
+        srcIdx = findfirst(node -> node == path[1], oldPath)
+        dstIdx = findlast(node -> node == path[end], oldPath)
         path = vcat(oldPath[1:srcIdx], path[2:(end - 1)], oldPath[dstIdx:end])
     end
     solution.bundlePaths[bundle.idx] = path
@@ -53,20 +46,17 @@ function update_bundle_path!(
 end
 
 function update_bundle_on_nodes!(
-    solution::Solution,
-    bundle::Bundle,
-    path::Vector{Int};
-    partial::Bool=false,
-    remove::Bool=false,
+    solution::Solution, bundle::Bundle, path::Vector{Int}; partial::Bool, remove::Bool=false
 )
     if partial
         path = path[2:(end - 1)]
     end
     for node in path
+        bundleVector = get(solution.bundlesOnNode, node, Bundle[])
         if remove
-            filter!(bun -> bun != bundle, solution.bundlesOnNode[node])
+            filter!(bun -> bun != bundle, bundleVector)
         else
-            push!(solution.bundlesOnNode[node], bundle)
+            push!(bundleVector, bundle)
         end
     end
 end
@@ -74,18 +64,17 @@ end
 # Add / Replace the path of the bundle in the solution with the path given as argument 
 # If src and dst are referenced, replace the src-dst part of the current path with the new one
 function add_path!(
-    solution::Solution, bundle::Bundle, path::Vector{Int}; src::Int=-1, dst::Int=-1
+    solution::Solution, bundle::Bundle, path::Vector{Int}; partial::Bool=false
 )
-    update_bundle_path!(solution, bundle, path; src=src, dst=dst)
-    return update_bundle_on_nodes!(solution, bundle, path; partial=(src != -1 && dst != -1))
+    update_bundle_path!(solution, bundle, path; partial=partial)
+    return update_bundle_on_nodes!(solution, bundle, path; partial=partial)
 end
 
 # Remove the path of the bundle in the solution
 function remove_path!(solution::Solution, bundle::Bundle; src::Int=-1, dst::Int=-1)
-    oldPart = update_bundle_path!(solution, bundle, Int[]; src=src, dst=dst)
-    return update_bundle_on_nodes!(
-        solution, bundle, oldPart; partial=(src != -1 && dst != -1), remove=true
-    )
+    partial = (src != -1) && (dst != -1)
+    oldPart = update_bundle_path!(solution, bundle, [src, dst]; partial=partial)
+    return update_bundle_on_nodes!(solution, bundle, oldPart; partial=partial, remove=true)
 end
 
 # Plot some of the paths on a map ?
@@ -110,6 +99,7 @@ function check_supplier(instance::Instance, bundle::Bundle, pathSrc::Int; verbos
             @warn "Infeasible solution : bundle $(bundle.idx) has supplier $(bundle.supplier) and its path starts at $(pathSupplier)"
         return false
     end
+    return true
 end
 
 # Checking the customer is correct
@@ -120,12 +110,13 @@ function check_customer(instance::Instance, bundle::Bundle, pathDst::Int; verbos
             @warn "Infeasible solution : bundle $(bundle.idx) has customer $(bundle.customer) and its path ends at $(pathCustomer)"
         return false
     end
+    return true
 end
 
 function get_routed_commodities(
     solution::Solution, order::Order, timedSrc::Int, timedDst::Int
 )
-    allArcCommodities = reduce(vcat, solution.bins[timedSrc, timedDst])
+    allArcCommodities = get_all_commodities(solution.bins[timedSrc, timedDst])
     orderUniqueCom = unique(order.content)
     return sort(filter(com -> com in orderUniqueCom, allArcCommodities))
 end
@@ -198,14 +189,10 @@ function compute_arc_cost(
     arcVolume = sum(arcData.capacity - bin.capacity for bin in bins) / VOLUME_FACTOR
     arcLeadTimeCost = sum(sum(com.leadTimeCost for com in bin) for bin in bins)
     # Node cost 
-    cost = dstData.volumeCost * arcVolume
+    cost = (dstData.volumeCost + arcData.carbonCost) * arcVolume
     # Transport cost 
     transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : length(bins)
-    transportCost = if current_cost
-        TSGraph.currentCost[src, dst]
-    else
-        (arcData.unitCost + arcData.carbonCost)
-    end
+    transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
     cost += transportUnits * transportCost
     # Commodity cost
     return cost += arcData.distance * arcLeadTimeCost
