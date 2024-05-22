@@ -6,9 +6,7 @@ function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
     # Sorting commodities in decreasing order of size (if not already done)
-    if !sorted
-        sort!(commodities; by=com -> com.size, rev=true)
-    end
+    !sorted && sort!(commodities; rev=true)
     # Adding commodities on top of others
     for commodity in commodities
         added = false
@@ -28,17 +26,14 @@ function first_fit_decreasing(
     return newBins
 end
 
-# First fit decreasing to update loads
-function first_fit_decreasing!(
-    loads::Vector{Int},
-    fullCapacity::Int,
-    commodities::Vector{Commodity};
-    sorted::Bool=false,
+# First fit decreasing computed on loads to return only the number of bins added by the vector of commodities
+function tentative_first_fit(
+    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
     # Sorting commodities in decreasing order of size (if not already done)
-    if !sorted
-        sort!(commodities; by=com -> com.size, rev=true)
-    end
+    !sorted && sort!(commodities; rev=true)
+    loads = map(bin -> bin.load, bins)
+    lengthBefore = length(loads)
     # Adding commodities on top of others
     for commodity in commodities
         added = false
@@ -48,16 +43,14 @@ function first_fit_decreasing!(
         end
         added || push!(loads, fullCapacity - commodity.size)
     end
+    return length(loads) - lengthBefore
 end
 
-# Compute the number of bins that would be added if all the commodities were packed
+# Wrapper for objects
 function tentative_first_fit(
-    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool
 )
-    newLoads = map(bin -> bin.load, bins)
-    lengthBefore = length(newLoads)
-    first_fit_decreasing!(newLoads, fullCapacity, commodities; sorted=sorted)
-    return length(newLoads) - lengthBefore
+    return tentative_first_fit(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
 # Only useful for best fit decreasing computation of best bin
@@ -72,7 +65,7 @@ function best_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
     # Sorting commodities in decreasing order of size (if not already done)
-    sorted || sort!(commodities; by=com -> com.size, rev=true)
+    !sorted && sort!(commodities; rev=true)
     # Adding commodities on top of others
     for commodity in commodities
         # Selecting best bin

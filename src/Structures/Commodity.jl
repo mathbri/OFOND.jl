@@ -28,3 +28,8 @@ part_number(commodity::Commodity) = commodity.data.partNumber
 size(commodity::Commodity) = commodity.data.size
 
 lead_time_cost(commodity::Commodity) = commodity.data.leadTimeCost
+
+# Defining isless to simplify sorting operations by size for commodities
+function Base.isless(com1::Commodity, com2::Commodity)
+    return Base.isless(size(com1), size(com2))
+end
