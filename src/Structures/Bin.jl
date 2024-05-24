@@ -54,7 +54,7 @@ function remove!(bin::Bin, commodities::Vector{Commodity})
 end
 
 function get_all_commodities(bins::Vector{Bin})
-    return reduce(vcat, map(bin -> bin.content, bins))
+    return reduce(vcat, map(bin -> bin.content, bins); init=Commodity[])
 end
 
 # Defining zero of a vector of bins / loads for sparse matrices usage

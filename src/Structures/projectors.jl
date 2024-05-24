@@ -2,7 +2,7 @@
 
 # Computing the steps to delivery to know which travel time node should be used for the order
 function get_node_step_to_delivery(TSGraph::TimeSpaceGraph, TSNode::Int, delDate::Int)
-    stepToDel = delDate - TSGraph.timeSteps[TSNode]
+    stepToDel = delDate - TSGraph.timeStep[TSNode]
     # If the step to delivery is negative, adding the time horizon to it
     stepToDel < 0 && (stepToDel += TSGraph.timeHorizon)
     return stepToDel

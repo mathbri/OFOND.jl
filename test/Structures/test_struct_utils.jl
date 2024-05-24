@@ -44,19 +44,20 @@ bundle3 = OFOND.Bundle(supplier1, plant, [order3], 3, hash(supplier1, hash(plant
 bundles = [bundle1, bundle2, bundle3]
 
 @testset "Other constructors" begin
-    @test OFOND.Order(bundle1, 2) == Order(
-        hash(supplier, hash(plant)),
+    @test OFOND.Order(bundle1, 2) == OFOND.Order(
+        hash(supplier1, hash(plant)),
         2,
-        Commodity[],
-        hash(2, hash(supplier, hash(plant))),
+        OFOND.Commodity[],
+        hash(2, hash(supplier1, hash(plant))),
         0,
         Dict{Symbol,Int}(),
         0,
         0.0,
     )
 
-    @test OFOND.Commodity(order1, OFOND.CommodityData("B123", 10, 2.5)) ==
-        OFOND.Commodity(hash("C123"), hash("B123"), OFOND.CommodityData("B123", 10, 2.5))
+    @test OFOND.Commodity(order1, OFOND.CommodityData("B123", 10, 2.5)) == OFOND.Commodity(
+        hash(1, hash("C123")), hash("B123"), OFOND.CommodityData("B123", 10, 2.5)
+    )
 end
 
 @testset "add_properties" begin
@@ -64,7 +65,7 @@ end
     push!(bundle.orders, order3)
     bundle4 = OFOND.add_properties(bundle, network)
     @test bundle4 ==
-        Bundle(supplier1, plant, [order3], 1, hash(supplier1, hash(plant)), 15, 3)
+        OFOND.Bundle(supplier1, plant, [order3], 1, hash(supplier1, hash(plant)), 15, 3)
 end
 
 order = OFOND.add_properties(order3, (x, y, z) -> 2)

@@ -11,7 +11,7 @@ struct Instance
     bundles::Vector{Bundle}
     # Time Horizon 
     timeHorizon::Int
-    dateHorizon::Vector{Dates}
+    dateHorizon::Vector{Date}
 end
 
 # Methods
@@ -22,7 +22,9 @@ function add_properties(instance::Instance, bin_packing::Function)
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
     for bundle in newBundles
-        bundle.orders = [add_properties(order, bin_packing) for order in bundle.orders]
+        newOrders = [add_properties(order, bin_packing) for order in bundle.orders]
+        empty!(bundle.orders)
+        append!(bundle.orders, newOrders)
     end
     newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
@@ -40,7 +42,7 @@ end
 function sort_order_content!(instance::Instance)
     for bundle in instance.bundles
         for order in bundle.orders
-            sort!(order.content; by=com -> com.size, rev=true)
+            sort!(order.content; rev=true)
         end
     end
 end

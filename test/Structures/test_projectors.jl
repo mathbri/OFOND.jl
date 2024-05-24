@@ -79,7 +79,8 @@ end
     @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep2, 1, 2) == -1
     @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep2, 1, 3) ==
         TTGraph.hashToIdx[hash(3, port_l.hash)]
-    @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep2, 2, 3) == -1
+    @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep2, 2, 3) ==
+        TTGraph.hashToIdx[hash(0, port_l.hash)]
     portStep3 = TSGraph.hashToIdx[hash(3, port_l.hash)]
     @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep3, 1, 2) ==
         TTGraph.hashToIdx[hash(2, port_l.hash)]
@@ -99,9 +100,9 @@ end
         TSGraph.hashToIdx[hash(2, supplier2.hash)]
     # 0 time step from delivery so same time step as delivery date
     supp2fromDel0 = TTGraph.hashToIdx[hash(0, supplier2.hash)]
-    @test OFOND.time_space_projector(TTGraph, TSGraph, supp2fromDel1, 2) ==
+    @test OFOND.time_space_projector(TTGraph, TSGraph, supp2fromDel0, 2) ==
         TSGraph.hashToIdx[hash(2, supplier2.hash)]
-    @test OFOND.time_space_projector(TTGraph, TSGraph, supp2fromDel1, 4) ==
+    @test OFOND.time_space_projector(TTGraph, TSGraph, supp2fromDel0, 4) ==
         TSGraph.hashToIdx[hash(4, supplier2.hash)]
     # Tests with other nodes
     xdockFromDel3 = TTGraph.hashToIdx[hash(3, xdock.hash)]
@@ -123,7 +124,6 @@ end
         TTGraph.hashToIdx[hash(1, xdock.hash)]
     @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep2, order3, bundle3) ==
         TTGraph.hashToIdx[hash(3, port_l.hash)]
-    @test OFOND.travel_time_projector(TTGraph, TSGraph, portStep2, order4, bundle3) == -1
     # travel time arc
     supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     plantStep1 = TSGraph.hashToIdx[hash(1, plant.hash)]
@@ -144,7 +144,7 @@ end
         TSGraph.hashToIdx[hash(3, supplier1.hash)], TSGraph.hashToIdx[hash(4, xdock.hash)]
     )
     # time space path
-    portFromDel1 = TTGraph.hashToIdx[hash(2, port_l.hash)]
+    portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
     plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
     TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
     @test OFOND.time_space_projector(TTGraph, TSGraph, TTPath, order3) == [

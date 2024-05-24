@@ -20,7 +20,7 @@ function Solution(
     I, J, V = findnz(timeSpaceGraph.networkArcs)
     bins = [Bin[] for _ in I]
     return Solution(
-        fill([-1], length(bundles)),
+        fill([-1, -1], length(bundles)),
         Dict{Int,Vector{Bundle}}(zip(keys, [Bundle[] for _ in keys])),
         sparse(I, J, bins),
     )
@@ -40,6 +40,7 @@ function update_bundle_path!(
         srcIdx = findfirst(node -> node == path[1], oldPath)
         dstIdx = findlast(node -> node == path[end], oldPath)
         path = vcat(oldPath[1:srcIdx], path[2:(end - 1)], oldPath[dstIdx:end])
+        oldPath = oldPath[srcIdx:dstIdx]
     end
     solution.bundlePaths[bundle.idx] = path
     return oldPath
@@ -125,14 +126,22 @@ function check_quantities(
     instance::Instance, solution::Solution, src::Int, dst::Int, order::Order; verbose::Bool
 )
     timedSrc, timedDst = time_space_projector(
-        instance.travelTimeGraph, instance.timeSpaceGraph, src, dst, order.deliveryDate
+        instance.travelTimeGraph, instance.timeSpaceGraph, src, dst, order
     )
     # Checking quantities in this arc
     routedCommodities = get_routed_commodities(solution, order, timedSrc, timedDst)
     if sort(order.content) != routedCommodities
+        srcInfo = (
+            instance.timeSpaceGraph.networkNodes[timedSrc].name,
+            instance.timeSpaceGraph.timeStep[timedSrc],
+        )
+        dstInfo = (
+            instance.timeSpaceGraph.networkNodes[timedDst].name,
+            instance.timeSpaceGraph.timeStep[timedDst],
+        )
         verbose &&
             @warn "Infeasible solution : order $order misses quantities on arc ($timedSrc-$timedDst)" :inOrder =
-                order.content :onArc = routedCommodities
+                order.content :onArc = routedCommodities :arc = "$srcInfo-$dstInfo"
         return false
     end
     return true
@@ -187,7 +196,9 @@ function compute_arc_cost(
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
     arcVolume = sum(arcData.capacity - bin.capacity for bin in bins) / VOLUME_FACTOR
-    arcLeadTimeCost = sum(sum(com.leadTimeCost for com in bin) for bin in bins)
+    arcLeadTimeCost = sum(
+        bin -> sum(com -> lead_time_cost(com), bin.content; init=0), bins; init=0
+    )
     # Node cost 
     cost = (dstData.volumeCost + arcData.carbonCost) * arcVolume
     # Transport cost 
@@ -201,7 +212,7 @@ end
 # Compute the cost of a solution : node cost + arc cost + commodity cost
 function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
     totalCost = 0.0
-    for arc in edges(instance.timeSpaceGraph)
+    for arc in edges(instance.timeSpaceGraph.graph)
         arcBins = solution.bins[src(arc), dst(arc)]
         # If there is no bins, skipping arc
         length(arcBins) == 0 && continue
