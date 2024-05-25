@@ -4,12 +4,13 @@
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}
 )
-    volume = sum(com.size for com in commodities) / VOLUME_FACTOR
-    leadTimeCost = sum(com.leadTimeCost for com in commodities)
+    volume = sum(size(com) for com in commodities) / VOLUME_FACTOR
+    leadTimeCost = sum(lead_time_cost(com) for com in commodities)
     # Node cost 
     cost = (dstData.volumeCost + arcData.carbonCost) * volume
     # Transport cost 
-    cost += newBins * arcData.unitCost
+    addedBins = arcData.isLinear ? (volume / arcData.capacity) : newBins
+    cost += addedBins * arcData.unitCost
     # Commodity cost
     return cost += arcData.distance * leadTimeCost
 end
@@ -27,12 +28,10 @@ function add_order!(
         bins = solution.bins[timedSrc, timedDst]
         dstData = TSGraph.networkNodes[timedDst]
         arcData = TSGraph.networkArcs[timedSrc, timedDst]
-        fullCapa, binsBefore = arcData.capacity, length(bins)
         # Updating bins
-        first_fit_decreasing!(bins, fullCapa, order.content; sorted=sorted)
+        addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
         # Updating cost
-        newBins = length(bins) - binsBefore
-        costAdded += compute_new_cost(arcData, dstData, newBins, order.content)
+        costAdded += compute_new_cost(arcData, dstData, addedBins, order.content)
     end
     return costAdded
 end

@@ -27,7 +27,7 @@ println("Testing OFO Network Design Package")
     end
     # Algorithms
     @testset "Algorithms" begin
-        # TODO : include("Algorithms/test_algorithms.jl") 
+        include("Algorithms/test_algorithms.jl")
     end
     # Writing
     @testset "Writing" begin
