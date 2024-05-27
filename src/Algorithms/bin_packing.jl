@@ -7,6 +7,7 @@ function first_fit_decreasing!(
 )
     # Sorting commodities in decreasing order of size (if not already done)
     !sorted && sort!(commodities; rev=true)
+    lengthBefore = length(bins)
     # Adding commodities on top of others
     for commodity in commodities
         added = false
@@ -15,6 +16,7 @@ function first_fit_decreasing!(
         end
         added || push!(bins, Bin(fullCapacity, commodity))
     end
+    return length(bins) - lengthBefore
 end
 
 # First fit decreasing but returns a copy of the bins instead of modifying it
@@ -24,6 +26,13 @@ function first_fit_decreasing(
     newBins = deepcopy(bins)
     first_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
     return newBins
+end
+
+# Wrapper for objects
+function first_fit_decreasing!(
+    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool
+)
+    return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
 # First fit decreasing computed on loads to return only the number of bins added by the vector of commodities
@@ -43,6 +52,7 @@ function tentative_first_fit(
         end
         added || push!(loads, fullCapacity - commodity.size)
     end
+    println(loads)
     return length(loads) - lengthBefore
 end
 
@@ -54,7 +64,7 @@ function tentative_first_fit(
 end
 
 # Only useful for best fit decreasing computation of best bin
-function get_capacity_left(bin::Bin, commodity::Commodity)
+function best_fit_capacity(bin::Bin, commodity::Commodity)
     capacity_after = bin.capacity - commodity.size
     capacity_after < 0 && return INFINITY
     return capacity_after
@@ -69,7 +79,7 @@ function best_fit_decreasing!(
     # Adding commodities on top of others
     for commodity in commodities
         # Selecting best bin
-        bestCapa, bestBin = findmin(bin -> get_capacity_left(bin, commodity), possibleBins)
+        bestCapa, bestBin = findmin(bin -> best_fit_capacity(bin, commodity), possibleBins)
         # If the best bin is full, adding a bin
         bestCapa == INFINITY && (push!(bins, Bin(fullCapacity, commodity)); continue)
         # Otherwise, adding it to the best bin
@@ -89,8 +99,9 @@ end
 # Milp model for adding commodities on top
 function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
     n = length(commodities)
+    n == 0 && return nothing
     loads = map(bin -> bin.load, bins)
-    B = length(first_fit_decreasing(loads, fullCapacity, commodities))
+    B = length(bins) + tentative_first_fit(bins, fullCapacity, commodities)
     # Model
     model = Model(HiGHS.Optimizer)
     # Variables
@@ -111,8 +122,8 @@ function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector
     yval = value.(model[:y])
     xval = value.(model[:x])
     # Add new bins if necessary
-    for b in length(bins):B
-        yval[b] == 1 && push!(bins, Bin(fullCapacity))
+    for b in length(bins):(B - 1)
+        yval[b + 1] == 1 && push!(bins, Bin(fullCapacity))
     end
     # Add commodities to bins
     for i in 1:n, b in 1:B
