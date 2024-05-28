@@ -1,9 +1,22 @@
 # Updating functions for the solution
 
+# TODO : could be merged with add_path function
 function is_path_partial(TTGraph::TravelTimeGraph, bundle::Bundle, path::Vector{Int};)
     bundle.supplier != TTGraph.networkNodes[path[1]] && return true
     bundle.customer != TTGraph.networkNodes[path[end]] && return true
     return false
+end
+
+function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
+    firstNode = 1
+    for (src, dst) in partition(path, 2, 1)
+        if travelTimeGraph.networkArcs[src, dst].type == :shortcut
+            firstNode += 1
+        else
+            break
+        end
+    end
+    return deleteat!(path, 1:(firstNode - 1))
 end
 
 function add_bundle!(
@@ -15,15 +28,11 @@ function add_bundle!(
     skipFill::Bool=false,
 )
     # If nothing to do, returns nothing
-    length(path) == 0 && return costAdded
+    length(path) == 0 && return 0.0
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
     # Adding the bundle to the solution
     remove_shortcuts!(path, TTGraph)
-    if is_path_partial(TTGraph, bundle, path)
-        add_path!(solution, bundle, path; src=path[1], dst=path[end])
-    else
-        add_path!(solution, bundle, path)
-    end
+    add_path!(solution, bundle, path; partial=is_path_partial(TTGraph, bundle, path))
     # Updating the bins
     skipFill && return 0.0
     return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
@@ -41,7 +50,7 @@ function get_bins_updated(
     # For every bundle path and every order in the bundle, adding the timed nodes in the matrix indices
     for (bundle, path) in zip(bundles, paths)
         for order in bundle.orders
-            timedPath = time_space_projector(TTGraph, TSGraph, path, order.deliveryDate)
+            timedPath = time_space_projector(TTGraph, TSGraph, path, order)
             # Without checking overlapping as the combine function will take care of it
             append!(I, timedPath[1:(end - 1)])
             append!(J, timedPath[2:end])
@@ -64,26 +73,23 @@ end
 # Refill bins on the working arcs, to be used after bundle removal
 function refill_bins!(
     solution::Solution,
-    timeSpaceGraph::TimeSpaceGraph,
+    TSGraph::TimeSpaceGraph,
     workingArcs::SparseMatrixCSC{Bool,Int};
     current_cost::Bool=false,
 )
     costAdded = 0.0
     # Efficient iteration over sparse matrices
     rows = rowvals(workingArcs)
-    for timedDst in 1:size(workingArcs, 2)
-        for srcIdx in nzrange(workingArcs, timedDst)
-            timedSrc = rows[srcIdx]
-            arcData = timeSpaceGraph.networkArcs[timedSrc, timedDst]
+    for tDst in 1:size(workingArcs, 2)
+        for srcIdx in nzrange(workingArcs, tDst)
+            tSrc, arcData = rows[srcIdx], TSGraph.networkArcs[tSrc, tDst]
             # No need to refill bins on linear arcs
             arcData.isLinear && continue
-            bins = solution.bins[timedSrc, timedDst]
-            newBins = refill_bins!(bins, arcData)
-            # Adding new arc cost
-            costAdded += newBins * arcData.unitCost
+            # Adding new bins cost
+            costAdded += refill_bins!(solution.bins[tSrc, tDst], arcData) * arcData.unitCost
         end
     end
-    return costAfterRefill
+    return costAdded
 end
 
 # Remove the bundle only on the path portion provided
@@ -95,7 +101,7 @@ function remove_bundle!(
     sorted::Bool=false,
 )
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
-    if length(path) == 0
+    if length(path) == 0 || !is_path_partial(TTGraph, bundle, path)
         remove_path!(solution, bundle)
     else
         remove_path!(solution, bundle; src=path[1], dst=path[end])
