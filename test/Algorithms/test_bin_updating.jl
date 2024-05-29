@@ -4,16 +4,16 @@
 # supp1_to_plant = OFOND.NetworkArc(:direct, 2.0, 2, false, 10.0, false, 1.0, 50)
 # port_to_plant = OFOND.NetworkArc(:oversea, 1.0, 1, true, 4.0, false, 1.0, 50)
 @testset "Compute new cost" begin
-    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1]) ≈ 4 + 0.1 + 5.0
-    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 2, [commodity1]) ≈ 8 + 0.1 + 5.0
+    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1]) ≈ 10 + 0.1 + 5
+    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 2, [commodity1]) ≈ 20 + 0.1 + 5
     @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1, commodity2]) ≈
-        4 + 0.25 + 12.0
-    @test OFOND.compute_new_cost(supp1_to_plant, xdock, 1, [commodity1]) ≈ 4 + 0.2 + 5.0
-    @test OFOND.compute_new_cost(port_to_plant, port_l, 1, [commodity1]) ≈ 10 + 0.2 + 5.0
+        10 + 0.25 + 12
+    @test OFOND.compute_new_cost(supp1_to_plant, xdock, 1, [commodity1]) ≈ 10 + 0.2 + 5
+    @test OFOND.compute_new_cost(port_to_plant, port_l, 1, [commodity1]) ≈ 4 + 0.1 + 2.5
     @test OFOND.compute_new_cost(port_to_plant, xdock, 2, [commodity1, commodity2]) ≈
-        20 + 0.5 + 6.0
+        8 + 0.25 + 0.25 + 6.0
     @test OFOND.compute_new_cost(supp_to_plat, xdock, 2, [commodity1, commodity2]) ≈
-        4 + 0.2 + 6.0
+        2 + 0 + 0.25 + 6.0
 end
 
 supp1FromDel3 = TTGraph.hashToIdx[hash(3, supplier1.hash)]
@@ -39,15 +39,15 @@ sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
     @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
     # Testing cost added
-    @test costAdded == 10
+    @test costAdded == 25.0
 
     OFOND.add_order!(sol, TSGraph, TSPath2, order2)
-    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(30, 20, [commodity2, commodity2])]
+    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     @test sol.bins[xdockStep3, portStep4] ==
         [OFOND.Bin(0, 50, [commodity1, commodity1, commodity2, commodity2])]
     @test sol.bins[portStep4, plantStep1] ==
         [OFOND.Bin(0, 50, [commodity1, commodity1, commodity2, commodity2])]
-    @test costAdded == 10
+    @test costAdded == 25.0
 end
 
 @testset "Remove order" begin
@@ -55,11 +55,11 @@ end
     costRemoved = OFOND.remove_order!(sol, TSGraph, TSPath, order1)
     # Testing only the second remains
     @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(50)]
-    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(30, 20, [commodity2, commodity2])]
-    @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(30, 20, [commodity2, commodity2])]
-    @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(30, 20, [commodity2, commodity2])]
+    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
+    @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
+    @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     # Testing cost added
-    @test costRemoved == 10
+    @test costRemoved == -17.0
 
     OFOND.remove_order!(sol, TSGraph, TSPath2, order2)
     @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(50)]
@@ -75,15 +75,15 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
 
 @testset "Update bins" begin
     # Same with add / remove order but give the bundle and TTPath instead
-    costAdded = OFOND.update_bins(sol, TSGraph, TTGraph, bundle3, TTPath)
+    costAdded = OFOND.update_bins!(sol, TSGraph, TTGraph, bundle3, TTPath)
     # Testing that the result are supposed to be the same for order 3
-    @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
-    @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
-    @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
+    @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     # Testing everything is shifted of 1 time step for order 4
-    @test sol.bins[supp1Step3, xdockStep4] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
-    @test sol.bins[xdockStep4, portStep1] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
-    @test sol.bins[portStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
+    @test sol.bins[supp1Step3, xdockStep4] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[xdockStep4, portStep1] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[portStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
 
-    @test costAdded == 10
+    @test costAdded == 49.0
 end

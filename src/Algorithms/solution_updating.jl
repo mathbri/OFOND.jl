@@ -80,18 +80,21 @@ function refill_bins!(
     costAdded = 0.0
     # Efficient iteration over sparse matrices
     rows = rowvals(workingArcs)
-    for tDst in 1:size(workingArcs, 2)
+    for tDst in 1:Base.size(workingArcs, 2)
         for srcIdx in nzrange(workingArcs, tDst)
-            tSrc, arcData = rows[srcIdx], TSGraph.networkArcs[tSrc, tDst]
+            tSrc = rows[srcIdx]
+            arcData = TSGraph.networkArcs[tSrc, tDst]
             # No need to refill bins on linear arcs
             arcData.isLinear && continue
             # Adding new bins cost
-            costAdded += refill_bins!(solution.bins[tSrc, tDst], arcData) * arcData.unitCost
+            costAdded +=
+                refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
         end
     end
     return costAdded
 end
 
+# TODO : adapt test to this new return
 # Remove the bundle only on the path portion provided
 function remove_bundle!(
     solution::Solution,
@@ -101,14 +104,21 @@ function remove_bundle!(
     sorted::Bool=false,
 )
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
+    oldPart = Int[]
     if length(path) == 0 || !is_path_partial(TTGraph, bundle, path)
-        remove_path!(solution, bundle)
+        oldPart = remove_path!(solution, bundle)
     else
-        remove_path!(solution, bundle; src=path[1], dst=path[end])
+        oldPart = remove_path!(solution, bundle; src=path[1], dst=path[end])
     end
-    return update_bins!(
-        solution, TSGraph, TTGraph, bundle, path; sorted=sorted, remove=true
+    if oldPart == [-1, -1]
+        println("Error in removing the bundle")
+        println("Bundle : $bundle")
+        println("Path : $path")
+    end
+    costRemoved = update_bins!(
+        solution, TSGraph, TTGraph, bundle, oldPart; sorted=sorted, remove=true
     )
+    return (costRemoved, oldPart)
 end
 
 # Update the current solution
@@ -129,19 +139,43 @@ function update_solution!(
             costAdded += add_bundle!(
                 solution, instance, bundle, path; sorted=sorted, skipFill=skipRefill
             )
+            println("Cost added : $costAdded")
         end
     else
+        pathsToUpdate = Vector{Vector{Int}}()
         # If remove = true, removing the bundle from the solution
         for (bundle, path) in zip(bundles, paths)
-            costAdded += remove_bundle!(solution, instance, bundle, path; sorted=sorted)
+            costRemoved, oldPart = remove_bundle!(
+                solution, instance, bundle, path; sorted=sorted
+            )
+            costAdded += costRemoved
+            push!(pathsToUpdate, oldPart)
+            println("Cost removed : $costAdded")
         end
         # If skipRefill than no recomputation
         skipRefill && return costAdded
         # Than refilling the bins
         binsUpdated = get_bins_updated(
-            instance.timeSpaceGraph, instance.travelTimeGraph, bundles, paths
+            instance.timeSpaceGraph, instance.travelTimeGraph, bundles, pathsToUpdate
         )
+        I, J, V = findnz(binsUpdated)
+        println("Bins updated : \n $I \n $J")
+        I, J, V = findnz(solution.bins)
+        println("Bins before refilling : \n $I \n $J \n $V")
         costAdded += refill_bins!(solution, instance.timeSpaceGraph, binsUpdated)
+        println("Cost refilled : $costAdded")
     end
     return costAdded
+end
+
+# Removing all empty bins from the linear arcs (to be used before extraction)
+function clean_empty_bins!(solution::Solution, instance::Instance)
+    TSGraph = instance.timeSpaceGraph
+    for arc in edges(TSGraph.graph)
+        arcData = TSGraph.networkArcs[src(arc), dst(arc)]
+        # No update for consolidated arcs
+        !arcData.isLinear && continue
+        # Removing empty bins
+        filter!(bin -> bin.load > 0, solution.bins[src(arc), dst(arc)])
+    end
 end

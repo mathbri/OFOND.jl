@@ -10,11 +10,11 @@ println("Testing OFO Network Design Package")
 
 @testset "OFOND.jl" begin
     # Utils file
-    @testset "utils.jl" begin
+    @testset "Utils (general)" begin
         include("test_utils.jl")
     end
     # Run file
-    @testset "run.jl" begin
+    @testset "Run file" begin
         # TODO : include("test_run.jl")
     end
     # Structures 

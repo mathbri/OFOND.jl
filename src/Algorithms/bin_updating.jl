@@ -4,10 +4,10 @@
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}
 )
-    volume = sum(size(com) for com in commodities) / VOLUME_FACTOR
+    volume = sum(size(com) for com in commodities)
     leadTimeCost = sum(lead_time_cost(com) for com in commodities)
     # Node cost 
-    cost = (dstData.volumeCost + arcData.carbonCost) * volume
+    cost = (dstData.volumeCost + arcData.carbonCost) * volume / VOLUME_FACTOR
     # Transport cost 
     addedBins = arcData.isLinear ? (volume / arcData.capacity) : newBins
     cost += addedBins * arcData.unitCost
@@ -65,7 +65,7 @@ function update_bins!(
     costAdded = 0.0
     for order in bundle.orders
         # Projecting path
-        timedPath = time_space_projector(TTGraph, TSGraph, path, order.deliveryDate)
+        timedPath = time_space_projector(TTGraph, TSGraph, path, order)
         # Add or Remove order
         if remove
             costAdded += remove_order!(solution, TSGraph, timedPath, order)

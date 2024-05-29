@@ -30,7 +30,7 @@ end
 
 # Wrapper for objects
 function first_fit_decreasing!(
-    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool
+    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool=false
 )
     return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
@@ -41,31 +41,33 @@ function tentative_first_fit(
 )
     # Sorting commodities in decreasing order of size (if not already done)
     !sorted && sort!(commodities; rev=true)
-    loads = map(bin -> bin.load, bins)
-    lengthBefore = length(loads)
+    capacities = map(bin -> bin.capacity, bins)
+    lengthBefore = length(capacities)
     # Adding commodities on top of others
     for commodity in commodities
         added = false
-        for (idxL, load) in enumerate(loads)
-            (fullCapacity - load >= commodity.size) &&
-                (added = true; loads[idxL] += commodity.size; break)
+        for (idxL, capacity) in enumerate(capacities)
+            if capacity >= size(commodity)
+                added = true
+                capacities[idxL] -= size(commodity)
+                break
+            end
         end
-        added || push!(loads, fullCapacity - commodity.size)
+        added || push!(capacities, fullCapacity - size(commodity))
     end
-    println(loads)
-    return length(loads) - lengthBefore
+    return length(capacities) - lengthBefore
 end
 
 # Wrapper for objects
 function tentative_first_fit(
-    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool
+    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool=false
 )
     return tentative_first_fit(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
 # Only useful for best fit decreasing computation of best bin
 function best_fit_capacity(bin::Bin, commodity::Commodity)
-    capacity_after = bin.capacity - commodity.size
+    capacity_after = bin.capacity - size(commodity)
     capacity_after < 0 && return INFINITY
     return capacity_after
 end
@@ -76,15 +78,22 @@ function best_fit_decreasing!(
 )
     # Sorting commodities in decreasing order of size (if not already done)
     !sorted && sort!(commodities; rev=true)
+    # As findmin doesn't work on empty bin vectors, making one recursive call here 
+    if length(bins) == 0
+        push!(bins, Bin(fullCapacity, commodities[1]))
+        return best_fit_decreasing!(bins, fullCapacity, commodities[2:end]; sorted=true) + 1
+    end
+    lengthBefore = length(bins)
     # Adding commodities on top of others
     for commodity in commodities
         # Selecting best bin
-        bestCapa, bestBin = findmin(bin -> best_fit_capacity(bin, commodity), possibleBins)
+        bestCapa, bestBin = findmin(bin -> best_fit_capacity(bin, commodity), bins)
         # If the best bin is full, adding a bin
         bestCapa == INFINITY && (push!(bins, Bin(fullCapacity, commodity)); continue)
         # Otherwise, adding it to the best bin
-        add!(bin[bestBin], commodity)
+        add!(bins[bestBin], commodity)
     end
+    return length(bins) - lengthBefore
 end
 
 # Best fit decreasing but returns a copy of the bins instead of modifying it
@@ -100,8 +109,9 @@ end
 function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
     n = length(commodities)
     n == 0 && return nothing
-    loads = map(bin -> bin.load, bins)
-    B = length(bins) + tentative_first_fit(bins, fullCapacity, commodities)
+    lengthBefore = length(bins)
+    B = lengthBefore + tentative_first_fit(bins, fullCapacity, commodities)
+    loads = vcat(map(bin -> bin.load, bins), fill(0, B - length(bins)))
     # Model
     model = Model(HiGHS.Optimizer)
     # Variables
@@ -112,10 +122,12 @@ function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector
     @constraint(
         model,
         fitInBin[b=1:B],
-        fullCapacity * y[b] >= sum(x[i, b] * commodities[i].size for i in 1:n) + loads[b]
+        fullCapacity * y[b] >= sum(x[i, b] * size(commodities[i]) for i in 1:n) + loads[b]
     )
+    @constraint(model, breakSym[b=1:(B - 1)], y[b] >= y[b + 1])
     # Objective
     @objective(model, Min, sum(y))
+    set_silent(model)
     # Solve
     optimize!(model)
     # Get variables value
@@ -129,6 +141,7 @@ function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector
     for i in 1:n, b in 1:B
         xval[i, b] == 1 && add!(bins[b], commodities[i])
     end
+    return length(bins) - lengthBefore
 end
 
 function milp_packing(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
