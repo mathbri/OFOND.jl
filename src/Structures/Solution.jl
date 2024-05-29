@@ -5,7 +5,8 @@
 struct Solution
     # Paths used for delivery
     bundlePaths::Vector{Vector{Int}}
-    bundlesOnNode::Dict{Int,Vector{Bundle}} # bundles on each node of the travel-time common graph + plants
+    # Bundles on each node of the travel-time common graph + plants
+    bundlesOnNode::Dict{Int,Vector{Bundle}}
     # Transport units completion through time 
     bins::SparseMatrixCSC{Vector{Bin},Int}
 end
@@ -46,6 +47,7 @@ function update_bundle_path!(
     return oldPath
 end
 
+# As there may be a lot of suppliers given in the paths, change to haskey test instead of get to not create a bundle vector object for nothing
 function update_bundle_on_nodes!(
     solution::Solution, bundle::Bundle, path::Vector{Int}; partial::Bool, remove::Bool=false
 )
@@ -75,7 +77,8 @@ end
 function remove_path!(solution::Solution, bundle::Bundle; src::Int=-1, dst::Int=-1)
     partial = (src != -1) && (dst != -1)
     oldPart = update_bundle_path!(solution, bundle, [src, dst]; partial=partial)
-    return update_bundle_on_nodes!(solution, bundle, oldPart; partial=partial, remove=true)
+    update_bundle_on_nodes!(solution, bundle, oldPart; partial=partial, remove=true)
+    return oldPart
 end
 
 # Plot some of the paths on a map ?
@@ -195,12 +198,12 @@ function compute_arc_cost(
 )
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
-    arcVolume = sum(arcData.capacity - bin.capacity for bin in bins) / VOLUME_FACTOR
+    arcVolume = sum(arcData.capacity - bin.capacity for bin in bins)
     arcLeadTimeCost = sum(
         bin -> sum(com -> lead_time_cost(com), bin.content; init=0), bins; init=0
     )
     # Node cost 
-    cost = (dstData.volumeCost + arcData.carbonCost) * arcVolume
+    cost = (dstData.volumeCost + arcData.carbonCost) * arcVolume / VOLUME_FACTOR
     # Transport cost 
     transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : length(bins)
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost

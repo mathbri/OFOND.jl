@@ -141,17 +141,17 @@ for (i, j) in zip(I, J)
     push!(sol.bins[i, j], OFOND.Bin(15, 5, [commodity3]))
 end
 
-# TODO : remove the [1] and test the old part returned
 @testset "remove bundle" begin
     # test with empty, partial and normal path
     # empty and full path should be the same
     sol2 = deepcopy(sol)
-    costAdded2 = OFOND.remove_bundle!(sol2, instance, bundle3, Int[])[1]
+    costAdded2, oldPart2 = OFOND.remove_bundle!(sol2, instance, bundle3, Int[])
     sol3 = deepcopy(sol)
-    costAdded3 = OFOND.remove_bundle!(sol3, instance, bundle3, TTPath)[1]
+    costAdded3, oldPart3 = OFOND.remove_bundle!(sol3, instance, bundle3, TTPath)
     # test that commodities are not in the bins but the bins are still there
     emptySol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test costAdded2 ≈ costAdded3 ≈ -41.0
+    @test oldPart2 == oldPart3 == TTPath
     @test sol2.bundlePaths == sol3.bundlePaths == emptySol.bundlePaths
     @test sol2.bundlesOnNode == sol3.bundlesOnNode == emptySol.bundlesOnNode
     @test sol2.bins == sol3.bins
@@ -163,10 +163,11 @@ end
     @test all(bins -> bins == [OFOND.Bin(50), OFOND.Bin(15, 5, [commodity3])], filteredV3)
     # tests with partial path
     sol4 = deepcopy(sol)
-    costAdded4 = OFOND.remove_bundle!(
+    costAdded4, oldPart4 = OFOND.remove_bundle!(
         sol4, instance, bundle3, [supp1FromDel3, xdockFromDel2, portFromDel1]
-    )[1]
+    )
     @test costAdded4 ≈ -28.5
+    @test oldPart4 == [supp1FromDel3, xdockFromDel2, portFromDel1]
     @test sol4.bundlePaths ==
         [[-1, -1], [-1, -1], [supp1FromDel3, portFromDel1, plantFromDel0]]
     @test sol4.bundlesOnNode[xdockFromDel2] == OFOND.Bundle[]
@@ -183,16 +184,8 @@ emptySol = OFOND.Solution(TTGraph, TSGraph, bundles)
 @testset "update solution" begin
     # mix of all the above
     costAdded = OFOND.update_solution!(sol, instance, [bundle1, bundle3], [TTPath, TTPath])
-    println("Paths before removal : $(sol.bundlePaths)")
-    # println(sol.bundlesOnNode)
-    # println(sol.bins)
     @test sol.bundlePaths == [TTPath, [-1, -1], TTPath]
     costRemoved = OFOND.update_solution!(sol, instance, [bundle1, bundle3]; remove=true)
-    println("Paths after removal : $(sol.bundlePaths)")
-    # println(sol.bundlesOnNode)
-    # println(sol.bins)
-    I, J, V = findnz(sol.bins)
-    println("Bins after refilling : \n $I \n $J \n $V")
     @test costAdded + costRemoved ≈ 0.0
     @test sol.bundlePaths == emptySol.bundlePaths
     @test sol.bundlesOnNode == emptySol.bundlesOnNode

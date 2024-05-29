@@ -180,13 +180,15 @@ end
     @test sol.bundlesOnNode[xdockFromDel2] == [bundle1, bundle1]
 
     OFOND.add_path!(sol, bundle2, [xdockFromDel2, portFromDel1])
-    OFOND.remove_path!(sol, bundle1; src=xdockFromDel2, dst=portFromDel1)
+    oldPart = OFOND.remove_path!(sol, bundle1; src=xdockFromDel2, dst=portFromDel1)
+    @test oldPart == [xdockFromDel2, xdockFromDel2, portFromDel1]
     @test sol.bundlePaths[1] == TTPath
     @test sol.bundlesOnNode[xdockFromDel2] == [bundle2]
     @test sol.bundlesOnNode[portFromDel1] == [bundle1, bundle2]
     @test sol.bundlesOnNode[plantFromDel0] == [bundle1]
 
-    OFOND.remove_path!(sol, bundle1)
+    oldPart = OFOND.remove_path!(sol, bundle1)
+    @test oldPart == TTPath
     @test sol.bundlePaths[1] == [-1, -1]
     @test sol.bundlesOnNode[xdockFromDel2] == [bundle2]
     @test sol.bundlesOnNode[portFromDel1] == [bundle2]
@@ -293,12 +295,7 @@ supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     for com in [commodity1, commodity1]
         OFOND.add!(sol.bins[supp1step2, xdockStep3][1], com)
     end
-    # push!(sol.bins[portStep4, plantStep1], OFOND.Bin(50))
-    # for com in [commodity1, commodity1]
-    #     OFOND.add!(sol.bins[portStep4, plantStep1][1], com)
-    # end
     # add direct paths for the other bundles
-    println(supp2fromDel1, "-", plantFromDel0)
     OFOND.add_path!(sol, bundle2, [supp2fromDel1, plantFromDel0])
     OFOND.add_path!(sol, bundle3, [supp1FromDel2, plantFromDel0])
     # add commodities on direct arc
@@ -308,7 +305,6 @@ supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     end
     push!(sol.bins[supp2step4, plantStep1], OFOND.Bin(50))
     for com in [commodity2, commodity2]
-        println(supp2step4, "-", plantStep1)
         arcBins = sol.bins[supp2step4, plantStep1]
         OFOND.add!(arcBins[1], com)
     end
@@ -316,38 +312,6 @@ supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     @test OFOND.is_feasible(instance, sol)
     @test OFOND.is_feasible(instance, sol; verbose=true)
 end
-
-# # add commities on first and last arc of TTPath
-# push!(sol.bins[supp1step2, xdockStep3], OFOND.Bin(50))
-# for com in [commodity1, commodity1]
-#     OFOND.add!(sol.bins[supp1step2, xdockStep3][1], com)
-# end
-# push!(sol.bins[portStep4, plantStep1], OFOND.Bin(50))
-# for com in [commodity1, commodity1]
-#     OFOND.add!(sol.bins[portStep4, plantStep1][1], com)
-# end
-# # add direct paths for the other bundles
-# supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
-# println(supp2fromDel1, "-", plantFromDel0)
-# OFOND.add_path!(sol, bundle2, [supp2FromDel1, plantFromDel0])
-# OFOND.add_path!(sol, bundle3, [supp1FromDel2, plantFromDel0])
-# # add commodities on direct arc
-# push!(sol.bins[supp1step3, plantStep1], OFOND.Bin(50))
-# for com in [commodity2, commodity2]
-#     OFOND.add!(sol.bins[portStep4, plantStep1][1], com)
-# end
-# supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
-# push!(sol.bins[supp2step4, plantStep1], OFOND.Bin(50))
-# for com in [commodity2, commodity1]
-#     OFOND.add!(sol.bins[portStep4, plantStep1][1], com)
-# end
-
-# supp_to_plat = OFOND.NetworkArc(:outsource, 1.0, 1, false, 4.0, true, 0.0, 50)
-# supp1_to_plant = OFOND.NetworkArc(:direct, 2.0, 2, false, 10.0, false, 1.0, 50)
-# supp2_to_plant = OFOND.NetworkArc(:direct, 2.0, 1, false, 10.0, false, 1.0, 50)
-# plat_to_plant = OFOND.NetworkArc(:delivery, 1.0, 1, true, 4.0, false, 1.0, 50)
-# xdock_to_port = OFOND.NetworkArc(:cross_plat, 1.0, 1, true, 4.0, false, 0.0, 50)
-# port_to_plant = OFOND.NetworkArc(:oversea, 1.0, 1, true, 4.0, false, 1.0, 50)
 
 @testset "Cost computation" begin
     bins = [OFOND.Bin(50)]
@@ -362,11 +326,11 @@ end
     @test OFOND.compute_arc_cost(TSGraph, bins, portStep4, plantStep1; current_cost=false) ≈
         14.8
     # volume = 30, stockCost = 10.5, distance = 1, unitCost = 4, carbonCost = 0, nodeCost = 1, linear
-    # 10.5 + 3/5 * 4/100 + 30/100*1 = 10.824
+    # 10.5 + 3/5 * 4 + 30/100*1 = 13.2
     xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]
     @test OFOND.compute_arc_cost(
         TSGraph, bins, supp2step4, xdockStep1; current_cost=false
-    ) ≈ 10.824
+    ) ≈ 13.2
     # test on the whole solution
-    @test OFOND.compute_cost(instance, sol; current_cost=false) ≈ 77.966
+    @test OFOND.compute_cost(instance, sol; current_cost=false) ≈ 79.55
 end

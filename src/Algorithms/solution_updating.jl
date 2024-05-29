@@ -94,7 +94,6 @@ function refill_bins!(
     return costAdded
 end
 
-# TODO : adapt test to this new return
 # Remove the bundle only on the path portion provided
 function remove_bundle!(
     solution::Solution,
@@ -109,11 +108,6 @@ function remove_bundle!(
         oldPart = remove_path!(solution, bundle)
     else
         oldPart = remove_path!(solution, bundle; src=path[1], dst=path[end])
-    end
-    if oldPart == [-1, -1]
-        println("Error in removing the bundle")
-        println("Bundle : $bundle")
-        println("Path : $path")
     end
     costRemoved = update_bins!(
         solution, TSGraph, TTGraph, bundle, oldPart; sorted=sorted, remove=true
@@ -139,7 +133,6 @@ function update_solution!(
             costAdded += add_bundle!(
                 solution, instance, bundle, path; sorted=sorted, skipFill=skipRefill
             )
-            println("Cost added : $costAdded")
         end
     else
         pathsToUpdate = Vector{Vector{Int}}()
@@ -150,7 +143,6 @@ function update_solution!(
             )
             costAdded += costRemoved
             push!(pathsToUpdate, oldPart)
-            println("Cost removed : $costAdded")
         end
         # If skipRefill than no recomputation
         skipRefill && return costAdded
@@ -158,12 +150,7 @@ function update_solution!(
         binsUpdated = get_bins_updated(
             instance.timeSpaceGraph, instance.travelTimeGraph, bundles, pathsToUpdate
         )
-        I, J, V = findnz(binsUpdated)
-        println("Bins updated : \n $I \n $J")
-        I, J, V = findnz(solution.bins)
-        println("Bins before refilling : \n $I \n $J \n $V")
         costAdded += refill_bins!(solution, instance.timeSpaceGraph, binsUpdated)
-        println("Cost refilled : $costAdded")
     end
     return costAdded
 end
