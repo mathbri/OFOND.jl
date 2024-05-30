@@ -1,7 +1,5 @@
 # Utils function only used in greedy
 
-# TODO : when solution struct updated, replace paths with solution and get path with the bundle idx
-
 # Check whether the arc is fit for a cost update
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]
@@ -22,14 +20,16 @@ function is_forbidden(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bund
     return (inlandBundle && (srcIsPort || dstIsPort))
 end
 
-function get_order_node_com_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
-    arcData = TTGraph.networkArcs[src, dst]
-    dstData = TTGraph.networkNodes[dst]
-    # Node volume cost + Commodity last time cost  
-    return dstData.volumeCost * order.volume + arcData.distance * order.leadTimeCost
+# Computes volume and lead time costs for an order
+function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
+    dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
+    # Node volume cost + Arc carbon cost + Commodity last time cost
+    return (dstData.volumeCost + arcData.carbonCost) * order.volume / VOLUME_FACTOR +
+           arcData.distance * order.leadTimeCost
 end
 
-function get_order_transport_units(
+# Computes transport units for an order
+function transport_units(
     solution::Solution,
     TSGraph::TimeSpaceGraph,
     timedSrc::Int,
@@ -40,39 +40,38 @@ function get_order_transport_units(
 )
     arcData = TSGraph.networkArcs[timedSrc, timedDst]
     # Transport cost 
-    arcOrderTrucks = get_transport_units(order, arcData)
+    orderTrucks = get_transport_units(order, arcData)
     # If we take into account the current solution
     if use_bins
-        loads = solution.binLoads[timedSrc, timedDst]
+        bins = solution.binLoads[timedSrc, timedDst]
         # If the arc is not empty, computing a tentative first fit 
-        if length(loads) > 0
-            arcOrderTrucks = first_fit_decreasing(
-                loads, arcData.capacity, order.content; sorted=sorted
-            )
+        if length(bins) > 0
+            orderTrucks = tentative_first_fit(bins, arcData, order; sorted=sorted)
         end
     end
-    return arcOrderTrucks
+    return orderTrucks
 end
 
-function get_transport_cost(
+# Returns the corresponding transport costs to be used
+function transport_cost(
     TSGraph::TimeSpaceGraph, timedSrc::Int, timedDst::Int; current_cost::Bool
 )
     current_cost && return TSGraph.currentCost[timedSrc, timedDst]
-    arcData = TSGraph.networkArcs[timedSrc, timedDst]
-    return (arcData.unitCost + arcData.carbonCost)
+    return TSGraph.networkArcs[timedSrc, timedDst].unitCost
 end
 
-function get_arc_update_cost(
-    solution::Solution,
+# Compute the arc update cost to be used in the path computation
+function arc_update_cost(
+    sol::Solution,
     TTGraph::TravelTimeGraph,
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
     src::Int,
     dst::Int;
-    sorted::Bool,
-    use_bins::Bool,
-    opening_factor::Float64,
-    current_cost::Bool,
+    sorted::Bool=false,
+    use_bins::Bool=true,
+    opening_factor::Float64=1.0,
+    current_cost::Bool=false,
 )
     # If the arc is forbidden for the bundle, returning INF
     is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
@@ -80,33 +79,27 @@ function get_arc_update_cost(
     arcBundleCost = EPS
     for order in bundle.orders
         # Getting time space projection
-        timedSrc, timedDst = time_space_projector(
-            TTGraph, TSGraph, src, dst, order.deliveryDate
-        )
+        tSrc, tDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
         # Node volume cost 
-        arcBundleCost += get_order_node_com_cost(TTGraph, src, dst, order)
+        arcBundleCost += volume_stock_cost(TTGraph, src, dst, order)
         # Arc transport cost 
         arcBundleCost +=
-            get_order_transport_units(
-                solution,
-                TSGraph,
-                timedSrc,
-                timedDst,
-                order;
-                sorted=sorted,
-                use_bins=use_bins,
+            transport_units(
+                sol, TSGraph, tSrc, tDst, order; sorted=sorted, use_bins=use_bins
             ) *
-            get_transport_cost(TSGraph, timedSrc, timedDst; current_cost=current_cost) *
+            transport_cost(TSGraph, tSrc, tDst; current_cost=current_cost) *
             opening_factor
     end
     return arcBundleCost
 end
 
 function find_other_src_node(travelTimeGraph::TravelTimeGraph, src::Int)
-    return findfirst(
+    otherSrcIdx = findfirst(
         dst -> travelTimeGraph.networkArcs[src, dst].type == :shortcut,
         outneighbors(travelTimeGraph, src),
     )
+    otherSrcIdx === nothing && return nothing
+    return outneighbors(travelTimeGraph, src)[otherSrcIdx]
 end
 
 # Creating start node vector
@@ -169,29 +162,11 @@ function is_path_admissible(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
     # Too long ? Too many node ? To be difined
 end
 
-function get_path_cost(path::Vector{Int}, costMatrix::SparseMatrixCSC{Float64,Int})
+# TODO : remove get from name as it is not a getter 
+function path_cost(path::Vector{Int}, costMatrix::SparseMatrixCSC{Float64,Int})
     cost = 0.0
     for (i, j) in partition(path, 2, 1)
         cost += costMatrix[i, j]
     end
     return cost
-end
-
-function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
-    firstNode = 1
-    for (src, dst) in partition(path, 2, 1)
-        if travelTimeGraph.networkArcs[src, dst].type == :shortcut
-            firstNode += 1
-        else
-            break
-        end
-    end
-    return deleteat!(path, 1:(firstNode - 1))
-end
-
-function remove_shotcuts!(path::Vector{Edge}, travelTimeGraph::TravelTimeGraph)
-    firstEdge = findfirst(
-        edge -> travelTimeGraph.networkArcs[edge.src, edge.dst].type != :shortcut, path
-    )
-    return deleteat!(path, 1:(firstEdge - 1))
 end
