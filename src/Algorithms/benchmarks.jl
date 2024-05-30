@@ -12,7 +12,6 @@
 # Benchmark heuristic where all bundle path are computed as the shortest delivery path on the network graph
 function shortest_delivery!(solution::Solution, instance::Instance)
     TTGraph = instance.travelTimeGraph
-    TSGraph = instance.timeSpaceGraph
     # Sorting commodities
     sort_order_content!(instance)
     # Computing the shortest delivery possible for each bundle
@@ -29,6 +28,8 @@ function shortest_delivery!(solution::Solution, instance::Instance)
     end
 end
 
+# TODO 
 # Average orders volume and either create solution from lower bound solve idea or from milp solve idea
+# Averaging could be done in another way
 
 function average_delivery_heuristic() end
