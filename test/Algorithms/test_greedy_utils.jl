@@ -52,15 +52,19 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
         sol, TSGraph, xdockStep3, portStep4, order1; sorted=true, use_bins=false
     ) == 2
     @test OFOND.transport_units(
-        sol, TSGraph, xdockStep3, plantStep1, order1; sorted=true, use_bins=false
+        sol, TSGraph, portStep4, plantStep1, order1; sorted=true, use_bins=false
     ) == 3
     # adding things on the TSGraph to check it is taken into account
     OFOND.first_fit_decreasing!(
-        sol.bins[xdockStep3, portStep4], 40, [commodity1, commodity1]
+        sol.bins[supp1Step2, xdockStep3], 40, [commodity1, commodity1]
     )
     @test OFOND.transport_units(
         sol, TSGraph, supp1Step2, xdockStep3, order1; sorted=true, use_bins=true
     ) ≈ 0.4
+
+    OFOND.first_fit_decreasing!(
+        sol.bins[xdockStep3, portStep4], 40, [commodity1, commodity1]
+    )
     @test OFOND.transport_units(
         sol, TSGraph, xdockStep3, portStep4, order1; sorted=true, use_bins=true
     ) == 0
@@ -70,6 +74,7 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     @test OFOND.transport_units(
         sol, TSGraph, portStep4, plantStep1, order1; sorted=true, use_bins=true
     ) == 1
+
     # transport cost
     @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=false) ≈ 4.0
     @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=true) ≈ 1e-5
@@ -79,12 +84,12 @@ end
 
 TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
 
-@testset "arc bundle cost" begin
+@testset "Arc bundle cost" begin
     # arc update cost function
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     # forbidden arc
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, portFromDel1, plantFromDel0;
+        sol, TTGraph, TSGraph, bundle1, portFromDel1, plantFromDel0; use_bins=false
     ) == 1e9
     @test OFOND.arc_update_cost(
         sol,
@@ -94,49 +99,31 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         portFromDel1,
         plantFromDel0;
         sorted=true,
-        use_bins=true,
         opening_factor=10.0,
         current_cost=true,
     ) == 1e9
     # linear arc
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2;
+        sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; use_bins=false
     ) == 1e-5 + 1.6 + 0 + 0.2 + 5
     @test OFOND.arc_update_cost(
-        sol,
-        TTGraph,
-        TSGraph,
-        bundle1,
-        supp1FromDel3,
-        xdockFromDel2;
-        use_bins=true,
-        opening_factor=10.0,
+        sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; opening_factor=10.0
     ) == 1e-5 + 16 + 0 + 0.2 + 5
     # consolidated arc with nothing on it
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
+        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
     ) == 1e-5 + 8 + 0 + 0.2 + 5
     @test OFOND.arc_update_cost(
-        sol,
-        TTGraph,
-        TSGraph,
-        bundle1,
-        xdockFromDel1,
-        plantFromDel0;
-        use_bins=true,
-        opening_factor=10.0,
+        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
     ) == 1e-5 + 40 + 0 + 0.2 + 5
     # consolidated arc with things on it
     OFOND.first_fit_decreasing!(
         sol.bins[xdockStep4, plantStep1], 40, [commodity1, commodity1]
     )
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
+        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
     ) == 1e-5 + 8 + 0 + 0.2 + 5
-    TSGraph[portStep4, plantStep1] = 1.0
-    @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
-    ) == 1e-5 + 2 + 0 + 0.2 + 5
+    TSGraph.currentCost[portStep4, plantStep1] = 1.0
     @test OFOND.arc_update_cost(
         sol,
         TTGraph,
@@ -144,8 +131,11 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         bundle1,
         xdockFromDel1,
         plantFromDel0;
-        use_bins=true,
-        opening_factor=10.0,
+        use_bins=false,
+        current_cost=true,
+    ) == 1e-5 + 2 + 0 + 0.2 + 5
+    @test OFOND.arc_update_cost(
+        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
     ) == 1e-5 + 0 + 0 + 0.2 + 5
 end
 

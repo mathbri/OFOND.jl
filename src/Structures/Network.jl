@@ -137,6 +137,7 @@ end
 
 # TODO : add a function to change arc or node data if needed
 
+# TODO : change from this to throw error ?
 function Base.zero(::Type{NetworkArc})
     return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end
