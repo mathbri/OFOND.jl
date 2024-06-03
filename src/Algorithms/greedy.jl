@@ -36,10 +36,10 @@ function greedy_path(
     bundle::Bundle,
     src::Int,
     dst::Int;
-    sorted::Bool,
-    use_bins::Bool,
+    sorted::Bool=false,
+    use_bins::Bool=true,
     opening_factor::Float64=1.0,
-    current_cost::Bool,
+    current_cost::Bool=false,
 )
     update_cost_matrix!(
         solution,
@@ -65,7 +65,7 @@ function greedy_insertion(
     bundle::Bundle,
     src::Int,
     dst::Int;
-    sorted::Bool,
+    sorted::Bool=false,
     current_cost::Bool=false,
 )
     shortestPath, pathCost = greedy_path(
@@ -96,9 +96,10 @@ function greedy_insertion(
             opening_factor=0.5,
             current_cost=current_cost,
         )
-        pathCost = get_path_cost(shortestPath, costMatrix)
+        pathCost = path_cost(shortestPath, costMatrix)
         if !is_path_admissible(TTGraph, shortestPath)
             # Then not taking into account the current solution
+            # If this happens, we want to be sure to have an admissible path
             shortestPath, pathCost = greedy_path(
                 solution,
                 TTGraph,
@@ -108,9 +109,9 @@ function greedy_insertion(
                 dst;
                 sorted=sorted,
                 use_bins=false,
-                current_cost=current_cost,
+                current_cost=false,
             )
-            pathCost = get_path_cost(shortestPath, costMatrix)
+            pathCost = path_cost(shortestPath, costMatrix)
         end
     end
     return shortestPath, pathCost

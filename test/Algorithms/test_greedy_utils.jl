@@ -73,6 +73,8 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     # transport cost
     @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=false) ≈ 4.0
     @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=true) ≈ 1e-5
+    TSGraph[portStep4, plantStep1] = 1.0
+    @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=true) ≈ 1e-5
 end
 
 TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
@@ -131,6 +133,10 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
     ) == 1e-5 + 8 + 0 + 0.2 + 5
+    TSGraph[portStep4, plantStep1] = 1.0
+    @test OFOND.arc_update_cost(
+        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
+    ) == 1e-5 + 2 + 0 + 0.2 + 5
     @test OFOND.arc_update_cost(
         sol,
         TTGraph,

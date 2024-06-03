@@ -30,7 +30,7 @@ OFOND.add_arc!(network, port_l, plant, port_to_plant)
 
 # Define bundles
 bpDict = Dict(
-    :direct => 2, :cross_plat => 2, :delivery => 2, :oversea => 2, :port_transport => 2
+    :direct => 3, :cross_plat => 2, :delivery => 2, :oversea => 2, :port_transport => 2
 )
 commodity1 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("A123", 10, 2.5))
 bunH1 = hash(supplier1, hash(plant))
@@ -98,4 +98,40 @@ end
 
 @testset "Solution Updating" begin
     include("test_solution_updating.jl")
+end
+
+# Benchmarks 
+
+@testset "Benchmarks" begin
+    include("test_benchmarks.jl")
+end
+
+# Greedy 
+
+@testset "Greedy Utils" begin
+    include("test_greedy_utils.jl")
+end
+
+@testset "Greedy" begin
+    include("test_greedy.jl")
+end
+
+# Lower Bound 
+
+@testset "Lower Bound Utils" begin
+    include("test_lb_utils.jl")
+end
+
+@testset "Lower Bound" begin
+    include("test_lower_bound.jl")
+end
+
+# Local Search
+
+@testset "Local Search Utils" begin
+    include("test_ls_utils.jl")
+end
+
+@testset "Local Search" begin
+    include("test_local_search.jl")
 end
