@@ -2,28 +2,32 @@ supp1FromDel2 = TTGraph.hashToIdx[hash(2, supplier1.hash)]
 xdockFromDel1 = TTGraph.hashToIdx[hash(1, xdock.hash)]
 plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
 
-@testset "Greedy path" begin
+@testset "Lower bound path" begin
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     # classic path computation
-    path, cost = OFOND.greedy_path(
+    path, cost = OFOND.lower_bound_path(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
     )
     @test path == [supp1FromDel2, plantFromDel0]
     @test cost ≈ 20.2
-    # change opening factor to change path 
-    path, cost = OFOND.greedy_path(
-        sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; opening_factor=0.5
+    # change bins to change path 
+    push!(sol.bins[xdockStep4, plantStep1], OFOND.Bin(50))
+    path, cost = OFOND.lower_bound_path(
+        sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; use_bins=true
     )
     @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
     @test cost ≈ 20.2
     # change current cost to change path 
+    empty!(sol.bins[xdockStep4, plantStep1])
     TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
-    path, cost = OFOND.greedy_path(
+    path, cost = OFOND.lower_bound_path(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; current_cost=true
     )
     @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
     @test cost ≈ 20.2
 end
+
+# TODO : adapt this function below
 
 # Modifying instance a little for testing
 # Adding a cycle in the network that won't be one in the time expansion
@@ -41,13 +45,13 @@ TTGraph2 = OFOND.TravelTimeGraph(network2, [bundle4])
 TSGraph2 = OFOND.TimeSpaceGraph(network2, 4)
 instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
 
-@testset "Greedy insertion" begin
+@testset "Lower bound insertion" begin
     sol2 = OFOND.Solution(TTGraph2, TSGraph2, [bundle4])
     supp3Idx = TTGraph2.hashToIdx[hash(3, supplier3.hash)]
     plantIdx = TTGraph2.hashToIdx[hash(0, plant.hash)]
     # get 3 paths 
     # one directly admissible (classic one)
-    path1, cost1 = OFOND.greedy_insertion(
+    path1, cost1 = OFOND.lower_bound_insertion(
         sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx
     )
     @test path1 == [supp3FromDel2, xdockFromDel1, plantFromDel0]
@@ -64,7 +68,7 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     J = [portStep4, xdockStep3, xdockStep4]
     TSGraph2.currentCost[I, J] .*= 0.1
     # path2 should not be admissible
-    path2, cost2 = OFOND.greedy_path(
+    path2, cost2 = OFOND.lower_bound_path(
         sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx; current_cost=true
     )
     @test path2 ==
@@ -72,7 +76,7 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     @test cost2 ≈ 1e-4 + 3e-5
     @test !OFOND.is_path_admissible(TTGraph2, path1)
     # path3 should and be equal to path1
-    path3, cost3 = OFOND.greedy_insertion(
+    path3, cost3 = OFOND.lower_bound_insertion(
         sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx; current_cost=true
     )
     @test path3 == path1
@@ -85,7 +89,7 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
 @testset "Heuristic" begin
     # run heuristic and test solution as for benchmark
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
-    OFOND.greedy!(sol, instance)
+    lowerBound = OFOND.lower_bound!(sol, instance)
     @test sol.bundlePaths == [
         [supp1FromDel2, xdockFromDel1, plantFromDel0],
         [supp2fromDel1, plantFromDel0],
@@ -104,4 +108,5 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     @test sol.bins[supp2Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     filledArcs = findnz(sol.bins)[3]
     @test length(filledArcs) == 5
+    @test lowerBound ≈ 20.2
 end

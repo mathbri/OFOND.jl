@@ -87,13 +87,3 @@ function update_lb_cost_matrix!(
         end
     end
 end
-
-# TODO
-function lower_bound_filtering!(instance::Instance, solution::Solution)
-    # solution is supposed to be one from lower bound heuristic
-    # (or run lower bound heuristic first)
-    # two mode : aggressive or not 
-    # aggressive : all bundle taking direct paths are filtered from instance
-    # not aggressive : all bundle taking direct paths and BP lower bound is reached for orders are filtered from instance
-    # use milp packing for order bp precomputation ?
-end

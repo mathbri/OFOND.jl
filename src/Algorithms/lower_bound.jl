@@ -22,9 +22,9 @@ function lower_bound_path(
     bundle::Bundle,
     src::Int,
     dst::Int;
-    use_bins::Bool,
-    current_cost::Bool,
-    giant::Bool,
+    use_bins::Bool=false,
+    current_cost::Bool=false,
+    giant::Bool=false,
 )
     update_lb_cost_matrix!(
         solution,
@@ -73,8 +73,8 @@ function lower_bound_insertion(
             src,
             dst;
             use_bins=false,
-            current_cost=current_cost,
-            giant=giant,
+            current_cost=false,
+            giant=false,
         )
     end
     return shortestPath, pathCost
@@ -98,7 +98,8 @@ function lower_bound!(solution::Solution, instance::Instance)
         # Adding to solution
         update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
     end
-    return println("Lower Bound Computed : $lowerBound")
+    println("Lower Bound Computed : $lowerBound")
+    return lowerBound
 end
 
 function parrallel_lower_bound!(solution::Solution, instance::Instance)
@@ -116,3 +117,12 @@ end
 # I run the lower bound heuristic : it splits my instance between directs and non-directs 
 # Because the cost is lower bound, the directs are sure to be one ?
 # Than I can just consider the non-directs for the LNS
+
+function lower_bound_filtering!(instance::Instance, solution::Solution)
+    # solution is supposed to be one from lower bound heuristic
+    # (or run lower bound heuristic first)
+    # two mode : aggressive or not 
+    # aggressive : all bundle taking direct paths are filtered from instance
+    # not aggressive : all bundle taking direct paths and BP lower bound is reached for orders are filtered from instance
+    # use milp packing for order bp precomputation ?
+end
