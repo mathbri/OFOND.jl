@@ -96,11 +96,7 @@ end
 
 # Remove the bundle only on the path portion provided
 function remove_bundle!(
-    solution::Solution,
-    instance::Instance,
-    bundle::Bundle,
-    path::Vector{Int};
-    sorted::Bool=false,
+    solution::Solution, instance::Instance, bundle::Bundle, path::Vector{Int};
 )
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
     oldPart = Int[]
@@ -109,9 +105,7 @@ function remove_bundle!(
     else
         oldPart = remove_path!(solution, bundle; src=path[1], dst=path[end])
     end
-    costRemoved = update_bins!(
-        solution, TSGraph, TTGraph, bundle, oldPart; sorted=sorted, remove=true
-    )
+    costRemoved = update_bins!(solution, TSGraph, TTGraph, bundle, oldPart; remove=true)
     return (costRemoved, oldPart)
 end
 
@@ -138,9 +132,7 @@ function update_solution!(
         pathsToUpdate = Vector{Vector{Int}}()
         # If remove = true, removing the bundle from the solution
         for (bundle, path) in zip(bundles, paths)
-            costRemoved, oldPart = remove_bundle!(
-                solution, instance, bundle, path; sorted=sorted
-            )
+            costRemoved, oldPart = remove_bundle!(solution, instance, bundle, path)
             costAdded += costRemoved
             push!(pathsToUpdate, oldPart)
         end

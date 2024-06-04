@@ -1,5 +1,10 @@
 # Bin packing functions
 
+# TODO : FFD and BFD have faster implementations using binary trees 
+# Need to see if bin packing remains a bottleneck by number of problems to solve or time per problem
+# see Faster First Fit for algorithm
+# see AVL Tree in DataStructures.jl for implementation
+
 # TODO : add other bin packing computations to improve this neighborhood
 
 function first_fit_decreasing!(
@@ -12,7 +17,8 @@ function first_fit_decreasing!(
     for commodity in commodities
         added = false
         for bin in bins
-            add!(bin, commodity) && (added = true; break)
+            added = add!(bin, commodity)
+            added && break
         end
         added || push!(bins, Bin(fullCapacity, commodity))
     end

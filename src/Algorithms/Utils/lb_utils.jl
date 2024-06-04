@@ -17,7 +17,7 @@ function lb_transport_units(
         bins = solution.bins[timedSrc, timedDst]
         # If the arc is not empty, computing space left in last giant container approx and removing it from the cost 
         if length(bins) > 0
-            truckSpaceLeft = sum(bin -> bin.capacity) / arcData.capacity
+            truckSpaceLeft = sum(bin.capacity for bin in bins) / arcData.capacity
             orderTrucks = max(0, orderTrucks - truckSpaceLeft)
         end
     end
