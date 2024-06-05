@@ -36,11 +36,11 @@ function bin_packing_improvement!(
         newBins = compute_new_bins(arcData, allCommodities; sorted=sorted)
         # If the number of bins did not change, skipping next
         length(newBins) >= length(arcBins) && continue
-        # Computing cost improvement
-        costImprov +=
-            (arcData.unitCost + arcData.carbonCost) * (length(arcBins) - length(newBins))
         # Updating bins
         solution.bins[src(arc), dst(arc)] = newBins
+        # Computing cost improvement (unless linear arc)
+        arcData.isLinear && continue
+        costImprov += arcData.unitCost * (length(arcBins) - length(newBins))
     end
     return costImprov
 end
@@ -63,21 +63,21 @@ function bundle_reintroduction!(
 )
     # compute greedy insertion and lower bound insertion and take the best one ?
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    bundles, paths = [bundle], [solution.bundlePaths[bundle.idx]]
+    bundles, oldPaths = [bundle], [solution.bundlePaths[bundle.idx]]
     # Saving previous solution state 
-    previousBins, costRemoved = save_and_remove_bundle!(
-        solution, instance, bundles, paths; current_cost=current_cost, sorted=sorted
+    oldBins, costRemoved = save_and_remove_bundle!(
+        solution, instance, bundles, oldPaths; current_cost=current_cost
     )
     # If the cost removed is negative or null, no chance of improving 
-    if costRemoved <= 0
-        update_solution!(solution, instance, bundles, paths; skipRefill=true)
+    if costRemoved <= EPS
+        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
         # Reverting bins to the previous state
-        return revert_bins!(solution, previousBins)
+        return revert_bins!(solution, oldBins)
     end
     # Inserting it back
     suppNode = TTGraph.bundleStartNodes[bundle.idx]
     custNode = TTGraph.bundleEndNodes[bundle.idx]
-    bestCost, bestPath = best_reinsertion(
+    pathCost, newPath = greedy_insertion(
         solution,
         TTGraph,
         TSGraph,
@@ -90,15 +90,24 @@ function bundle_reintroduction!(
     # Updating path if it improves the cost
     if pathCost < costRemoved
         # Adding to solution
-        updateCost = update_solution!(solution, instance, bundles, [bestPath]; sorted=true)
+        updateCost = update_solution!(solution, instance, bundles, [newPath]; sorted=true)
         # verification
-        @assert bestCost ≈ updateCost "Path cost and Update cost don't match, check the error"
+        @assert pathCost ≈ updateCost "Path cost and Update cost don't match, check the error"
         return nothing
     else
-        update_solution!(solution, instance, bundles, paths; skipRefill=true)
-        return revert_bins!(solution, previousBins)
+        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+        return revert_bins!(solution, oldBins)
     end
 end
+
+# TODO : do Oscar's trick for memory efficient computation
+# Define solution2 (or lbSol) outside of the function, modify them both in the function 
+# and permute the return to choose the best, the other being the one not needed 
+# ie return (sol, sol2) or (sol2, sol)
+# is it really applicable here as we have to start from the same solution ?
+# not exactly as we have to make them both equal at the end of the neighborhood function 
+# but just need to create this function that make them equal and we can avoid allocating memory for all the old paths and bins
+# this trick could be used also for the other neighborhoods
 
 # Remove and insert back all bundles flowing from src to dst 
 function two_node_incremental!(
@@ -112,34 +121,36 @@ function two_node_incremental!(
     twoNodeBundles = get_bundles_to_update(solution, src, dst)
     # If there is no bundles concerned, returning
     length(twoNodeBundles) == 0 && return nothing
-    twoNodePaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
+    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
     # Saving previous solution state 
-    previousBins, costRemoved = save_and_remove_bundle!(
-        solution, instance, bundles, paths; current_cost=current_cost, sorted=sorted
+    oldBins, costRemoved = save_and_remove_bundle!(
+        solution, instance, twoNodeBundles, oldPaths; current_cost=current_cost
     )
     # Inserting it back
-    addedCost = 0.0
+    greedyAddedCost, lbAddedCost, lbSol = 0.0, 0.0, deepcopy(solution)
     for bundle in twoNodeBundles
-        bestCost, bestPath = best_reinsertion(
-            solution,
-            TTGraph,
-            TSGraph,
-            bundle,
-            src,
-            dst;
-            sorted=sorted,
-            current_cost=current_cost,
+        greedyPath, lowerBoundPath = both_insertion(
+            solution, instance, bundle, src, dst; sorted=sorted, current_cost=current_cost
         )
-        addedCost += bestCost
-        # Adding to solution
-        updateCost = update_solution!(solution, instance, [bundle], [bestPath]; sorted=true)
-        # verification
-        @assert bestCost ≈ updateCost "Path cost and Update cost don't match, check the error"
+        # Adding to solutions
+        greedyAddedCost += update_solution!(
+            solution, instance, [bundle], [greedyPath]; sorted=sorted
+        )
+        lbAddedCost += update_solution!(
+            lbSol, instance, [bundle], [lowerBoundPath]; sorted=sorted
+        )
     end
     # Solution already updated so if it didn't improve, reverting to old state
-    if addedCost < costRemoved
-        update_solution!(solution, instance, bundles, paths; remove=true, skipRefill=true)
-        return revert_bins!(solution, previousBins)
+    if min(greedyAddedCost, lbAddedCost) > costRemoved
+        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+        return revert_bins!(solution, oldBins)
+    else
+        # Choosing the best update (greedy by default)
+        if greedyAddedCost > lbAddedCost
+            change_solution_to_other!(
+                solution, lbSol, instance, twoNodeBundles; sorted=sorted
+            )
+        end
     end
 end
 
@@ -148,7 +159,9 @@ function local_search!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     sort_order_content!(instance)
     # First, bundle reintroduction to change whole paths
-    for bundle in instance.bundles
+    bundleIdxs = randperm(length(instance.bundles))
+    for bundleIdx in bundleIdxs
+        bundle = instance.bundles[bundleIdx]
         bundle_reintroduction!(solution, instance, bundle; sorted=true)
     end
     # Second, two node incremental to optimize shared network

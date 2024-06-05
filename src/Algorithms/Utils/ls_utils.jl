@@ -73,61 +73,63 @@ function save_and_remove_bundle!(
     return previousBins, costRemoved
 end
 
-# If I evaluate a path on the greedy cost matrix, either I have the same path 
-# as the greedy one and the cost is the same, or I have a different path with 
-# a worst cost because the greedy one is optimal for the greedy cost matrix
-# It would make sense if several bundles were to be inserted
+# TODO : test both functions added below
 
-# function best_reinsertion(
-#     solution::Solution,
-#     TTGraph::TravelTimeGraph,
-#     TSGraph::TimeSpaceGraph,
-#     bundle::Bundle,
-#     src::Int,
-#     dst::Int;
-#     sorted::Bool,
-#     current_cost::Bool,
-# )
-#     # Computing shortest path
-#     greedyPath, greedyCost = greedy_insertion(
-#         solution,
-#         TTGraph,
-#         TSGraph,
-#         bundle,
-#         src,
-#         dst;
-#         sorted=sorted,
-#         current_cost=current_cost,
-#     )
-#     lbPath, lbCost = lower_bound_insertion(
-#         solution,
-#         TTGraph,
-#         TSGraph,
-#         bundle,
-#         src,
-#         dst;
-#         use_bins=true,
-#         current_cost=current_cost,
-#         giant=true,
-#     )
-#     # Computing real cost of lbPath
-#     update_cost_matrix!(
-#         solution,
-#         TTGraph,
-#         TSGraph,
-#         bundle;
-#         sorted=sorted,
-#         use_bins=true,
-#         current_cost=current_cost,
-#     )
-#     lbCost = path_cost(lbPath, TTGraph.costMatrix)
-#     # Selecting the best one
-#     if greedyCost < lbCost
-#         return greedyPath, greedyCost
-#     else
-#         return lbPath, lbCost
-#     end
-# end
+# Compute paths for both insertion type 
+function both_insertion(
+    solution::Solution,
+    instance::Instance,
+    bundle::Bundle,
+    src::Int,
+    dst::Int;
+    sorted::Bool=false,
+    current_cost::Bool=false,
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    pathCost, greedyPath = greedy_insertion(
+        solution,
+        TTGraph,
+        TSGraph,
+        bundle,
+        src,
+        dst;
+        sorted=sorted,
+        current_cost=current_cost,
+    )
+    pathCost, lowerBoundPath = lower_bound_insertion(
+        solution,
+        TTGraph,
+        TSGraph,
+        bundle,
+        src,
+        dst;
+        use_bins=true,
+        giant=true,
+        current_cost=current_cost,
+    )
+    return greedyPath, lowerBoundPath
+end
+
+# Change solution paths and bins into other solution paths and bins
+# Must be the last ones added
+function change_solution_to_other!(
+    sol::Solution,
+    other::Solution,
+    instance::Instance,
+    bundles::Vector{Bundle};
+    sorted::Bool=false,
+)
+    # Removing added path by greedy update 
+    update_solution!(
+        sol, instance, bundles, sol.bundlePaths[idx(bundles)]; remove=true, skipRefill=true
+    )
+    # We can skip refill and just clean the bins as the commodities were the last added
+    clean_empty_bins!(sol, instance)
+    # Adding lower bound ones
+    return update_solution!(
+        sol, instance, bundles, other.bundlePaths[idx(bundles)]; sorted=sorted
+    )
+end
 
 # Checking if two nodes are candidates for two node incremental
 function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)

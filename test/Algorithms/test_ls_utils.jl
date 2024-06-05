@@ -132,9 +132,35 @@ end
     @test costRemoved ≈ 0.0
 end
 
-# @testset "Best re-insertion" begin
-#     #
-# end
+@testset "Both re-insertion" begin
+    sol = OFOND.Solution(TTGraph, TSGraph, bundles)
+    # by having 4 bins with 5 space left and wanting to add bundle 1, 
+    append!(sol.bins[supp1Step3, plantStep1], fill(OFOND.Bin(5), 4))
+    # lb will count 0 with use_bins as greedy will count 1 new truck 
+    # lb path will be direct while greedy path will be via cross-dock
+    greedyPath, lowerBoundPath = OFOND.both_insertion(
+        sol, instance, [bundle1], supp1FromDel2, plantFromDel0
+    )
+    @test greedyPath == [supp1FromDel2, xdockFromDel1, plantFromDel0]
+    @test lowerBoundPath == [supp1FromDel2, plantFromDel0]
+end
+
+@testset "Change solution" begin
+    sol = OFOND.Solution(TTGraph, TSGraph, bundles)
+    OFOND.greedy!(sol, instance)
+    sol2 = OFOND.Solution(TTGraph, TSGraph, bundles)
+    OFOND.shortest_delivery!(sol2, instance)
+    # sol for bundle 3 becomes sol2
+    OFOND.change_solution_to_other!(sol, sol2, instance, [bundle3])
+    @test sol.bundlePaths[1] != sol2.bundlePaths[1]
+    @test sol.bundlePaths[2] != sol2.bundlePaths[2]
+    @test sol.bundlePaths[3] == sol2.bundlePaths[3]
+    @test sol.bins[supp1step3, xdockStep4] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    @test sol.bins[supp1step3, plantStep1] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[supp1step4, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[xdockStep4, plantStep1] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    @test sol.bins[supp2step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
+end
 
 @testset "Node selection" begin
     @test !OFOND.are_nodes_candidate(TTGraph, 20, 20)
