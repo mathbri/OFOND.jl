@@ -21,16 +21,12 @@ println("Testing OFO Network Design Package")
     @testset "Structures" begin
         include("Structures/test_structures.jl")
     end
-    # Reading
-    @testset "Reading" begin
+    # Reading and Writing
+    @testset "Reading-Writing" begin
         # TODO : include("Reading/test_reading.jl")
     end
     # Algorithms
     @testset "Algorithms" begin
         include("Algorithms/test_algorithms.jl")
-    end
-    # Writing
-    @testset "Writing" begin
-        # TODO : include("Writing/test_writing.jl")
     end
 end

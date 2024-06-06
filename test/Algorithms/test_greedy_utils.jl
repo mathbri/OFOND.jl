@@ -17,7 +17,7 @@ plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
     # faking bundle1 goes to plant2 
     TTGraph2 = deepcopy(TTGraph)
     TTGraph2.bundleDst[1] = 6
-    @test !OFOND.is_update_candidate(TTGraph, xdockFromDel2, plantFromDel0, bundle1)
+    @test !OFOND.is_update_candidate(TTGraph2, xdockFromDel1, plantFromDel0, bundle1)
     # is forbidden function
     @test !OFOND.is_forbidden(TTGraph, xdockFromDel1, plantFromDel0, bundle1)
     @test OFOND.is_forbidden(TTGraph, xdockFromDel2, portFromDel1, bundle1)
@@ -52,7 +52,7 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
         sol, TSGraph, xdockStep3, portStep4, order1; sorted=true, use_bins=false
     ) == 2
     @test OFOND.transport_units(
-        sol, TSGraph, portStep4, plantStep1, order1; sorted=true, use_bins=false
+        sol, TSGraph, supp1Step3, plantStep1, order1; sorted=true, use_bins=false
     ) == 3
     # adding things on the TSGraph to check it is taken into account
     OFOND.first_fit_decreasing!(
@@ -71,15 +71,16 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     @test OFOND.transport_units(
         sol, TSGraph, xdockStep3, portStep4, order2; sorted=true, use_bins=true
     ) == 1
+    # nothing on this arc so tentative_first_fit don't activate
     @test OFOND.transport_units(
         sol, TSGraph, portStep4, plantStep1, order1; sorted=true, use_bins=true
-    ) == 1
+    ) == 2
 
     # transport cost
     @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=false) ≈ 4.0
     @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=true) ≈ 1e-5
-    TSGraph[portStep4, plantStep1] = 1.0
-    @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=true) ≈ 1e-5
+    TSGraph.currentCost[portStep4, plantStep1] = 1.0
+    @test OFOND.transport_cost(TSGraph, portStep4, plantStep1; current_cost=true) ≈ 1.0
 end
 
 TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
@@ -90,7 +91,7 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
     # forbidden arc
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, portFromDel1, plantFromDel0; use_bins=false
-    ) == 1e9
+    ) ≈ 1e9
     @test OFOND.arc_update_cost(
         sol,
         TTGraph,
@@ -101,29 +102,29 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         sorted=true,
         opening_factor=10.0,
         current_cost=true,
-    ) == 1e9
+    ) ≈ 1e9
     # linear arc
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; use_bins=false
-    ) == 1e-5 + 1.6 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1.6 + 0 + 0.2 + 5
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; opening_factor=10.0
-    ) == 1e-5 + 16 + 0 + 0.2 + 5
-    # consolidated arc with nothing on it
+    ) ≈ 1e-5 + 16 + 0 + 0.2 + 5
+    # consolidated arc with nothing on it (tentaive first fit shouldn't activate)
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
-    ) == 1e-5 + 8 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 8 + 0 + 0.2 + 5
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
-    ) == 1e-5 + 40 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 80 + 0 + 0.2 + 5
     # consolidated arc with things on it
     OFOND.first_fit_decreasing!(
         sol.bins[xdockStep4, plantStep1], 40, [commodity1, commodity1]
     )
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
-    ) == 1e-5 + 8 + 0 + 0.2 + 5
-    TSGraph.currentCost[portStep4, plantStep1] = 1.0
+    ) ≈ 1e-5 + 8 + 0 + 0.2 + 5
+    TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
     @test OFOND.arc_update_cost(
         sol,
         TTGraph,
@@ -133,13 +134,15 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         plantFromDel0;
         use_bins=false,
         current_cost=true,
-    ) == 1e-5 + 2 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 2 + 0 + 0.2 + 5
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
-    ) == 1e-5 + 0 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 0 + 0 + 0.2 + 5
 end
 
 @testset "Source nodes finding" begin
+    supp2FromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
+    supp2FromDel0 = TTGraph.hashToIdx[hash(0, supplier2.hash)]
     # find_other_src_node
     @test OFOND.find_other_src_node(TTGraph, supp1FromDel3) == supp1FromDel2
     @test OFOND.find_other_src_node(TTGraph, supp1FromDel2) == supp1FromDel1
@@ -155,18 +158,18 @@ end
 end
 
 I = vcat(
-    allIdxs[2:4],
-    [allIdxs[6], allIdxs[3], allIdxs[6], allIdxs[8], allIdxs[12]],
-    allIdxs[8:10],
-    allIdxs[2:4],
-    [allIdxs[6]],
+    allTTIdxs[2:4],
+    [allTTIdxs[6], allTTIdxs[3], allTTIdxs[6], allTTIdxs[8], allTTIdxs[12]],
+    allTTIdxs[8:10],
+    allTTIdxs[2:4],
+    [allTTIdxs[6]],
 )
 J = vcat(
-    allIdxs[7:9],
-    [allIdxs[7], allIdxs[end], allIdxs[end], allIdxs[end], allIdxs[end]],
-    allIdxs[11:13],
-    allIdxs[1:3],
-    [allIdxs[5]],
+    allTTIdxs[7:9],
+    [allTTIdxs[7], allTTIdxs[end], allTTIdxs[end], allTTIdxs[end], allTTIdxs[end]],
+    allTTIdxs[11:13],
+    allTTIdxs[1:3],
+    [allTTIdxs[5]],
 )
 
 @testset "Cost matrix update" begin
@@ -182,19 +185,19 @@ J = vcat(
     OFOND.update_cost_matrix!(sol, TTGraph, TSGraph, bundle1)
     @test TTGraph.costMatrix == TTGraph2.costMatrix
     # V = vcat(
-    #     fill(1e-5 + 6.8, 3),
+    #     fill(1e-5 + 16 + 5.2, 3), third supp1-xdock starts before supp1 src so stays 1e-5
     #     1e-5,
-    #     1e-5 + 110.2,
+    #     1e-5 + 310.2, bpUnits[:direct] = 3 and unitCost * openingFactor = 100
     #     1e-5,
-    #     1e-5 + 45.2,
+    #     1e-5 + 85.2, bpUnits[:delivery] = 2 and unitCost * openingFactor = 40
     #     OFOND.INFINITY,
-    #     fill(1e-5 + 45, 3),
+    #     fill(OFOND.INFINITY, 3),
     #     fill(1e-5, 4),
     # )
     V = fill(1e-5, 15)
-    V[[1, 2, 3, 5, 7, 9, 10, 11]] .+= [6.8, 6.8, 6.8, 110.2, 45.2, 45.0, 45.0, 45.0]
-    V[8] = 1e9
-    @test TTGraph3.costMatrix[I, J] .≈ V
+    V[[1, 2, 5, 7]] .+= [21.2, 21.2, 310.2, 85.2]
+    V[8:11] .= 1e9
+    @test all([TTGraph3.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 
     # add things on some arcs
     OFOND.first_fit_decreasing!(
@@ -202,10 +205,20 @@ J = vcat(
     )
     # use bins affect cost
     OFOND.update_cost_matrix!(sol, TTGraph2, TSGraph, bundle1; use_bins=true)
+    # V = vcat(
+    #     fill(1e-5 + 6.8, 3), third supp1-xdock starts before supp1 src so stays 1e-5
+    #     1e-5,
+    #     1e-5 + 40.2, bpUnits[:direct] = 3 and unitCost = 10 and distance = 2 so 10 for leadTime and 0.2 for carbon
+    #     1e-5,
+    #     1e-5 + 85.2, FFD(delivery) = 0 (bin alreday there) and unitCost = 4 and distance = 1 so 5 for leadTime and 0.2 for carbon
+    #     OFOND.INFINITY,
+    #     fill(OFOND.INFINITY, 3),
+    #     fill(1e-5, 4),
+    # )
     V = fill(1e-5, 15)
-    V[[1, 2, 3, 5, 7, 9, 10, 11]] .+= [6.8, 6.8, 6.8, 110.2, 0.2, 45.0, 45.0, 45.0]
-    V[8] = 1e9
-    @test TTGraph2.costMatrix[I, J] .≈ V
+    V[[1, 2, 5, 7]] .+= [6.8, 6.8, 40.2, 5.2]
+    V[8:11] .= 1e9
+    @test all([TTGraph2.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 end
 
 @testset "Path admissibility and cost" begin
@@ -215,7 +228,10 @@ end
         TTGraph, [supp1FromDel3, xdockFromDel2, portFromDel1, xdockFromDel1, plantFromDel0]
     )
     # get_path_cost
-    @test OFOND.path_cost(TTPath, TTGraph.costMatrix) ≈ 3e-5
     TTGraph.costMatrix[supp1FromDel3, xdockFromDel2] = 1.0
-    @test OFOND.path_cost(TTPath, TTGraph.costMatrix) ≈ 1 + 2e-5
+    TTGraph.costMatrix[xdockFromDel2, portFromDel1] = 1.5
+    TTGraph.costMatrix[portFromDel1, plantFromDel0] = 2.1
+    @test OFOND.path_cost(TTPath, TTGraph.costMatrix) ≈ 4.6
+    TTGraph.costMatrix[supp1FromDel3, xdockFromDel2] = 10.0
+    @test OFOND.path_cost(TTPath, TTGraph.costMatrix) ≈ 13.6
 end

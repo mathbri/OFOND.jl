@@ -42,9 +42,7 @@ function arc_lb_update_cost(
     arcBundleCost = EPS
     for order in bundle.orders
         # Getting time space projection
-        timedSrc, timedDst = time_space_projector(
-            TTGraph, TSGraph, src, dst, order.deliveryDate
-        )
+        timedSrc, timedDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
         # Node volume cost 
         arcBundleCost += volume_stock_cost(TTGraph, src, dst, order)
         # Arc transport cost 
@@ -69,9 +67,9 @@ function update_lb_cost_matrix!(
     # Iterating through outneighbors of the start nodes and common nodes
     for src in
         vcat(get_all_start_nodes(travelTimeGraph, bundle), travelTimeGraph.commonNodes)
-        for dst in outneighbors(travelTimeGraph, src)
+        for dst in outneighbors(travelTimeGraph.graph, src)
             # If the arc doesn't need an update, skipping
-            is_update_candidate(TTGraph, src, dst, bundle) || continue
+            is_update_candidate(travelTimeGraph, src, dst, bundle) || continue
             # Otherwise, computing the new cost
             travelTimeGraph.costMatrix[src, dst] = arc_lb_update_cost(
                 solution,

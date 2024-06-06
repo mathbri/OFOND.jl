@@ -35,10 +35,11 @@ function lower_bound_path(
         current_cost=current_cost,
         giant=giant,
     )
-    dijkstraState = dijkstra_shortest_paths(TTGraph, src, TTGraph.costMatrix)
+    dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
+    removedCost = remove_shortcuts!(shortestPath, TTGraph)
     pathCost = dijkstraState.dists[dst]
-    return shortestPath, pathCost
+    return shortestPath, pathCost - removedCost
 end
 
 function lower_bound_insertion(
@@ -64,7 +65,8 @@ function lower_bound_insertion(
         giant=giant,
     )
     # If the path is not admissible, re-computing it
-    if use_bins && !is_path_admissible(TTGraph, shortestPath)
+    pureLowerBound = !use_bins && !current_cost && !giant
+    if !pureLowerBound && !is_path_admissible(TTGraph, shortestPath)
         shortestPath, pathCost = lower_bound_path(
             solution,
             TTGraph,
@@ -88,8 +90,8 @@ function lower_bound!(solution::Solution, instance::Instance)
     # Computing the lower bound delivery for each bundle
     for bundle in instance.bundles
         # Retrieving bundle start and end nodes
-        suppNode = TTGraph.bundleStartNodes[bundle.idx]
-        custNode = TTGraph.bundleEndNodes[bundle.idx]
+        suppNode = TTGraph.bundleSrc[bundle.idx]
+        custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
         shortestPath, pathCost = lower_bound_insertion(
             solution, TTGraph, TSGraph, bundle, suppNode, custNode;

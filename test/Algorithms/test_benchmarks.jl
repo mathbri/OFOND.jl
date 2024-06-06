@@ -21,11 +21,11 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     # only the plant has bundle on nodes
     @test sol.bundlesOnNode[plantFromDel0] == bundles
     otherBundlesOnNode = filter(p -> p.first != plantFromDel0, sol.bundlesOnNode)
-    @test all(x -> length(x) == 0, otherBundlesOnNode)
+    @test all(p -> length(p.second) == 0, otherBundlesOnNode)
     # bins should be filled accordingly
     @test sol.bins[supp1Step3, plantStep1] ==
-        [OFOND.Bin(5, 45, [commodity1, commodity1, commodity1, commodity2])]
-    @test sol.bins[supp1Step4, plantStep2] == [OFOND.Bin(25, 25, [commodity1, commodity2])]
+        [OFOND.Bin(5, 45, [commodity1, commodity1, commodity2, commodity1])]
+    @test sol.bins[supp1Step4, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     @test sol.bins[supp2Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     I, J, V = findnz(sol.bins)
     # test equivalent to : all other arcs don't have bins

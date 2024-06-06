@@ -100,9 +100,8 @@ function add_timed_supplier!(
     bundlesOnNodes::Dict{UInt,Vector{Bundle}},
 )
     nodeIdx = add_timed_node!(travelTimeGraph, nodeData, stepToDel)
-    startOnNode = filter(
-        bundle -> bundle.maxDelTime == stepToDel, bundlesOnNodes[nodeData.hash]
-    )
+    bundleOnSupplier = get(bundlesOnNodes, nodeData.hash, Bundle[])
+    startOnNode = filter(bundle -> bundle.maxDelTime == stepToDel, bundleOnSupplier)
     for bundle in startOnNode
         travelTimeGraph.bundleSrc[bundle.idx] = nodeIdx
     end
@@ -114,7 +113,8 @@ function add_timed_customer!(
     bundlesOnNodes::Dict{UInt,Vector{Bundle}},
 )
     nodeIdx = add_timed_node!(travelTimeGraph, nodeData, 0)
-    for bundle in bundlesOnNodes[nodeData.hash]
+    bundleOnCustomer = get(bundlesOnNodes, nodeData.hash, Bundle[])
+    for bundle in bundleOnCustomer
         travelTimeGraph.bundleDst[bundle.idx] = nodeIdx
     end
 end
@@ -135,7 +135,8 @@ function add_network_node!(
     # Number of times we have to add a timed copy of the node 
     # plant = 0, suppliers = max of bundle del time, platforms = overall max del time
     if nodeData.type == :supplier
-        extraCopies = maximum(bundle -> bundle.maxDelTime, bundlesOnNodes[nodeData.hash])
+        bundleOnSupplier = get(bundlesOnNodes, nodeData.hash, Bundle[])
+        extraCopies = maximum(bundle -> bundle.maxDelTime, bundleOnSupplier; init=0)
         for stepToDel in 0:extraCopies
             add_timed_supplier!(travelTimeGraph, nodeData, stepToDel, bundlesOnNodes)
         end

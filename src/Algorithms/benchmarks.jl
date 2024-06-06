@@ -17,8 +17,8 @@ function shortest_delivery!(solution::Solution, instance::Instance)
     # Computing the shortest delivery possible for each bundle
     for bundle in instance.bundles
         # Retrieving bundle start and end nodes
-        suppNode = TTGraph.bundleStartNodes[bundle.idx]
-        custNode = TTGraph.bundleEndNodes[bundle.idx]
+        suppNode = TTGraph.bundleSrc[bundle.idx]
+        custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
         shortestPath = enumerate_paths(
             dijkstra_shortest_paths(TTGraph.graph, suppNode, TTGraph.costMatrix), custNode

@@ -51,10 +51,11 @@ function greedy_path(
         opening_factor=opening_factor,
         current_cost=current_cost,
     )
-    dijkstraState = dijkstra_shortest_paths(TTGraph, src, TTGraph.costMatrix)
+    dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
+    removedCost = remove_shortcuts!(shortestPath, TTGraph)
     pathCost = dijkstraState.dists[dst]
-    return shortestPath, pathCost
+    return shortestPath, pathCost - removedCost
 end
 
 # Compute the path and cost for the greedy insertion of a bundle, handling path admissibility
@@ -121,13 +122,14 @@ function greedy!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
-    sortedBundleIdxs = sortperm(bundles; by=bun -> bun.maxPackSize, rev=true)
+    sortedBundleIdxs = sortperm(instance.bundles; by=bun -> bun.maxPackSize, rev=true)
     # Computing the greedy delivery possible for each bundle
+    totalCost = 0.0
     for bundleIdx in sortedBundleIdxs
         bundle = instance.bundles[bundleIdx]
         # Retrieving bundle start and end nodes
-        suppNode = TTGraph.bundleStartNodes[bundleIdx]
-        custNode = TTGraph.bundleEndNodes[bundleIdx]
+        suppNode = TTGraph.bundleSrc[bundleIdx]
+        custNode = TTGraph.bundleDst[bundleIdx]
         # Computing shortest path
         shortestPath, pathCost = greedy_insertion(
             solution, TTGraph, TSGraph, bundle, suppNode, custNode; sorted=true
@@ -136,7 +138,16 @@ function greedy!(solution::Solution, instance::Instance)
         updateCost = update_solution!(
             solution, instance, [bundle], [shortestPath]; sorted=true
         )
-        # verification
-        @assert isapprox(pathCost, updateCost) "Path cost and Update cost don't match, check the error"
+        # verification (correcting path cost from bias in cost computation)
+        # if !(pathCost ≈ updateCost)
+        #     println("Path cost $pathCost")
+        #     println("Corrected cost $(pathCost - (length(shortestPath) - 1) * EPS)")
+        #     println("TTGraph cost matrix : $(TTGraph.costMatrix)")
+        # end
+        # pathCost -= (length(shortestPath) - 1) * EPS
+        # @assert pathCost ≈ updateCost "Path cost ($pathCost) and Update cost ($updateCost) don't match, check the error \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match, check the error \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        totalCost += updateCost
     end
+    return totalCost
 end

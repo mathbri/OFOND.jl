@@ -16,7 +16,8 @@ function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
             break
         end
     end
-    return deleteat!(path, 1:(firstNode - 1))
+    deleteat!(path, 1:(firstNode - 1))
+    return (firstNode - 1) * EPS
 end
 
 function add_bundle!(
@@ -108,6 +109,8 @@ function remove_bundle!(
     costRemoved = update_bins!(solution, TSGraph, TTGraph, bundle, oldPart; remove=true)
     return (costRemoved, oldPart)
 end
+
+# TODO : write this function only for a bundle and a path, it is weird to always put bracket
 
 # Update the current solution
 # Providing a path with remove option means to remove the bundle only on the path portion provided

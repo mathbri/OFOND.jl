@@ -38,6 +38,7 @@ end
 function first_fit_decreasing!(
     bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool=false
 )
+    arcData.capacity <= 0 && println("Arc capacity must be positive $arcData")
     return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
 

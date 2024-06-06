@@ -64,6 +64,14 @@ xdockIdxs = findall(n -> n == xdock, TTGraph.networkNodes)
 portIdxs = findall(n -> n == port_l, TTGraph.networkNodes)
 plantIdxs = findall(n -> n == plant, TTGraph.networkNodes)
 common = vcat(xdockIdxs, portIdxs, plantIdxs)
+allTTNodes = vcat(
+    fill(supplier1, 4), fill(supplier2, 2), fill(xdock, 4), fill(port_l, 4), fill(plant, 1)
+)
+allTTSteps = [0, 1, 2, 3, 0, 1, 0, 1, 2, 3, 0, 1, 2, 3, 0]
+allTTIdxs = [
+    TTGraph.hashToIdx[hash(step, node.hash)] for (step, node) in zip(allTTSteps, allTTNodes)
+]
+
 TSGraph = OFOND.TimeSpaceGraph(network, 4)
 allNodes = vcat(
     fill(supplier1, 4), fill(supplier2, 4), fill(xdock, 4), fill(port_l, 4), fill(plant, 4)

@@ -42,8 +42,8 @@ function transport_units(
     # Transport cost 
     orderTrucks = get_transport_units(order, arcData)
     # If we take into account the current solution
-    if use_bins
-        bins = solution.binLoads[timedSrc, timedDst]
+    if use_bins && !arcData.isLinear
+        bins = solution.bins[timedSrc, timedDst]
         # If the arc is not empty, computing a tentative first fit 
         if length(bins) > 0
             orderTrucks = tentative_first_fit(bins, arcData, order; sorted=sorted)
@@ -96,10 +96,10 @@ end
 function find_other_src_node(travelTimeGraph::TravelTimeGraph, src::Int)
     otherSrcIdx = findfirst(
         dst -> travelTimeGraph.networkArcs[src, dst].type == :shortcut,
-        outneighbors(travelTimeGraph, src),
+        outneighbors(travelTimeGraph.graph, src),
     )
     otherSrcIdx === nothing && return nothing
-    return outneighbors(travelTimeGraph, src)[otherSrcIdx]
+    return outneighbors(travelTimeGraph.graph, src)[otherSrcIdx]
 end
 
 # Creating start node vector
@@ -135,11 +135,11 @@ function update_cost_matrix!(
 )
     # Iterating through outneighbors of the start nodes and common nodes
     for src in vcat(get_all_start_nodes(TTGraph, bundle), TTGraph.commonNodes)
-        for dst in outneighbors(TTGraph, src)
+        for dst in outneighbors(TTGraph.graph, src)
             # If the arc doesn't need an update, skipping
             is_update_candidate(TTGraph, src, dst, bundle) || continue
             # Otherwise, computing the new cost
-            TTGraph.costMatrix[src, dst] = get_arc_update_cost(
+            TTGraph.costMatrix[src, dst] = arc_update_cost(
                 solution,
                 TTGraph,
                 TSGraph,
@@ -162,7 +162,6 @@ function is_path_admissible(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
     # Too long ? Too many node ? To be difined
 end
 
-# TODO : remove get from name as it is not a getter 
 function path_cost(path::Vector{Int}, costMatrix::SparseMatrixCSC{Float64,Int})
     cost = 0.0
     for (i, j) in partition(path, 2, 1)
