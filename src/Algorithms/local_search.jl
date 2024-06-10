@@ -25,13 +25,13 @@ function bin_packing_improvement!(
     solution::Solution, instance::Instance; sorted::Bool=false, skipLinear::Bool=true
 )
     costImprov = 0.0
-    for arc in edges(instance.timeSpaceGraph)
+    for arc in edges(instance.timeSpaceGraph.graph)
         arcBins = solution.bins[src(arc), dst(arc)]
         arcData = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)]
         # If no improvement possible
         is_bin_candidate(arcBins, arcData; skipLinear=skipLinear) || continue
         # Gathering all commodities
-        allCommodities = reduce(vcat, arcBins)
+        allCommodities = get_all_commodities(arcBins)
         # Computing new bins
         newBins = compute_new_bins(arcData, allCommodities; sorted=sorted)
         # If the number of bins did not change, skipping next
@@ -68,16 +68,25 @@ function bundle_reintroduction!(
     oldBins, costRemoved = save_and_remove_bundle!(
         solution, instance, bundles, oldPaths; current_cost=current_cost
     )
-    # If the cost removed is negative or null, no chance of improving 
-    if costRemoved <= EPS
+    println("Cost removed : $costRemoved")
+    # If the cost removed is positive or null, no chance of improving 
+    # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
+    pathsLinearCost = bundle_path_linear_cost(bundle, oldPaths[1], TTGraph)
+    println("Path linear cost : $pathsLinearCost")
+    # println(oldBins)
+    # I, J, V = findnz(oldBins)
+    # println([solution.bins[i, j] for (i, j) in zip(I, J)])
+    if costRemoved + pathsLinearCost >= -EPS
+        println("No improvement possible\n")
         update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
         # Reverting bins to the previous state
-        return revert_bins!(solution, oldBins)
+        revert_bins!(solution, oldBins)
+        return 0.0
     end
     # Inserting it back
-    suppNode = TTGraph.bundleStartNodes[bundle.idx]
-    custNode = TTGraph.bundleEndNodes[bundle.idx]
-    pathCost, newPath = greedy_insertion(
+    suppNode = TTGraph.bundleSrc[bundle.idx]
+    custNode = TTGraph.bundleDst[bundle.idx]
+    newPath, pathCost = greedy_insertion(
         solution,
         TTGraph,
         TSGraph,
@@ -87,16 +96,29 @@ function bundle_reintroduction!(
         sorted=sorted,
         current_cost=current_cost,
     )
-    # Updating path if it improves the cost
-    if pathCost < costRemoved
+    println("Cost added : $(pathCost) (path $newPath)")
+    # Updating path if it improves the cost (accounting for EPS cost on arcs)
+    if pathCost + costRemoved < -1e-3
+        println("Path improved\n")
+        println(oldBins)
+        println(solution.bins)
         # Adding to solution
-        updateCost = update_solution!(solution, instance, bundles, [newPath]; sorted=true)
+        # updateCost = update_solution!(solution, instance, bundles, [newPath]; sorted=true)
+        updateCost = add_bundle!(solution, instance, bundle, newPath; sorted=true)
         # verification
-        @assert pathCost ≈ updateCost "Path cost and Update cost don't match, check the error"
-        return nothing
+        println(solution.bins)
+        println(TTGraph.costMatrix)
+        for order in bundle.orders
+            println(time_space_projector(TTGraph, TSGraph, newPath, order))
+        end
+        println(bundle_path_linear_cost(bundle, newPath, TTGraph))
+        @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        return pathCost + costRemoved
     else
+        println("Path not improved\n")
         update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
-        return revert_bins!(solution, oldBins)
+        revert_bins!(solution, oldBins)
+        return 0.0
     end
 end
 

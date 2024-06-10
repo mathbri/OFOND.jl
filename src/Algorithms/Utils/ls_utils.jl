@@ -6,7 +6,7 @@ function is_bin_candidate(bins::Vector{Bin}, arcData::NetworkArc; skipLinear::Bo
     skipLinear && arcData.isLinear && return false
     # If there is no gap with the lower bound, skipping arc
     arcVolume = sum(bin.load for bin in bins)
-    ceil(arcVolume / arcData.capacity) == length(arcBins) && return false
+    ceil(arcVolume / arcData.capacity) == length(bins) && return false
     return true
 end
 
@@ -23,7 +23,7 @@ end
 # Store previous bins before removing commodities from them
 function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int};)
     I, J, _ = findnz(workingArcs)
-    oldBins = Vector{Vector{Bin}}(undef, length(workingArcs))
+    oldBins = Vector{Vector{Bin}}(undef, length(I))
     # Efficient iteration over sparse matrices
     rows = rowvals(workingArcs)
     for timedDst in 1:Base.size(workingArcs, 2)
@@ -58,6 +58,7 @@ function save_and_remove_bundle!(
     current_cost::Bool=false,
 )
     # Getting all timed arcs concerned
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     workingArcs = get_bins_updated(TSGraph, TTGraph, bundles, paths)
     previousCost = 0.0
     if current_cost
@@ -73,8 +74,6 @@ function save_and_remove_bundle!(
     return previousBins, costRemoved
 end
 
-# TODO : test both functions added below
-
 # Compute paths for both insertion type 
 function both_insertion(
     solution::Solution,
@@ -86,7 +85,7 @@ function both_insertion(
     current_cost::Bool=false,
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    pathCost, greedyPath = greedy_insertion(
+    greedyPath, pathCost = greedy_insertion(
         solution,
         TTGraph,
         TSGraph,
@@ -96,7 +95,7 @@ function both_insertion(
         sorted=sorted,
         current_cost=current_cost,
     )
-    pathCost, lowerBoundPath = lower_bound_insertion(
+    lowerBoundPath, pathCost = lower_bound_insertion(
         solution,
         TTGraph,
         TSGraph,
@@ -126,9 +125,8 @@ function change_solution_to_other!(
     # We can skip refill and just clean the bins as the commodities were the last added
     clean_empty_bins!(sol, instance)
     # Adding lower bound ones
-    return update_solution!(
-        sol, instance, bundles, other.bundlePaths[idx(bundles)]; sorted=sorted
-    )
+    update_solution!(sol, instance, bundles, other.bundlePaths[idx(bundles)]; sorted=sorted)
+    return nothing
 end
 
 # Checking if two nodes are candidates for two node incremental
@@ -151,8 +149,8 @@ end
 # If node 1 and node 2 are given : bundles that flow from 1 to 2
 # If only node 1 : bundle that have node 1 for destination
 function get_bundles_to_update(solution::Solution, node1::Int, node2::Int=-1)
-    node2 == -1 && return solution.bundlesOnNodes[node1]
-    return intersect(solution.bundlesOnNodes[node1], solution.bundlesOnNodes[node2])
+    node2 == -1 && return solution.bundlesOnNode[node1]
+    return intersect(solution.bundlesOnNode[node1], solution.bundlesOnNode[node2])
 end
 
 function get_paths_to_update(
@@ -163,7 +161,22 @@ function get_paths_to_update(
         oldPath = solution.bundlePaths[bundle.idx]
         srcIdx = findfirst(node -> node == node1, oldPath)
         dstIdx = findlast(node -> node == node2, oldPath)
-        paths[idx] = path[srcIdx:dstIdx]
+        paths[idx] = oldPath[srcIdx:dstIdx]
     end
     return paths
+end
+
+# TODO : test this
+function bundle_path_linear_cost(
+    bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
+)
+    cost = 0.0
+    for (i, j) in partition(path, 2, 1), order in bundle.orders
+        cost += volume_stock_cost(TTGraph, i, j, order)
+        arcData = TTGraph.networkArcs[i, j]
+        !arcData.isLinear && continue
+        # for linear arcs, adding transport cost 
+        cost += get_transport_units(order, arcData) * arcData.unitCost
+    end
+    return cost
 end
