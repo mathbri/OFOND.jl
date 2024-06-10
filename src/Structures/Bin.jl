@@ -26,6 +26,10 @@ function Base.:(==)(bin1::Bin, bin2::Bin)
            bin1.content == bin2.content
 end
 
+function Base.show(io::IO, bin::Bin)
+    return print(io, "Bin($(bin.capacity), $(bin.load), $(bin.content))")
+end
+
 function add!(bin::Bin, commodity::Commodity)
     if bin.capacity >= size(commodity)
         push!(bin.content, commodity)

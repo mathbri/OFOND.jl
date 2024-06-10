@@ -156,7 +156,7 @@ function clean_empty_bins!(solution::Solution, instance::Instance)
     for arc in edges(TSGraph.graph)
         arcData = TSGraph.networkArcs[src(arc), dst(arc)]
         # No update for consolidated arcs
-        !arcData.isLinear && continue
+        # !arcData.isLinear && continue
         # Removing empty bins
         filter!(bin -> bin.load > 0, solution.bins[src(arc), dst(arc)])
     end

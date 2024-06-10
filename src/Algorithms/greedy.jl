@@ -138,15 +138,8 @@ function greedy!(solution::Solution, instance::Instance)
         updateCost = update_solution!(
             solution, instance, [bundle], [shortestPath]; sorted=true
         )
-        # verification (correcting path cost from bias in cost computation)
-        # if !(pathCost ≈ updateCost)
-        #     println("Path cost $pathCost")
-        #     println("Corrected cost $(pathCost - (length(shortestPath) - 1) * EPS)")
-        #     println("TTGraph cost matrix : $(TTGraph.costMatrix)")
-        # end
-        # pathCost -= (length(shortestPath) - 1) * EPS
-        # @assert pathCost ≈ updateCost "Path cost ($pathCost) and Update cost ($updateCost) don't match, check the error \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
-        @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match, check the error \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        # verification
+        @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost
     end
     return totalCost

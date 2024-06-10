@@ -192,3 +192,27 @@ emptySol = OFOND.Solution(TTGraph, TSGraph, bundles)
     OFOND.clean_empty_bins!(sol, instance)
     @test sol.bins == emptySol.bins
 end
+
+@testset "clean empty bins" begin
+    sol = deepcopy(emptySol)
+    push!(sol.bins[supp1Step2, xdockStep3], OFOND.Bin(20, 0, OFOND.Commodity[]))
+    push!(sol.bins[xdockStep3, portStep4], OFOND.Bin(20, 0, OFOND.Commodity[]))
+    push!(sol.bins[portStep4, plantStep1], OFOND.Bin(15, 5, [commodity3]))
+    OFOND.clean_empty_bins!(sol, instance)
+    I, J, V = findnz(sol.bins)
+    nonEmpty = findall(x -> length(x) > 0, V)
+    @test I[nonEmpty] == [portStep4]
+    @test J[nonEmpty] == [plantStep1]
+    @test V[nonEmpty] == [[OFOND.Bin(15, 5, [commodity3])]]
+
+    sol = deepcopy(emptySol)
+    push!(sol.bins[supp1Step2, xdockStep3], OFOND.Bin(20, 0, OFOND.Commodity[]))
+    push!(sol.bins[xdockStep3, portStep4], OFOND.Bin(20, 0, OFOND.Commodity[]))
+    push!(sol.bins[portStep4, plantStep1], OFOND.Bin(15, 5, OFOND.Commodity[]))
+    OFOND.clean_empty_bins!(sol, instance)
+    I, J, V = findnz(sol.bins)
+    nonEmpty = findall(x -> length(x) > 0, V)
+    @test I[nonEmpty] == [portStep4]
+    @test J[nonEmpty] == [plantStep1]
+    @test V[nonEmpty] == [[OFOND.Bin(15, 5, OFOND.Commodity[])]]
+end

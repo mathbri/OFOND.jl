@@ -141,3 +141,7 @@ end
 function Base.zero(::Type{NetworkArc})
     return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end
+
+function Base.show(io::IO, node::NetworkNode)
+    return print(io, "Node($(node.account), $(node.type))")
+end

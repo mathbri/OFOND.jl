@@ -239,3 +239,8 @@ end
         sol, [bundle1, bundle3], supp1FromDel2, xdockFromDel1
     ) == [[supp1FromDel2, xdockFromDel1], [supp1FromDel2, xdockFromDel1]]
 end
+
+@testset "Bundle path linear cost" begin
+    # bundle 3 on TTPath
+    @test OFOND.bundle_path_linear_cost(bundle3, TTPath, TTGraph) ≈ 41.0
+end

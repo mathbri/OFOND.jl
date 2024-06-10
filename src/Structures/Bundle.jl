@@ -27,3 +27,7 @@ end
 function idx(bundles::Vector{Bundle})
     return map(bundle -> bundle.idx, bundles)
 end
+
+function Base.show(io::IO, bundle::Bundle)
+    return print(io, "Bundle($(bundle.supplier), $(bundle.customer), idx=$(bundle.idx))")
+end

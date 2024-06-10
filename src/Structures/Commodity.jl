@@ -33,3 +33,10 @@ lead_time_cost(commodity::Commodity) = commodity.data.leadTimeCost
 function Base.isless(com1::Commodity, com2::Commodity)
     return Base.isless(size(com1), size(com2))
 end
+
+function Base.show(io::IO, commodity::Commodity)
+    return print(
+        io,
+        "Commodity($(commodity.orderHash), $(part_number(commodity)), $(size(commodity)), $(lead_time_cost(commodity)))",
+    )
+end

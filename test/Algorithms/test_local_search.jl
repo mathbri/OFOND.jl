@@ -77,19 +77,10 @@ end
     # problem with bundle1 = bundle3 also affects removal of commodities as its removes commodities from b1 and b3 than recompute the new path
 
     # change path bundle 3 
-    println("Before removal")
-    println(sol.bins[supp1Step3, xdockStep4])
-    println(sol.bins[xdockStep4, plantStep1])
     OFOND.update_solution!(sol, instance, [bundle3]; remove=true)
-    println("After removal")
-    println(sol.bins[supp1Step3, xdockStep4])
-    println(sol.bins[xdockStep4, plantStep1])
     # as said above, need to reintroduce bundle1
     # TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
     OFOND.update_solution!(sol, instance, [bundle1, bundle3], [[3, 8, 15], TTPath])
-    println("After reintroduction")
-    println(sol.bins[supp1Step3, xdockStep4])
-    println(sol.bins[xdockStep4, plantStep1])
     # adding commodities si that the filling is different after reinsertion
     OFOND.add!(sol.bins[xdockStep4, plantStep1][1], commodity3)
     OFOND.add!(sol.bins[supp1Step3, xdockStep4][1], commodity3)

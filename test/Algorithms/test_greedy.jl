@@ -78,8 +78,6 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     supp3FromDel3 = TTGraph2.hashToIdx[hash(3, supplier3.hash)]
     xdockFromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
     portFromDel1 = TTGraph2.hashToIdx[hash(1, port_l.hash)]
-    println(TTGraph2.costMatrix)
-    println(TSGraph2.currentCost)
     @test path2 ==
         [supp3FromDel3, xdockFromDel2, portFromDel1, xdockFromDel1, plantFromDel0]
     @test cost2 ≈ 6.250015 + 6.00003 + 6.25003 + 6.25003

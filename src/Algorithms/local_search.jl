@@ -68,16 +68,9 @@ function bundle_reintroduction!(
     oldBins, costRemoved = save_and_remove_bundle!(
         solution, instance, bundles, oldPaths; current_cost=current_cost
     )
-    println("Cost removed : $costRemoved")
-    # If the cost removed is positive or null, no chance of improving 
     # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
     pathsLinearCost = bundle_path_linear_cost(bundle, oldPaths[1], TTGraph)
-    println("Path linear cost : $pathsLinearCost")
-    # println(oldBins)
-    # I, J, V = findnz(oldBins)
-    # println([solution.bins[i, j] for (i, j) in zip(I, J)])
     if costRemoved + pathsLinearCost >= -EPS
-        println("No improvement possible\n")
         update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
         # Reverting bins to the previous state
         revert_bins!(solution, oldBins)
@@ -96,26 +89,14 @@ function bundle_reintroduction!(
         sorted=sorted,
         current_cost=current_cost,
     )
-    println("Cost added : $(pathCost) (path $newPath)")
     # Updating path if it improves the cost (accounting for EPS cost on arcs)
     if pathCost + costRemoved < -1e-3
-        println("Path improved\n")
-        println(oldBins)
-        println(solution.bins)
         # Adding to solution
-        # updateCost = update_solution!(solution, instance, bundles, [newPath]; sorted=true)
-        updateCost = add_bundle!(solution, instance, bundle, newPath; sorted=true)
+        updateCost = update_solution!(solution, instance, bundles, [newPath]; sorted=true)
         # verification
-        println(solution.bins)
-        println(TTGraph.costMatrix)
-        for order in bundle.orders
-            println(time_space_projector(TTGraph, TSGraph, newPath, order))
-        end
-        println(bundle_path_linear_cost(bundle, newPath, TTGraph))
         @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         return pathCost + costRemoved
     else
-        println("Path not improved\n")
         update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
         revert_bins!(solution, oldBins)
         return 0.0

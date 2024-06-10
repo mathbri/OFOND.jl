@@ -166,7 +166,6 @@ function get_paths_to_update(
     return paths
 end
 
-# TODO : test this
 function bundle_path_linear_cost(
     bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
 )
