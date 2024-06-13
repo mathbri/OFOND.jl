@@ -5,6 +5,7 @@ using Geodesy
 using MetaGraphsNext
 using SparseArrays
 using Dates
+using CSV
 
 println("Testing OFO Network Design Package")
 
@@ -23,7 +24,7 @@ println("Testing OFO Network Design Package")
     end
     # Reading and Writing
     @testset "Reading-Writing" begin
-        # TODO : include("Reading/test_reading.jl")
+        include("ReadingWriting/test_read_write.jl")
     end
     # Algorithms
     @testset "Algorithms" begin

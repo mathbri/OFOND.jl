@@ -1,0 +1,8 @@
+﻿point_account,point_type,point_name,point_latitude,point_longitude,point_country,point_continent,point_m3_cost
+001,supplier,Supp1,1,0,FR,EU,0
+001,supplier,Supp11,2,1,FR,EU,1.5
+002,supplier,Supp2,0,1,FR,EU,0
+003,other,Other1,0,0,FR,EU,0
+004,xdock,XDock1,2,1,FR,EU,1
+005,port_l,PortL1,3,3,FR,EU,0
+003,plant,Plant1,4,4,FR,EU,0

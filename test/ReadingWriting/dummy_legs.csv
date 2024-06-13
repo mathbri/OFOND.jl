@@ -1,0 +1,11 @@
+src_account, src_type, dst_account, dst_type, leg_type, distance, travel_time, unitCost, isLinear, carbonCost, capacity
+001,supplier,004,xdock,outsource,1.0,1,4.0,true,0.0,50
+002,supplier,004,xdock,other,1.0,1,4.0,true,0.0,50
+008,supplier,004,xdock,outsource,1.0,1.2,4.0,true,0.0,50
+002,supplier,004,xdock,outsource,1.0,1,4.0,true,0.0,50
+001,supplier,003,plant,direct,2.0,2,false,10.0,false,1.0,50
+002,supplier,003,plant,direct,2.0,1,false,10.0,false,1.0,50
+004,xdock,003,plant,delivery,1.0,1,true,4.0,false,1.0,50
+004,xdock,005,port_l,cross_plat,1.0,1,true,4.0,false,0.0,50
+005,port_l,003,plant,oversea,1.0,1,true,4.0,false,1.0,50
+005,port_l,003,plant,oversea,1.0,1,true,4.0,false,1.0,50

@@ -70,9 +70,6 @@ function Base.hash(node::NetworkNode)
     return hash(node.account, hash(node.type))
 end
 
-# TODO : implement function if needed
-# function Base.show(node::NetworkNode) end
-
 # Copy a node information and only change the node type
 function change_node_type(node::NetworkNode, newType::Symbol)
     return NetworkNode(
@@ -104,35 +101,38 @@ function add_node!(network::NetworkGraph, node::NetworkNode)
     if haskey(network.graph, node.hash)
         @warn "Same node already in the network" :nodeInGraph = network.graph[node.hash] :nodeToAdd =
             node
-        return nothing
-    end
-    # Adding the node to the network graph
-    network.graph[node.hash] = node
-    # If its a supplier adding shortcut arc to the network 
-    if node.type == :supplier
-        add_arc!(network, node, node, SHORTCUT)
+    elseif !(node.type in NODE_TYPES)
+        @warn "Node type not in NodeTypes" :node = node :nodeTypes = NODE_TYPES
+    else
+        # Adding the node to the network graph
+        network.graph[node.hash] = node
+        # If its a supplier adding shortcut arc to the network 
+        node.type == :supplier && add_arc!(network, node, node, SHORTCUT)
     end
 end
 
 # Adding a leg to the network
+function add_arc!(network::NetworkGraph, src::UInt, dst::UInt, arc::NetworkArc)
+    if haskey(network.graph, src, dst)
+        @warn "Source and destination already have arc data" :srcInGraph = network.graph[src] :dstInGraph = network.graph[dst] :srcToAdd =
+            src :dstToAdd = dst
+    elseif !haskey(network.graph, src)
+        @warn "Source unknown in the network" :source = src
+    elseif !haskey(network.graph, dst)
+        @warn "Destination unknown in the network" :destination = dst
+    elseif !(arcType in ARC_TYPES)
+        @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = ARC_TYPES
+    else
+        # Adding the leg to the network graph (if no anomaly)
+        network.graph[src, dst] = arc
+    end
+end
+
+# Wrapper for network nodes
 function add_arc!(
     network::NetworkGraph, src::NetworkNode, dst::NetworkNode, arc::NetworkArc
 )
-    if haskey(network.graph, src.hash, dst.hash)
-        @warn "Source and destination already have arc data" :srcInGraph = network.graph[src.hash] :dstInGraph = network.graph[dst.hash] :srcToAdd =
-            src :dstToAdd = dst
-        return nothing
-    end
-    if !haskey(network.graph, src.hash)
-        @warn "Source unknown in the network" :source = src
-        return nothing
-    end
-    if !haskey(network.graph, dst.hash)
-        @warn "Destination unknown in the network" :destination = dst
-        return nothing
-    end
-    # Adding the leg to the network graph
-    return network.graph[src.hash, dst.hash] = arc
+    return add_arc!(network, src.hash, dst.hash, arc)
 end
 
 # TODO : add a function to change arc or node data if needed

@@ -1,96 +1,75 @@
 # File containing all functions to read an instance
 
-function check_node_type(nodeType::Symbol, counts::Dict{Symbol,Int})
-    if !(nodeType in NODE_TYPES)
-        @warn "Node type not in NodeTypes" :nodeType = nodeType
-    else
-        counts[nodeType] += 1
-    end
+function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
+    nodeType = Symbol(nodeTypeStr)
+    haskey(counts, nodeType) && counts[nodeType] += 1
+    return NetworkNode(
+        row.point_account,
+        nodeType,
+        row.point_name,
+        LLA(row.point_latitude, row.point_longitude),
+        row.point_country,
+        row.point_continent,
+        nodeType in COMMON_NODE_TYPES,
+        row.point_m3_cost,
+    )
 end
 
-function read_and_add_nodes!(networkGraph::NetworkGraph, node_file::String)
-    counts = Dict{Symbol,Int}(
-        :supplier => 0, :plant => 0, :xdock => 0, :iln => 0, :port_l => 0, :port_d => 0
-    )
+function read_and_add_nodes!(network::NetworkGraph, node_file::String)
+    counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     # Reading .csv file
     csv_reader = CSV.File(
         node_file; types=Dict("point_account" => String15, "point_type" => String15)
     )
-    println("Reading nodes from CSV file $(node_file) ($(length(csv_reader)) lines)")
-    for (i, row) in enumerate(csv_reader)
-        nodeType = Symbol(row.point_type)
-        check_node_type(nodeType, counts)
-        node = NetworkNode(
-            row.point_account,
-            nodeType,
-            row.point_name,
-            LLA(row.point_latitude, row.point_longitude),
-            row.point_country,
-            row.point_continent,
-            nodeType in COMMON_NODE_TYPES,
-            row.point_m3_cost,
-        )
-        add_node!(networkGraph, node)
+    @info "Reading nodes from CSV file $(node_file) ($(length(csv_reader)) lines)"
+    for row in csv_reader
+        node = read_node!(counts, row)
+        add_node!(network, node)
     end
-    return println("Read $(nv(networkGraph)) nodes : $counts \n")
+    @info "Read $(nv(network.graph)) nodes : $counts"
 end
 
-function check_arc_type(arcType::Symbol, counts::Dict{Symbol,Int})
-    if !(arcType in ARC_TYPES)
-        @warn "Arc type not in ArcTypes" :arcType = arcType
-    else
-        counts[arcType] += 1
-    end
+function src_dst_hash(row::CSV.Row)
+    return hash(row.src_account, Symbol(row.src_type)),
+    hash(row.dst_account, Symbol(row.dst_type))
 end
 
-function get_network_node(networkGraph::NetworkGraph, account::String, type::String)
-    nodeType = Symbol(type)
-    nodeHash = hash(account, nodeType)
-    return networkGraph[nodeHash]
+function is_common_arc(row::CSV.Row)
+    return Symbol(row.src_type) in COMMON_NODE_TYPES &&
+           Symbol(row.dst_type) in COMMON_NODE_TYPES
 end
 
-function read_and_add_legs!(networkGraph::NetworkGraph, leg_file::String)
-    counts = Dict{Symbol,Int}(
-        :direct => 0,
-        :outsource => 0,
-        :delivery => 0,
-        :cross_plat => 0,
-        :oversea => 0,
-        :port_transport => 0,
+function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
+    arcType = Symbol(arcTypeStr)
+    haskey(counts, arcType) && counts[arcType] += 1
+    return NetworkArc(
+        arcType,
+        row.distance,
+        floor(Int, row.travel_time),
+        isCommon,
+        row.unitCost,
+        row.isLinear,
+        row.carbonCost,
+        row.capacity,
     )
+end
+
+function read_and_add_legs!(network::NetworkGraph, leg_file::String)
+    counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
-    csv_reader = CSV.File(
-        leg_file;
-        types=Dict(
-            "source_account" => String15,
-            "destination_account" => String15,
-            "source_type" => String15,
-            "destination_type" => String15,
-            "leg_type" => String15,
-        ),
-    )
-    println("Reading legs from CSV file $(file_name) ($(length(csv_reader)) lines)")
-    for (i, row) in enumerate(csv_reader)
-        arcType = Symbol(row.leg_type)
-        check_arc_type(arcType, counts)
-        sourceNode = get_network_node(networkGraph, row.source_account, row.source_type)
-        destNode = get_network_node(
-            networkGraph, row.destination_account, row.destination_type
-        )
-        arc = NetworkArc(
-            arcType,
-            row.distance,
-            floor(Int, row.travel_time),
-            sourceNode.isCommon && destNode.isCommon,
-            row.unitCost,
-            row.isLinear,
-            row.carbonCost,
-            row.capacity,
-        )
-        add_arc!(networkGraph, arc, sourceNode, destNode)
+    columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
+    csv_reader = CSV.File(leg_file; types=Dict([(column, String15) for column in columns]))
+    @info "Reading legs from CSV file $(leg_file) ($(length(csv_reader)) lines)"
+    for row in csv_reader
+        src, dst = src_dst_hash(row)
+        isCommon = is_common_arc(row)
+        arc = read_leg!(counts, row, isCommon)
+        add_arc!(network, arc, src, dst)
     end
-    return println("Read $(ne(networkGraph)) legs : $counts \n")
+    @info "Read $(ne(network.graph)) legs : $counts"
 end
+
+# TODO : adapt from here 
 
 function bundle_hash(row::CSV.Row)
     return hash(row.supplier_account, hash(row.customer_account))
@@ -108,60 +87,63 @@ function com_data_hash(row::CSV.Row)
     return hash(row.part_number, hash(com_size(row), hash(row.lead_time_cost)))
 end
 
+function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
+    supplierNode = network.graph[hash(row.supplier_account, :supplier)]
+    customerNode = network.graph[hash(row.customer_account, :plant)]
+    return get!(
+        bundles, bundle_hash(row), Bundle(supplierNode, customerNode, length(bundles) + 1)
+    )
+end
+
+function get_order!(orders::Dict{UInt,Order}, row::CSV.Row, bundle::Bundle)
+    return get!(orders, order_hash(row), Order(bundle, row.delivery_time_step))
+end
+
+function get_com_data!(comDatas::Dict{UInt,CommodityData}, row::CSV.Row)
+    return get!(
+        comDatas,
+        com_data_hash(row),
+        CommodityData(row.part_number, com_size(row), row.lead_time_cost),
+    )
+end
+
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
-    comDatas = Dict{UInt,CommodityData}()
-    orders = Dict{UInt,Order}()
-    bundles = Dict{UInt,Bundle}()
+    comDatas, orders = Dict{UInt,CommodityData}(), Dict{UInt,Order}()
+    bundles, allDates = Dict{UInt,Bundle}(), Set{Date}()
     comCount, comUnique = 0, 0
-    allDates = Set{Date}()
     # Reading .csv file
     csv_reader = CSV.File(
         commodities_file;
-        types=Dict("supplier_account" => String15, "customer_account" => String),
+        types=Dict("supplier_account" => String15, "customer_account" => String15),
     )
     println(
         "Reading commodity orders from CSV file $(file_name) ($(length(csv_reader)) lines)"
     )
     # Creating objects : each line is a commodity order
     println("Creating initial objects...")
-    for (i, row) in enumerate(csv_reader)
-        supplierNode = networkGraph[hash(row.supplier_account, :supplier)]
-        customerNode = networkGraph[hash(row.customer_account, :plant)]
+    for row in csv_reader
         # Getting bundle, order and commodity data
-        bundle = get!(
-            bundles,
-            bundle_hash(row),
-            Bundle(supplierNode, customerNode, length(bundles) + 1),
-        )
-        order = get!(orders, order_hash(row), Order(bundle, row.delivery_time_step))
-        comData = get!(
-            comDatas,
-            com_data_hash(row),
-            CommodityData(row.part_number, com_size(row), row.lead_time_cost),
-        )
+        bundle = get_bundle!(bundles, row, networkGraph)
+        order = get_order!(orders, row, bundle)
+        comData = get_com_data!(comDatas, row)
         # If the order is new we have to add it to the bundle
         haskey(orders, orderKey) || push!(bundle.orders, order)
-        # Creating commodity (to be duplicated)
+        # Creating (and Duplicating) commodity
         commodity = Commodity(order, comData)
-        # Duplicating commodity by quantity
         append!(order.content, [commodity for _ in 1:(row.quantity)])
-        comCount += row.quantity
-        comUnique += 1
+        comCount, comUnique .+= row.quantity, 1
         # Is it a new time step ?
-        deliveryDate = Date(row.delivery_date)
-        push!(allDates, deliveryDate)
+        push!(allDates, Date(row.delivery_date))
     end
     # Transforming dictionnaries into vectors
     bundleVector = collect(values(bundles))
     # Ordering the vector so that the idx field correspond to the actual idx in the vector
     sort!(bundleVector; by=bundle -> bundle.idx)
-    # Ordering the time horizon
-    dateHorizon = sort(collect(allDates))
     println(
         "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) " *
-        "on a $(length(dateHorizon)) steps time horizon\n",
+        "on a $(length(allDates)) steps time horizon\n",
     )
-    return bundleVector, dateHorizon
+    return bundleVector, sort(collect(allDates))
 end
 
 function read_instance(node_file::String, leg_file::String, commodities_file::String)
