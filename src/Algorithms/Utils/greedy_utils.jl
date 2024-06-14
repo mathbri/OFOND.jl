@@ -1,5 +1,7 @@
 # Utils function only used in greedy
 
+# TODO : carbon cost for direct arcs are not linear
+
 # Check whether the arc is fit for a cost update
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]

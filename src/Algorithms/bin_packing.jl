@@ -4,6 +4,9 @@
 # Need to see if bin packing remains a bottleneck by number of problems to solve or time per problem
 # see Faster First Fit for algorithm
 # see AVL Tree in DataStructures.jl for implementation
+# see sorted containers and serach_sorted_first function for Fatser BFD
+# maybe those implementations are not suited for this purpose and there is a need for a custom tree implem (or search)
+# ex : a new struture with one field being actual bins and the other being the tree used for search 
 
 # TODO : add other bin packing computations to improve this neighborhood
 

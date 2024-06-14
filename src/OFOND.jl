@@ -54,6 +54,12 @@ include("Algorithms/lower_bound.jl")
 # Local search heuristic
 include("Algorithms/Utils/ls_utils.jl")
 include("Algorithms/local_search.jl")
+
+# TODO : before handing over the package, create a branch on which :
+# - all lns files are deleted
+# - docs are done for exported functions
+# - unimplemented functions are removed (parrallel stuff on things like that)
+
 # Large Neighborhood Search
 # include("Algorithms/LNS/lns_utils.jl")
 # include("Algorithms/LNS/two_node.jl")

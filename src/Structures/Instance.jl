@@ -1,5 +1,9 @@
 # Instance structure to store problem metadata
 
+# TODO : think about the following
+# A lot of metadata of the problem are superfluous to solve the problem (dates, coordinates, ...)
+# The instance could be reduced to only the data needed with the metadata needed for extraction stored somewhere else
+
 struct Instance
     # Network 
     networkGraph::NetworkGraph
