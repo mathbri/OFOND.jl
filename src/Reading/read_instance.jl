@@ -88,11 +88,20 @@ function com_data_hash(row::CSV.Row)
 end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
-    supplierNode = network.graph[hash(row.supplier_account, :supplier)]
-    customerNode = network.graph[hash(row.customer_account, :plant)]
-    return get!(
-        bundles, bundle_hash(row), Bundle(supplierNode, customerNode, length(bundles) + 1)
-    )
+    # Get supplier and customer nodes
+    if !haskey(network.graph, hash(row.supplier_account, :supplier))
+        @warn "Supplier unknown in the network" :supplier = row.supplier_account :row = row
+    elseif !haskey(network.graph, hash(row.customer_account, :plant))
+        @warn "Customer unknown in the network" :customer = row.customer_account :row = row
+    else
+        supplierNode = network.graph[hash(row.supplier_account, :supplier)]
+        customerNode = network.graph[hash(row.customer_account, :plant)]
+        return get!(
+            bundles,
+            bundle_hash(row),
+            Bundle(supplierNode, customerNode, length(bundles) + 1),
+        )
+    end
 end
 
 function get_order!(orders::Dict{UInt,Order}, row::CSV.Row, bundle::Bundle)
@@ -116,14 +125,13 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         commodities_file;
         types=Dict("supplier_account" => String15, "customer_account" => String15),
     )
-    println(
-        "Reading commodity orders from CSV file $(file_name) ($(length(csv_reader)) lines)"
-    )
+    @info "Reading commodity orders from CSV file $(commodities_file) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
     println("Creating initial objects...")
     for row in csv_reader
         # Getting bundle, order and commodity data
         bundle = get_bundle!(bundles, row, networkGraph)
+        bundle === nothing && continue
         order = get_order!(orders, row, bundle)
         comData = get_com_data!(comDatas, row)
         # If the order is new we have to add it to the bundle
@@ -135,14 +143,9 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         # Is it a new time step ?
         push!(allDates, Date(row.delivery_date))
     end
-    # Transforming dictionnaries into vectors
-    bundleVector = collect(values(bundles))
-    # Ordering the vector so that the idx field correspond to the actual idx in the vector
-    sort!(bundleVector; by=bundle -> bundle.idx)
-    println(
-        "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) " *
-        "on a $(length(allDates)) steps time horizon\n",
-    )
+    # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
+    bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
+    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(allDates)) steps time horizon"
     return bundleVector, sort(collect(allDates))
 end
 

@@ -1,6 +1,6 @@
 # Create samll versions of renault's file by juste extracting the first lines of the files 
 
-# With this create a small network to test the connection between reading and structures
+# TODO : replace test warn with test logs for info testing also 
 
 @testset "Node readers" begin
     # Constants
@@ -135,15 +135,119 @@ port_to_plant = OFOND.NetworkArc(:oversea, 1.0, 1, true, 4.0, false, 1.0, 50)
     @test network.graph[port_l.hash, plant.hash] == port_to_plant
 end
 
-@testset "Commodity readers / getters" begin
-    # Bundle and order hash
-    # Commodity size and cost
+@testset "Commodity readers" begin
+    rows = [row for row in CSV.File("dummy_commodities.csv")]
+    row1, row2, row3 = rows[1:3]
+    # Bundle hash
+    @test OFOND.bundle_hash(row1) == hash("002", hash("003"))
+    @test OFOND.bundle_hash(row2) == hash("008", hash("003"))
+    # Order hash
+    @test OFOND.order_hash(row1) == hash(1, hash("002", hash("003")))
+    @test OFOND.order_hash(row2) == hash(1, hash("008", hash("003")))
+    # Commodity size
+    @test OFOND.com_size(row1) == 1500
+    @test OFOND.com_size(row2) == 354
+    @test OFOND.com_size(row3) == 1
+    # Commodity data hash
+    @test OFOND.com_data_hash(row1) == hash("B456", hash(1500, hash(3.5)))
+    @test OFOND.com_data_hash(row2) == hash("C456", hash(354, hash(3.5)))
+    @test OFOND.com_data_hash(row3) == hash("B456", hash(1, hash(3.6)))
 end
+
+@testset "Object getters" begin
+    rows = [row for row in CSV.File("dummy_commodities.csv")]
+    row1, row2, row3 = rows[1:3]
+    # Get bundle 
+    bundles = Dict{UInt,Bundle}()
+    b1 = OFOND.get_bundles!(bundles, row1, network)
+    @test b1 == Bundle(supplier1, plant, 1)
+    @test bundles ==
+        Dict{UInt,Bundle}(hash("002", hash("003")) => Bundle(supplier2, plant, 1))
+    b11 = OFOND.get_bundles!(bundles, row1, network)
+    @test b11 === b1
+    b12 = @test_warn "Supplier unknown in the network" OFOND.get_bundles!(
+        bundles, row2, network
+    )
+    @test b12 === nothing
+    b13 = @test_warn "Customer unknown in the network" OFOND.get_bundles!(
+        bundles, row3, network
+    )
+    @test b13 === nothing
+    # Get order 
+    orders = Dict{UInt,Order}()
+    o1 = OFOND.get_orders!(orders, row1, b1)
+    @test o1 == Order(b1, 1)
+    @test orders == Dict{UInt,Order}(hash(1, hash("002", hash("003"))) => Order(b1, 1))
+    o11 = OFOND.get_orders!(orders, row2, b1)
+    @test o11 == Order(b1, 1)
+    @test orders == Dict{UInt,Order}(
+        hash(1, hash("002", hash("003"))) => Order(b1, 1),
+        hash(1, hash("008", hash("003"))) => Order(b1, 1),
+    )
+    # Get com data
+    comDatas = Dict{UInt,CommodityData}()
+    cd1 = OFOND.get_commodity_data!(comDatas, row1)
+    @test cd1 == CommodityData("B456", 1500, 3.5)
+    @test comDatas == Dict{UInt,CommodityData}(hash("B456", hash(1500, hash(3.5))) => c1)
+    cd2 = OFOND.get_commodity_data!(comDatas, row2)
+    @test cd2 == CommodityData("C456", 354, 3.5)
+    @test comDatas == Dict{UInt,CommodityData}(
+        hash("B456", hash(1500, hash(3.5))) => cd1,
+        hash("C456", hash(354, hash(3.5))) => cd2,
+    )
+end
+
+bunH1 = hash(supplier2, hash(plant))
+comData2 = OFOND.CommodityData("A123", 10, 2.5)
+comData1 = OFOND.CommodityData("B456", 15, 3.5)
+
+commodity1 = OFOND.Commodity(hash(1, bunH1), hash("B456"), comData1)
+order1 = OFOND.Order(bunH1, 1, [commodity1, commodity1])
+bundle1 = OFOND.Bundle(supplier2, plant, [order2], 1, bunH1, 0, 0)
+
+bunH2 = hash(supplier1, hash(plant))
+commodity2 = OFOND.Commodity(hash(1, bunH2), hash("A123"), comData2)
+commodity3 = OFOND.Commodity(hash(1, bunH2), hash("B456"), comData1)
+commodity4 = OFOND.Commodity(hash(2, bunH2), hash("A123"), comData2)
+commodity5 = OFOND.Commodity(hash(2, bunH2), hash("B456"), comData1)
+
+order2 = OFOND.Order(bunH2, 1, [commodity2, commodity3])
+order3 = OFOND.Order(bunH2, 2, [commodity4, commodity5])
+bundle2 = OFOND.Bundle(supplier1, plant, [order2, order3], 2, bunH2, 0, 0)
 
 @testset "Read commodities" begin
     # read file and add commodities
+    bundles, dates = @test_warn [
+        "Supplier unknown in the network", "Customer unknown in the network"
+    ] OFOND.read_commodities(network, "dummy_commodities.csv")
+    # the bundles should be the one in all other tests
+    @test bundles == [bundle1, bundle2]
+    @testset "All fields equal bundle" for (idx, bundle) in zip([1, 2], [bundle1, bundle2]),
+        field in fieldnames(OFOND.Bundle)
+
+        @test getfield(bundle, field) == getfield(bundles[idx], field)
+    end
+    # the orders should be equal
+    @testset "All fields equal order" for (idxB, idxO, order) in zip(
+            [1, 2, 2], [1, 1, 2], [order1, order2, order3]
+        ),
+        field in fieldnames(OFOND.Order)
+
+        @test getfield(order, field) == getfield(bundles[idxB].orders[idxO], field)
+    end
 end
 
 @testset "Read instance" begin
     # read instance
+    instance = OFOND.read_instance(
+        "dummy_nodes.csv", "dummy_legs.csv", "dummy_commodities.csv"
+    )
+    @test instance == OFOND.Instance(
+        network,
+        TravelTimeGraph(),
+        TimeSpaceGraph(),
+        [bundle1, bundle2],
+        2,
+        [Dates.Date(2024, 1, 1), Dates.Date(2024, 1, 8)],
+    )
 end
