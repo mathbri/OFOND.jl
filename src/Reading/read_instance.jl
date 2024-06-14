@@ -1,15 +1,18 @@
 # File containing all functions to read an instance
 
 function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
-    nodeType = Symbol(nodeTypeStr)
-    haskey(counts, nodeType) && counts[nodeType] += 1
+    nodeType = Symbol(row.point_type)
+    haskey(counts, nodeType) && (counts[nodeType] += 1)
+    account, name, country, continent = promote(
+        row.point_account, row.point_name, row.point_country, row.point_continent
+    )
     return NetworkNode(
-        row.point_account,
+        account,
         nodeType,
-        row.point_name,
+        name,
         LLA(row.point_latitude, row.point_longitude),
-        row.point_country,
-        row.point_continent,
+        country,
+        continent,
         nodeType in COMMON_NODE_TYPES,
         row.point_m3_cost,
     )
@@ -19,7 +22,7 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String)
     counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     # Reading .csv file
     csv_reader = CSV.File(
-        node_file; types=Dict("point_account" => String15, "point_type" => String15)
+        node_file; types=Dict("point_account" => String, "point_type" => String)
     )
     @info "Reading nodes from CSV file $(node_file) ($(length(csv_reader)) lines)"
     for row in csv_reader
@@ -30,8 +33,8 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String)
 end
 
 function src_dst_hash(row::CSV.Row)
-    return hash(row.src_account, Symbol(row.src_type)),
-    hash(row.dst_account, Symbol(row.dst_type))
+    return hash(row.src_account, hash(Symbol(row.src_type))),
+    hash(row.dst_account, hash(Symbol(row.dst_type)))
 end
 
 function is_common_arc(row::CSV.Row)
@@ -40,8 +43,8 @@ function is_common_arc(row::CSV.Row)
 end
 
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
-    arcType = Symbol(arcTypeStr)
-    haskey(counts, arcType) && counts[arcType] += 1
+    arcType = Symbol(row.leg_type)
+    haskey(counts, arcType) && (counts[arcType] += 1)
     return NetworkArc(
         arcType,
         row.distance,
@@ -58,18 +61,15 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
-    csv_reader = CSV.File(leg_file; types=Dict([(column, String15) for column in columns]))
+    csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
     @info "Reading legs from CSV file $(leg_file) ($(length(csv_reader)) lines)"
     for row in csv_reader
         src, dst = src_dst_hash(row)
-        isCommon = is_common_arc(row)
-        arc = read_leg!(counts, row, isCommon)
-        add_arc!(network, arc, src, dst)
+        arc = read_leg!(counts, row, is_common_arc(row))
+        add_arc!(network, src, dst, arc)
     end
     @info "Read $(ne(network.graph)) legs : $counts"
 end
-
-# TODO : adapt from here 
 
 function bundle_hash(row::CSV.Row)
     return hash(row.supplier_account, hash(row.customer_account))
@@ -89,13 +89,13 @@ end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
     # Get supplier and customer nodes
-    if !haskey(network.graph, hash(row.supplier_account, :supplier))
+    if !haskey(network.graph, hash(row.supplier_account, hash(:supplier)))
         @warn "Supplier unknown in the network" :supplier = row.supplier_account :row = row
-    elseif !haskey(network.graph, hash(row.customer_account, :plant))
+    elseif !haskey(network.graph, hash(row.customer_account, hash(:plant)))
         @warn "Customer unknown in the network" :customer = row.customer_account :row = row
     else
-        supplierNode = network.graph[hash(row.supplier_account, :supplier)]
-        customerNode = network.graph[hash(row.customer_account, :plant)]
+        supplierNode = network.graph[hash(row.supplier_account, hash(:supplier))]
+        customerNode = network.graph[hash(row.customer_account, hash(:plant))]
         return get!(
             bundles,
             bundle_hash(row),
@@ -116,6 +116,7 @@ function get_com_data!(comDatas::Dict{UInt,CommodityData}, row::CSV.Row)
     )
 end
 
+# TODO : chane counts to dict for more precision in commodity diversity
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     comDatas, orders = Dict{UInt,CommodityData}(), Dict{UInt,Order}()
     bundles, allDates = Dict{UInt,Bundle}(), Set{Date}()
@@ -123,23 +124,23 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     # Reading .csv file
     csv_reader = CSV.File(
         commodities_file;
-        types=Dict("supplier_account" => String15, "customer_account" => String15),
+        types=Dict("supplier_account" => String, "customer_account" => String),
     )
     @info "Reading commodity orders from CSV file $(commodities_file) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
-    println("Creating initial objects...")
     for row in csv_reader
         # Getting bundle, order and commodity data
         bundle = get_bundle!(bundles, row, networkGraph)
         bundle === nothing && continue
         order = get_order!(orders, row, bundle)
         comData = get_com_data!(comDatas, row)
-        # If the order is new we have to add it to the bundle
-        haskey(orders, orderKey) || push!(bundle.orders, order)
+        # If the order is new (no commodities) we have to add it to the bundle
+        length(order.content) == 0 && push!(bundle.orders, order)
         # Creating (and Duplicating) commodity
         commodity = Commodity(order, comData)
         append!(order.content, [commodity for _ in 1:(row.quantity)])
-        comCount, comUnique .+= row.quantity, 1
+        comCount += row.quantity
+        comUnique += 1
         # Is it a new time step ?
         push!(allDates, Date(row.delivery_date))
     end

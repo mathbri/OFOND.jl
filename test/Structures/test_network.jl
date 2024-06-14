@@ -24,7 +24,7 @@ network = OFOND.NetworkGraph()
     @test node.continent == "continent"
     @test node.isCommon == false
     @test node.volumeCost == 1.0
-    @test node.hash == hash("account", hash(:type))
+    @test node.hash == hash("account", hash(:supplier))
 
     # Testing equality
     @test node ==
@@ -50,12 +50,15 @@ newNode = OFOND.change_node_type(node, :port_d)
     @test newNode.hash == hash("account", hash(:port_d))
 end
 
-newNode2 = OFOND.change_node_type(node, :supplier)
+newNode2 = OFOND.change_node_type(node, :iln)
 @testset "add_node" begin
     # Testing add_node! method
     OFOND.add_node!(network, node)
     @test haskey(network.graph, node.hash)
     @test network.graph[node.hash] === node
+    @test network.graph[node.hash, node.hash] == OFOND.NetworkArc(
+        :shortcut, OFOND.EPS, 1, false, OFOND.EPS, false, OFOND.EPS, 1_000_000
+    )
 
     # Testing add_node! method with changed node type
     OFOND.add_node!(network, newNode)
@@ -65,10 +68,7 @@ newNode2 = OFOND.change_node_type(node, :supplier)
     # Testing add_node! method with supplier
     OFOND.add_node!(network, newNode2)
     @test haskey(network.graph, newNode2.hash)
-    @test haskey(network.graph, newNode2.hash, newNode2.hash)
-    @test network.graph[newNode2.hash, newNode2.hash] == OFOND.NetworkArc(
-        :shortcut, OFOND.EPS, 1, false, OFOND.EPS, false, OFOND.EPS, 1_000_000
-    )
+    @test !haskey(network.graph, newNode2.hash, newNode2.hash)
 
     # Testing add_node! method with warnings
     warnNode = OFOND.NetworkNode("account", :supplier, "n2", LLA(2, 2), "c", "c", true, 1.1)
@@ -93,17 +93,18 @@ end
     @test network.graph[node.hash, newNode.hash] === arc
 
     @test_warn "Source unknown in the network" OFOND.add_arc!(network, node3, newNode, arc)
-    OFOND.add_arc!(network, node3, newNode, arc)
+    # OFOND.add_arc!(network, node3, newNode, arc)
     @test !haskey(network.graph, node3.hash)
     @test !haskey(network.graph, node3.hash, newNode.hash)
 
     @test_warn "Destination unknown in the network" OFOND.add_arc!(
         network, node, node3, arc
     )
-    OFOND.add_arc!(network, node, node3, arc)
+    # OFOND.add_arc!(network, node, node3, arc)
     @test !haskey(network.graph, node3.hash)
     @test !haskey(network.graph, node.hash, node3.hash)
 
+    OFOND.add_arc!(network, node, newNode2, arc)
     @test_warn "Source and destination already have arc data" OFOND.add_arc!(
         network, node, newNode2, arc2
     )

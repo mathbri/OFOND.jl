@@ -120,7 +120,7 @@ function add_arc!(network::NetworkGraph, src::UInt, dst::UInt, arc::NetworkArc)
         @warn "Source unknown in the network" :source = src
     elseif !haskey(network.graph, dst)
         @warn "Destination unknown in the network" :destination = dst
-    elseif !(arcType in ARC_TYPES)
+    elseif !(arc.type in ARC_TYPES)
         @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = ARC_TYPES
     else
         # Adding the leg to the network graph (if no anomaly)
@@ -132,7 +132,17 @@ end
 function add_arc!(
     network::NetworkGraph, src::NetworkNode, dst::NetworkNode, arc::NetworkArc
 )
-    return add_arc!(network, src.hash, dst.hash, arc)
+    # redifining warnings to give more information
+    if haskey(network.graph, src.hash, dst.hash)
+        @warn "Source and destination already have arc data" :srcInGraph = network.graph[src.hash] :dstInGraph = network.graph[dst.hash] :srcToAdd =
+            src :dstToAdd = dst
+    elseif !haskey(network.graph, src.hash)
+        @warn "Source unknown in the network" :source = src
+    elseif !haskey(network.graph, dst.hash)
+        @warn "Destination unknown in the network" :destination = dst
+    else
+        return add_arc!(network, src.hash, dst.hash, arc)
+    end
 end
 
 # TODO : add a function to change arc or node data if needed
