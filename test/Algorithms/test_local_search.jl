@@ -104,28 +104,118 @@ end
 
 # for this and local search, one solution is to add another cross-dock to avoid putting bundle1 and 3 on a forbidden path
 
+# Modifying instance a little for testing
+# Adding a cycle in the network that won't be one in the time expansion
+network2 = deepcopy(network)
+
+xdock2 = OFOND.NetworkNode("006", :xdock, "XDock1", LLA(3, 1), "FR", "EU", true, 1.0)
+xdock3 = OFOND.NetworkNode("007", :xdock, "XDock3", LLA(4, 1), "CN", "AS", true, 1.0)
+OFOND.add_node!(network2, xdock2)
+OFOND.add_node!(network2, xdock3)
+
+xdock1_to_2 = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 5.0, false, 0.0, 50)
+xdock1_to_3 = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 4.0, false, 0.0, 50)
+xdock2_to_3 = OFOND.NetworkArc(:cross_plat, 0.1, 0, true, 2.0, false, 0.0, 50)
+xdock2_to_plant = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 6.0, false, 1.0, 50)
+xdock3_to_plant = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 3.0, false, 1.0, 50)
+OFOND.add_arc!(network2, xdock, xdock2, xdock1_to_2)
+OFOND.add_arc!(network2, xdock, xdock3, xdock1_to_3)
+OFOND.add_arc!(network2, xdock2, plant, xdock2_to_plant)
+OFOND.add_arc!(network2, xdock3, plant, xdock3_to_plant)
+
+# Cretaing new instance
+TTGraph2 = OFOND.TravelTimeGraph(network2, bundles)
+TSGraph2 = OFOND.TimeSpaceGraph(network2, 4)
+instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates)
+
+# New TTPath
+supp1FromDel3 = TTGraph2.hashToIdx[hash(3, supplier1.hash)]
+xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
+xdock2fromDel1 = TTGraph2.hashToIdx[hash(1, xdock2.hash)]
+plantFromDel0 = TTGraph2.hashToIdx[hash(0, plant.hash)]
+TTPath12 = [supp1FromDel3, xdock1FromDel2, xdock2fromDel1, plantFromDel0]
+xdock3fromDel1 = TTGraph2.hashToIdx[hash(1, xdock3.hash)]
+TTPath13 = [supp1FromDel3, xdock1FromDel2, xdock3fromDel1, plantFromDel0]
+supp2fromDel1 = TTGraph2.hashToIdx[hash(1, supplier2.hash)]
+
+# New TSPath
+xdock1Step3 = TSGraph2.hashToIdx[hash(3, xdock.hash)]
+xdock2Step4 = TSGraph2.hashToIdx[hash(4, xdock2.hash)]
+plantStep1 = TSGraph2.hashToIdx[hash(1, plant.hash)]
+xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
+
 @testset "Two node incremental" begin
-    sol = OFOND.Solution(TTGraph, TSGraph, bundles)
-    # put bundle 1 and 3 on TTPath
-    OFOND.update_solution!(sol, instance, [bundle1, bundle3], [TTPath, TTPath])
-    OFOND.update_solution!(sol, instance, [bundle2], [[supp2fromDel1, plantFromDel0]])
-    # play with current cost so that lower boud insertion or greedy insertion is better
-    # without, same prop so that greedy insertion is better
+    sol = OFOND.Solution(TTGraph2, TSGraph2, bundles)
+    # put bundle 1 on TTPath12 and bundle 3 on TTPath13
+    OFOND.update_solution!(sol, instance2, [bundle1, bundle3], [TTPath12, TTPath13])
+    OFOND.update_solution!(sol, instance2, [bundle2], [[supp2fromDel1, plantFromDel0]])
 
-    # no bundlesOnNode for a supplier 
-    # TODO : add 2 xdocks so that you can change the path 
+    # testing just the bundle1 alone from xdock2 to plant 
+    costImprov = OFOND.two_node_incremental!(sol, instance2, xdock2fromDel1, plantFromDel0)
+    # initial path is TTPath12
+    # new path goes to xdock3 before plant
+    @test costImprov ≈ 0.0
+    @test sol.bundlePaths == [
+        [supp1FromDel3, xdock1FromDel2, xdock2fromDel1, xdock3fromDel1, plantFromDel0],
+        [supp2fromDel1, plantFromDel0],
+        TTPath13,
+    ]
+    # testing bundle on nodes
+    @test sol.bundlesOnNode[plantFromDel0] == [bundle1, bundle2, bundle3]
+    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle1, bundle3]
+    @test sol.bundlesOnNode[xdock2fromDel1] == [bundle1]
+    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle1, bundle3]
+    # testing bins
+    # just bundle 1
+    @test sol.bins[xdock1Step3, xdock2Step4] ==
+        [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    # just bundle 3
+    @test sol.bins[xdock1Step3, xdock3Step4] ==
+        [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    # just bundle 1
+    @test sol.bins[xdock2Step4, xdock3Step4] ==
+        [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    # bundle 1 and 3
+    @test sol.bins[xdock2Step4, plantStep1] ==
+        [OFOND.Bin(5, 45, [commodity2, commodity1, commodity1, commodity1])]
+    # nobody
+    @test sol.bins[xdock3Step4, plantStep1] == OFOND.Bin[]
 
-    # OFOND.two_node_incremental!(sol, instance, supp1FromDel3, plantFromDel0)
-    # # paths back to greedy
-    # greedySol = OFOND.Solution(TTGraph, TSGraph, bundles)
-    # OFOND.greedy!(greedySol, instance)
-    # @test sol == greedySol
+    # now testing bundle 1 and 3 together
+    # without, same propostion so that greedy insertion is better
+    costImprov = OFOND.two_node_incremental!(sol, instance2, xdock1fromDel2, plantFromDel0)
+    @test costImprov ≈ 0.0
+    @test sol.bundlePaths == [TTPath13, [supp2fromDel1, plantFromDel0], TTPath13]
+    # testing bundle on nodes
+    @test sol.bundlesOnNode[plantFromDel0] == [bundle1, bundle2, bundle3]
+    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle1, bundle3]
+    @test sol.bundlesOnNode[xdock2fromDel1] == OFOND.Bundle[]
+    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle1, bundle3]
+    # testing bins
+    @test sol.bins[xdock1Step3, xdock2Step4] == OFOND.Bin[]
+    @test sol.bins[xdock1Step3, xdock3Step4] ==
+        [OFOND.Bin(5, 45, [commodity2, commodity1, commodity1, commodity1])]
+    @test sol.bins[xdock1Step4, xdock3Step1] ==
+        [OFOND.Bin(25, 25, [commodity2, commodity1])]
+    @test sol.bins[xdock2Step4, xdock3Step4] == OFOND.Bin[]
+    @test sol.bins[xdock3Step4, plantStep1] ==
+        [OFOND.Bin(5, 45, [commodity2, commodity1, commodity1, commodity1])]
+    @test sol.bins[xdock3Step1, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
 
-    # TODO : with, by having old path cheapest in lb insertion, how exactly ?
-    # if both_insertion and change_solution_to_other works fine should be good 
-    # but should be great to test this too
+    # TODO : test a case where lower bound insertion is better
+    # then adding near full bins so that lowerBound and greedy don't propose the same
+    # how to obtain a better lower bound insertion ?
 end
 
-# @testset "Local search (full)" begin
-#     # TODO : mix of the above, from bad solution to good
-# end
+@testset "Local search (full)" begin
+    # mix of the above, from bad solution to good
+    sol = OFOND.Solution(TTGraph2, TSGraph2, bundles)
+    greedySol = deepcopy(sol)
+    OFOND.lower_bound!(sol, instance2)
+    # put bundle 1 on TTPath12 and bundle 3 on TTPath13
+    OFOND.update_solution!(sol, instance2, [bundle1, bundle3], [TTPath12, TTPath13])
+    OFOND.update_solution!(sol, instance2, [bundle2], [[supp2fromDel1, plantFromDel0]])
+    # changing with full local search 
+    OFOND.local_search!(sol, instance2, TSGraph2, TTGraph2, bundles)
+    @test sol == greedySol
+end

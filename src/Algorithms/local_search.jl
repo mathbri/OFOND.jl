@@ -129,6 +129,19 @@ function two_node_incremental!(
     oldBins, costRemoved = save_and_remove_bundle!(
         solution, instance, twoNodeBundles, oldPaths; current_cost=current_cost
     )
+    println("Cost removed : $costRemoved")
+    # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
+    pathsLinearCost = sum(
+        bundle_path_linear_cost(bundle, path, TTGraph) for
+        (bundle, path) in zip(twoNodeBundles, oldPaths)
+    )
+    println("Linear cost : $pathsLinearCost")
+    if costRemoved + pathsLinearCost >= -EPS
+        println("No improvement possible")
+        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+        revert_bins!(solution, oldBins)
+        return 0.0
+    end
     # Inserting it back
     greedyAddedCost, lbAddedCost, lbSol = 0.0, 0.0, deepcopy(solution)
     for bundle in twoNodeBundles
@@ -143,16 +156,25 @@ function two_node_incremental!(
             lbSol, instance, [bundle], [lowerBoundPath]; sorted=sorted
         )
     end
+    println("Greedy cost : $greedyAddedCost")
+    println("Lower bound cost : $lbAddedCost")
     # Solution already updated so if it didn't improve, reverting to old state
-    if min(greedyAddedCost, lbAddedCost) > costRemoved
+    if min(greedyAddedCost, lbAddedCost) + costRemoved < -1e-3
+        println("No improvement with new paths")
         update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
-        return revert_bins!(solution, oldBins)
+        revert_bins!(solution, oldBins)
+        return 0.0
     else
         # Choosing the best update (greedy by default)
         if greedyAddedCost > lbAddedCost
+            println("LB insertion improved and is better")
             change_solution_to_other!(
                 solution, lbSol, instance, twoNodeBundles; sorted=sorted
             )
+            return lbAddedCost + costRemoved
+        else
+            println("Greedy insertion improved and is better")
+            return greedyAddedCost + costRemoved
         end
     end
 end
