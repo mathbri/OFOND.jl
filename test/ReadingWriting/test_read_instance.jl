@@ -14,7 +14,7 @@
     # Read node
     rows = [
         row for row in CSV.File(
-            "$(@__DIR__)//dummy_nodes.csv";
+            joinpath(@__DIR__, "dummy_nodes.csv");
             types=Dict("point_account" => String, "point_type" => String),
         )
     ]
@@ -44,7 +44,7 @@ plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false,
 @testset "Read and add nodes" begin
     # read file and add nodes
     @test_warn ["Same node already in the network", "Node type not in NodeTypes"] OFOND.read_and_add_nodes!(
-        network, "$(@__DIR__)//dummy_nodes.csv"
+        network, joinpath(@__DIR__, "dummy_nodes.csv")
     )
     # the network should be the one in all other tests
     @test nv(network.graph) == 5
@@ -86,7 +86,7 @@ supp_to_plat = OFOND.NetworkArc(:outsource, 1.0, 1, false, 4.0, true, 0.0, 50)
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
     rows = [
         row for row in CSV.File(
-            "$(@__DIR__)//dummy_legs.csv";
+            joinpath(@__DIR__, "dummy_legs.csv");
             types=Dict([(column, String) for column in columns]),
         )
     ]
@@ -136,7 +136,7 @@ port_to_plant = OFOND.NetworkArc(:oversea, 1.0, 1, false, 4.0, false, 1.0, 50)
         "Source and destination already have arc data",
         "Source unknown in the network",
         "Arc type not in ArcTypes",
-    ] OFOND.read_and_add_legs!(network, "$(@__DIR__)//dummy_legs.csv")
+    ] OFOND.read_and_add_legs!(network, joinpath(@__DIR__, "dummy_legs.csv"))
     # the network should be the one in all other tests
     @test ne(network.graph) == 2 + 7
     @test network.graph[supplier1.hash, xdock.hash] == supp_to_plat
@@ -151,7 +151,7 @@ end
 @testset "Commodity readers" begin
     rows = [
         row for row in CSV.File(
-            "$(@__DIR__)//dummy_commodities.csv";
+            joinpath(@__DIR__, "dummy_commodities.csv");
             types=Dict("supplier_account" => String, "customer_account" => String),
         )
     ]
@@ -175,7 +175,7 @@ end
 @testset "Object getters" begin
     rows = [
         row for row in CSV.File(
-            "$(@__DIR__)//dummy_commodities.csv";
+            joinpath(@__DIR__, "dummy_commodities.csv");
             types=Dict("supplier_account" => String, "customer_account" => String),
         )
     ]
@@ -225,7 +225,7 @@ comData1 = OFOND.CommodityData("B456", 15, 3.5)
 
 commodity1 = OFOND.Commodity(hash(1, bunH1), hash("B456"), comData1)
 order1 = OFOND.Order(bunH1, 1, [commodity1, commodity1])
-bundle1 = OFOND.Bundle(supplier2, plant, [order2], 1, bunH1, 0, 0)
+bundle1 = OFOND.Bundle(supplier2, plant, [order1], 1, bunH1, 0, 0)
 
 bunH2 = hash(supplier1, hash(plant))
 commodity2 = OFOND.Commodity(hash(1, bunH2), hash("A123"), comData2)
@@ -241,7 +241,7 @@ bundle2 = OFOND.Bundle(supplier1, plant, [order2, order3], 2, bunH2, 0, 0)
     # read file and add commodities
     bundles, dates = @test_warn [
         "Supplier unknown in the network", "Customer unknown in the network"
-    ] OFOND.read_commodities(network, "$(@__DIR__)//dummy_commodities.csv")
+    ] OFOND.read_commodities(network, joinpath(@__DIR__, "dummy_commodities.csv");)
     # the bundles should be the one in all other tests
     @test bundles == [bundle1, bundle2]
     @testset "All fields equal bundle $(idx)" for idx in [1, 2]
@@ -264,9 +264,9 @@ end
 @testset "Read instance" begin
     # read instance
     instance = OFOND.read_instance(
-        "$(@__DIR__)//dummy_nodes.csv",
-        "$(@__DIR__)//dummy_legs.csv",
-        "$(@__DIR__)//dummy_commodities.csv",
+        joinpath(@__DIR__, "dummy_nodes.csv"),
+        joinpath(@__DIR__, "dummy_legs.csv"),
+        joinpath(@__DIR__, "dummy_commodities.csv"),
     )
     @test instance.networkGraph.graph == network.graph
     @test instance.travelTimeGraph.graph == OFOND.TravelTimeGraph().graph

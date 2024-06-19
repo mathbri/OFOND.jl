@@ -1,0 +1,9 @@
+route_id,supplier_account,customer_account,point_account,point_number,point_type
+1,008,003,001,1,supplier
+1,001,008,001,1,supplier
+1,001,003,008,1,supplier
+1,002,003,003,2,plant
+1,002,003,002,1,supplier
+2,001,003,001,1,supplier
+2,001,003,003,3,plant
+2,001,003,004,2,xdock

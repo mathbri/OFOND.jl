@@ -24,7 +24,7 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String)
     csv_reader = CSV.File(
         node_file; types=Dict("point_account" => String, "point_type" => String)
     )
-    @info "Reading nodes from CSV file $(node_file) ($(length(csv_reader)) lines)"
+    @info "Reading nodes from CSV file $(basename(node_file)) ($(length(csv_reader)) lines)"
     for row in csv_reader
         node = read_node!(counts, row)
         add_node!(network, node)
@@ -62,7 +62,7 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
     csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
-    @info "Reading legs from CSV file $(leg_file) ($(length(csv_reader)) lines)"
+    @info "Reading legs from CSV file $(basename(leg_file)) ($(length(csv_reader)) lines)"
     for row in csv_reader
         src, dst = src_dst_hash(row)
         arc = read_leg!(counts, row, is_common_arc(row))
@@ -116,7 +116,7 @@ function get_com_data!(comDatas::Dict{UInt,CommodityData}, row::CSV.Row)
     )
 end
 
-# TODO : chane counts to dict for more precision in commodity diversity
+# TODO : change counts to dict for more precision in commodity diversity
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     comDatas, orders = Dict{UInt,CommodityData}(), Dict{UInt,Order}()
     bundles, allDates = Dict{UInt,Bundle}(), Set{Date}()
@@ -126,7 +126,7 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         commodities_file;
         types=Dict("supplier_account" => String, "customer_account" => String),
     )
-    @info "Reading commodity orders from CSV file $(commodities_file) ($(length(csv_reader)) lines)"
+    @info "Reading commodity orders from CSV file $(basename(commodities_file)) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
     for row in csv_reader
         # Getting bundle, order and commodity data
