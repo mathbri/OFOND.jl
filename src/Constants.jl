@@ -17,3 +17,41 @@ const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
 
 const PERTURBATIONS = [:single_plant, :two_shared_node, :attract_reduce]
+
+const NETWORK_DESIGN_COLUMNS = [
+    "route_id",
+    "supplier_account",
+    "customer_account",
+    "part_number",
+    "packaging",
+    "quantity_part_in_route",
+    "delivery_date",
+    "point_account",
+    "point_index",
+    "point_date",
+    "shipment_id",
+]
+
+const SHIPMENT_INFO_COLUMNS = [
+    "shipment_id",
+    "source_point_account",
+    "destination_point_account",
+    "point_start_date",
+    "point_end_date",
+    "type",
+    "volume",
+    "transport_cost",
+    "carbon_cost",
+    "platform_cost",
+]
+
+const SHIPMENT_CONTENT_COLUMNS = [
+    "content_id",
+    "shipment_id",
+    "part_number",
+    "part_supplier_account",
+    "part_customer_account",
+    "quantity",
+    "packaging_size",
+    "volume",
+]
