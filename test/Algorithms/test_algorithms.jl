@@ -1,5 +1,3 @@
-# Defining common and useful Structures
-
 # Define supplier, platform, and plant
 supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
 supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)

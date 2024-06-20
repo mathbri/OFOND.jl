@@ -1,9 +1,3 @@
-function node_date(TTGraph::TravelTimeGraph, node::Int, order::Order)
-    node_date = order.deliveryDate - TTGraph.stepToDel[node]
-    node_date < 1 && (node_date += TTGraph.timeHorizon)
-    return node_date
-end
-
 function shipments_ids(
     solution::Solution, path::Vector{Int}, node::Int, idx::Int, coommodity::Commodity
 )
@@ -33,8 +27,8 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                 for (idx, node) in enumerate(timedPath)
                     data[8] = TSGraph.networkNodes[node].account  # point_account
                     data[9] = idx  # point_index
-                    data[10] = node_date(TTGraph, node, order)  # point_date
-                    shipments_ids = shipments_ids(TTGraph, node, path[idx + 1], order, com)
+                    data[10] = instance.dateHorizon[TSGraph.timeStep[node]]  # point_date
+                    shipments_ids = shipments_ids(solution, path, node, idx, com)
                     for id in shipments_ids
                         data[11] = id  # shipment_id
                         # writing data in csv formatted string
@@ -42,6 +36,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                     end
                 end
             end
+            data[1] += 1  # route_id
         end
     end
 end
@@ -70,7 +65,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
     end
 end
 
-# Finf the bundle corresponding to the commodity
+# Find the bundle corresponding to the commodity
 function find_bundle(instance::Instance, com::Commodity)
     for bundle in instance.bundles
         for order in bundle.orders
@@ -96,6 +91,7 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
                 data[7] = size(com)  # packaging_size
                 data[8] = data[6] * data[7]  # volume  
                 join(io, data, ",", "\n")
+                data[1] += 1
             end
         end
     end
