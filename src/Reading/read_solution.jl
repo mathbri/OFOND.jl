@@ -3,20 +3,22 @@
 
 # Check that the bundle exists in the instance and return it if found
 function check_bundle(instance::Instance, row::CSV.Row)
-    suppNode = NetworkNode(row.supplier_account, :supplier, "", LLA(0, 0), "", "", true, 0)
-    custNode = NetworkNode(row.customer_account, :plant, "", LLA(0, 0), "", "", true, 0)
+    suppNode = NetworkNode(
+        row.supplier_account, :supplier, "", LLA(0, 0), "", "", true, 0.0
+    )
+    custNode = NetworkNode(row.customer_account, :plant, "", LLA(0, 0), "", "", true, 0.0)
     bundleHash = hash(suppNode, hash(custNode))
-    bundle = findfirst(b -> b.hash == bundleHash, instance.bundles)
-    if bundle === nothing
+    bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
+    if bundleIdx === nothing
         @warn "Bundle unknown in the instance" :bundle = bundleHash :row = row
     else
-        return bundle
+        return instance.bundles[bundleIdx]
     end
 end
 
 # Check that the node exists ins the instance and return it if found
 function check_node(instance::Instance, row::CSV.Row)
-    nodeHash = hash(row.point_account, hash(row.point_type))
+    nodeHash = hash(row.point_account, hash(Symbol(row.point_type)))
     if haskey(instance.networkGraph.graph, nodeHash)
         return instance.networkGraph.graph[nodeHash]
     else
@@ -41,7 +43,7 @@ function check_paths(paths::Vector{Vector{NetworkNode}})
         @warn "Found $(length(emptyPaths)) empty paths for bundles $(emptyPaths)"
     end
     missingPointPaths = findall(
-        x -> length(findfirst(y -> y == zero(NetworkNode), x)) !== nothing, paths
+        x -> findfirst(y -> y == zero(NetworkNode), x) !== nothing, paths
     )
     if length(missingPointPaths) > 0
         @warn "Missing points in $(length(missingPointPaths)) paths for bundles $(missingPointPaths)"
@@ -54,11 +56,12 @@ function is_path_projectable(path::Vector{NetworkNode})
     return (length(path) > 0) && (length(missingPoints) == 0)
 end
 
-# TODO : test from here on
-
 # Find the next node in the projected path if it exists
 function find_next_node(TTGraph::TravelTimeGraph, ttNode::Int, node::NetworkNode)
-    return findfirst(idx -> TTGraph.networkNodes == node, inneighors(TTGraph.graph, ttNode))
+    inNodes = inneighbors(TTGraph.graph, ttNode)
+    nextNodeIdx = findfirst(idx -> TTGraph.networkNodes[idx] == node, inNodes)
+    nextNodeIdx === nothing && return nothing
+    return inNodes[nextNodeIdx]
 end
 
 function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::Int)
@@ -93,14 +96,17 @@ end
 # Repair paths by putting direct paths for bundles with errors
 function repair_paths!(paths::Vector{Vector{Int}}, instance::Instance)
     TTGraph = instance.travelTimeGraph
+    count = 0
     for (idx, path) in enumerate(paths)
         if length(path) == 0
             suppNode, custNode = TTGraph.bundleSrc[idx], TTGraph.bundleDst[idx]
             # Computing shortest path
             shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
             append!(path, shortestPath)
+            count += 1
         end
     end
+    return count
 end
 
 function read_solution(instance::Instance, solution_file::String)
@@ -115,7 +121,7 @@ function read_solution(instance::Instance, solution_file::String)
         ),
     )
     @info "Reading solution from CSV file $(basename(solution_file)) ($(length(csv_reader)) lines)"
-    paths = [Int[] for _ in 1:length(instance.bundles)]
+    paths = [NetworkNode[] for _ in 1:length(instance.bundles)]
     # Reading paths
     for row in csv_reader
         # Check bundle and node existence (warnings if not found)
@@ -129,9 +135,9 @@ function read_solution(instance::Instance, solution_file::String)
     check_paths(paths)
     @info "Projecting paths on the travel-time graph"
     allPaths = project_all_paths(paths, instance.travelTimeGraph)
-    check_paths(allPaths)
-    @info "Repairing paths for bundles with errors"
-    repair_paths!(allPaths, instance)
+    # check_paths(allPaths)
+    repaired = repair_paths!(allPaths, instance)
+    @info "Repaired $(repaired) paths for bundles with errors"
     # Creating and updating solution
     solution = Solution(instance)
     update_solution!(solution, instance, instance.bundles, allPaths)

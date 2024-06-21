@@ -66,8 +66,8 @@ function Base.:(==)(node1::NetworkNode, node2::NetworkNode)
     return (node1.account == node2.account) && (node1.type == node2.type)
 end
 
-function Base.hash(node::NetworkNode)
-    return hash(node.account, hash(node.type))
+function Base.hash(node::NetworkNode, h::UInt)
+    return hash(node.account, hash(node.type, h))
 end
 
 # Copy a node information and only change the node type
@@ -146,6 +146,8 @@ function add_arc!(
 end
 
 # TODO : add a function to change arc or node data if needed
+
+# TODO : change zero function to return a constant value to optimize garbage collecting ?
 
 function Base.zero(::Type{NetworkNode})
     return NetworkNode("0", :zero, "zero", LLA(0, 0), "", "", false, 0.0)

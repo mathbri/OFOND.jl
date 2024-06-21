@@ -202,15 +202,18 @@ end
     )
 end
 
+bundle11 = OFOND.Bundle(supplier2, plant, [order1], 1, bunH1, 0, 0)
+bundle22 = OFOND.Bundle(supplier1, plant, [order2, order3], 2, bunH2, 0, 0)
+
 @testset "Read commodities" begin
     # read file and add commodities
     bundles, dates = @test_warn [
         "Supplier unknown in the network", "Customer unknown in the network"
     ] OFOND.read_commodities(network, joinpath(@__DIR__, "dummy_commodities.csv");)
     # the bundles should be the one in all other tests
-    @test bundles == [bundle1, bundle2]
+    @test bundles == [bundle11, bundle22]
+    bundlesTest = [bundle11, bundle22]
     @testset "All fields equal bundle $(idx)" for idx in [1, 2]
-        bundlesTest = [bundle1, bundle2]
         @testset "Field $(field)" for field in fieldnames(OFOND.Bundle)
             @test getfield(bundlesTest[idx], field) == getfield(bundles[idx], field)
         end

@@ -1,10 +1,11 @@
-function shipments_ids(
+function get_shipments_ids(
     solution::Solution, path::Vector{Int}, node::Int, idx::Int, coommodity::Commodity
 )
     idx == length(path) && return [""]
     next_node = path[idx + 1]
-    bins = findall(b -> coommodity in b, solution.bins[node, next_node])
-    return string.([bin.idx for bin in bins])
+    bins = solution.bins[node, next_node]
+    binIdxs = findall(b -> coommodity in b.content, bins)
+    return string.([bin.idx for bin in bins[binIdxs]])
 end
 
 function write_network_design(io::IO, solution::Solution, instance::Instance)
@@ -19,20 +20,20 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
         for order in bundle.orders
             data[7] = instance.dateHorizon[order.deliveryDate]  # delivery_date
             orderCom = unique(order.content)
+            timedPath = time_space_projector(TTGraph, TSGraph, path, order)
             for com in orderCom
                 data[4] = part_number(com)  # part_number
                 data[5] = size(com)         # packaging
                 data[6] = length(findall(x -> x === com, order.content))  # quantity_part_in_route
-                timedPath = time_space_projector(TTGraph, TSGraph, path, order)
                 for (idx, node) in enumerate(timedPath)
                     data[8] = TSGraph.networkNodes[node].account  # point_account
                     data[9] = idx  # point_index
                     data[10] = instance.dateHorizon[TSGraph.timeStep[node]]  # point_date
-                    shipments_ids = shipments_ids(solution, path, node, idx, com)
+                    shipments_ids = get_shipments_ids(solution, timedPath, node, idx, com)
                     for id in shipments_ids
                         data[11] = id  # shipment_id
                         # writing data in csv formatted string
-                        join(io, data, ",", "\n")
+                        println(io, join(data, ","))
                     end
                 end
             end
@@ -60,7 +61,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             arcData.isLinear && (data[8] *= fillingRate)
             data[9] = arcData.carbonCost * fillingRate  # carbon_cost
             data[10] = dstData.volumeCost * fillingRate  # platform_cost
-            join(io, data, ",", "\n")
+            println(io, join(data, ","))
         end
     end
 end
@@ -90,7 +91,7 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
                 data[6] = length(findall(x -> x === com, bin.content))  # quantity
                 data[7] = size(com)  # packaging_size
                 data[8] = data[6] * data[7]  # volume  
-                join(io, data, ",", "\n")
+                println(io, join(data, ","))
                 data[1] += 1
             end
         end

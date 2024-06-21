@@ -20,8 +20,8 @@
     )
     @test bundle2 === nothing
     bundle3 = OFOND.check_bundle(instance, rows[4])
-    bundle3Test = OFOND.Bundle(supplier2, plant, [order2], 1, bunH1, 0, 0)
-    @testset "Bundle 3 test fields equality" for field in fieldnames(OFOND.Bundle)
+    bundle3Test = OFOND.Bundle(supplier2, plant, [order1], 1, bunH1, 15, 2)
+    @testset "Bundle 3 test equality - $(field)" for field in fieldnames(OFOND.Bundle)
         @test getfield(bundle3, field) == getfield(bundle3Test, field)
     end
     # check node
@@ -35,11 +35,6 @@
         @test getfield(node2, field) == getfield(node2Test, field)
     end
 end
-
-supplier1 = OFOND.NetworkNode("001", :supplier, "", LLA(0, 0), "", "", true, 0)
-supplier2 = OFOND.NetworkNode("002", :supplier, "", LLA(0, 0), "", "", true, 0)
-xdock = OFOND.NetworkNode("002", :xdock, "", LLA(0, 0), "", "", true, 0)
-plant = OFOND.NetworkNode("003", :plant, "", LLA(0, 0), "", "", true, 0)
 
 plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
 supp1FromDel2 = TTGraph.hashToIdx[hash(2, supplier1.hash)]
@@ -56,7 +51,11 @@ xdockFromDel1 = TTGraph.hashToIdx[hash(1, xdock.hash)]
     OFOND.add_node_to_path!(path, plant, 2)
     @test path == [supplier1, plant, xdock]
     # check paths
-    paths = [[supplier1, plant, xdock], [], [supplier1, zero(OFOND.NetworkNode), xdock]]
+    paths = [
+        [supplier1, plant, xdock],
+        OFOND.NetworkNode[],
+        [supplier1, zero(OFOND.NetworkNode), xdock],
+    ]
     @test_warn [
         "Found 1 empty paths for bundles [2]", "Missing points in 1 paths for bundles [3]"
     ] OFOND.check_paths(paths)
@@ -81,7 +80,7 @@ end
         [supplier2, OFOND.zero(OFOND.NetworkNode), plant], TTGraph, 1
     )
     @test errors
-    @test ttPath == [plant]
+    @test ttPath == [plantFromDel0]
     # all paths
     paths = [[supplier2, xdock, plant], [supplier1, zero(OFOND.NetworkNode), plant]]
     @test OFOND.project_all_paths(paths, TTGraph) ==
@@ -90,7 +89,7 @@ end
     allPaths = @test_warn "Next node not found, path not projectable for bundle 2" OFOND.project_all_paths(
         paths, TTGraph
     )
-    @test allPaths == [[supp2FromDel2, xdockFromDel1, plantFromDel0], []]
+    @test allPaths == [[supp2FromDel2, xdockFromDel1, plantFromDel0], Int[]]
     # repair paths
     OFOND.repair_paths!(allPaths, instance)
     @test allPaths ==
@@ -104,20 +103,22 @@ end
         "Bundle unknown in the instance",
         "Node unknown in the network",
     ] OFOND.read_solution(instance, joinpath(@__DIR__, "dummy_solution.csv"))
+    supp2FromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     @test sol.bundlePaths ==
-        [[supp2FromDel2, plantFromDel0], [supp1FromDel2, xdockFromDel1, plantFromDel0]]
-    @test sol.bundlesOnNode ==
-        Dict(xdockFromDel1 => [bundle2], plantFromDel0 => [bundle1, bundle2])
-    supp2step3 = TSGraph.hashToIdx[hash(3, supplier2.hash)]
+        [[supp2FromDel1, plantFromDel0], [supp1FromDel2, xdockFromDel1, plantFromDel0]]
+    @test sol.bundlesOnNode[xdockFromDel1] == [bundle2]
+    @test sol.bundlesOnNode[plantFromDel0] == [bundle1, bundle2]
+    supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     plantStep1 = TSGraph.hashToIdx[hash(1, plant.hash)]
     supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
-    supp1Step4 = TSGraph.hashToIdx[hash(4, supplier1.hash)]
     xdockStep4 = TSGraph.hashToIdx[hash(4, xdock.hash)]
     xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]
     plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
-    @test sol.bins[supp2step3, plantStep1] == [OFOND.Bin(20, 30, [commodity1, commodity1])]
-    @test sol.bins[supp1step3, xdockStep4] == [OFOND.Bin(25, 25, [commodity2, commodity3])]
-    @test sol.bins[xdockStep4, plantStep1] == [OFOND.Bin(25, 25, [commodity2, commodity3])]
-    @test sol.bins[supp1step4, xdockStep1] == [OFOND.Bin(25, 25, [commodity4, commodity5])]
-    @test sol.bins[xdockStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity4, commodity5])]
+    @test sol.bins[supp2step4, plantStep1] == [OFOND.Bin(20, 30, [commodity1, commodity1])]
+    supp1step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
+    @test sol.bins[supp1step3, xdockStep4] == [OFOND.Bin(25, 25, [commodity3, commodity2])]
+    @test sol.bins[xdockStep4, plantStep1] == [OFOND.Bin(25, 25, [commodity3, commodity2])]
+    supp1step4 = TSGraph.hashToIdx[hash(4, supplier1.hash)]
+    @test sol.bins[supp1step4, xdockStep1] == [OFOND.Bin(25, 25, [commodity5, commodity4])]
+    @test sol.bins[xdockStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity5, commodity4])]
 end
