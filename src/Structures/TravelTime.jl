@@ -221,3 +221,28 @@ end
 function is_platform(travelTimeGraph::TravelTimeGraph, node::Int)
     return travelTimeGraph.networkNodes[node].type in [:xdock, :iln]
 end
+
+function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
+    firstNode = 1
+    for (src, dst) in partition(path, 2, 1)
+        if travelTimeGraph.networkArcs[src, dst].type == :shortcut
+            firstNode += 1
+        else
+            break
+        end
+    end
+    deleteat!(path, 1:(firstNode - 1))
+    return (firstNode - 1) * EPS
+end
+
+# TODO : see the actual use for this function after thorough anaysis of algorithms
+# Shortcut for computing shortest paths
+function shortest_path(travelTimeGraph::TravelTimeGraph, src::Int, dst::Int)
+    dijkstraState = dijkstra_shortest_paths(
+        travelTimeGraph.graph, src, travelTimeGraph.costMatrix; maxdist=INFINITY
+    )
+    shortestPath = enumerate_paths(dijkstraState, dst)
+    removedCost = remove_shortcuts!(shortestPath, travelTimeGraph)
+    pathCost = dijkstraState.dists[dst]
+    return shortestPath, pathCost - removedCost
+end

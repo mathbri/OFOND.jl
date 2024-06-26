@@ -7,19 +7,6 @@ function is_path_partial(TTGraph::TravelTimeGraph, bundle::Bundle, path::Vector{
     return false
 end
 
-function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
-    firstNode = 1
-    for (src, dst) in partition(path, 2, 1)
-        if travelTimeGraph.networkArcs[src, dst].type == :shortcut
-            firstNode += 1
-        else
-            break
-        end
-    end
-    deleteat!(path, 1:(firstNode - 1))
-    return (firstNode - 1) * EPS
-end
-
 function add_bundle!(
     solution::Solution,
     instance::Instance,

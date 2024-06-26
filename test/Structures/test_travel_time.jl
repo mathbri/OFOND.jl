@@ -227,3 +227,46 @@ end
     @test OFOND.is_port(ttg, allIdxs[11])
     @test !OFOND.is_port(ttg, allIdxs[end])
 end
+
+supp1FromDel3 = ttg.hashToIdx[hash(3, supplier1.hash)]
+supp1FromDel2 = ttg.hashToIdx[hash(2, supplier1.hash)]
+supp1FromDel1 = ttg.hashToIdx[hash(1, supplier1.hash)]
+
+xdockFromDel2 = ttg.hashToIdx[hash(2, xdock.hash)]
+xdockFromDel1 = ttg.hashToIdx[hash(1, xdock.hash)]
+
+portFromDel1 = ttg.hashToIdx[hash(1, port_l.hash)]
+plantFromDel0 = ttg.hashToIdx[hash(0, plant.hash)]
+TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
+
+@testset "remove shortcuts" begin
+    path = [supp1FromDel3, supp1FromDel2, xdockFromDel1]
+    OFOND.remove_shortcuts!(path, ttg)
+    @test path == [supp1FromDel2, xdockFromDel1]
+    path = [supp1FromDel3, supp1FromDel2, supp1FromDel1, plantFromDel0]
+    OFOND.remove_shortcuts!(path, ttg)
+    @test path == [supp1FromDel1, plantFromDel0]
+    OFOND.remove_shortcuts!(TTPath, ttg)
+    @test TTPath == [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
+end
+
+supp2FromDel1 = ttg.hashToIdx[hash(1, supplier2.hash)]
+
+@testset "shortest path" begin
+    I, J, V = findnz(ttg.costMatrix)
+    addedCost = zeros(Base.size(ttg.costMatrix))
+    for (i, j) in zip(I, J)
+        addedCost[i, j] += 100
+    end
+    addedCost[supp1FromDel3, xdockFromDel2] = 10
+    addedCost[xdockFromDel2, portFromDel1] = 10
+    addedCost[portFromDel1, plantFromDel0] = 10
+    ttg.costMatrix .+= addedCost
+    @test OFOND.shortest_path(ttg, supp1FromDel3, plantFromDel0) == (TTPath, 30 + 3e-5)
+    ttg.costMatrix[supp1FromDel3, supp1FromDel2] = 10 + 1e-5
+    ttg.costMatrix[supp1FromDel2, plantFromDel0] = 10 + 1e-5
+    @test OFOND.shortest_path(ttg, supp1FromDel3, plantFromDel0) ==
+        ([supp1FromDel2, plantFromDel0], 20 + 1e-5)
+    @test OFOND.shortest_path(ttg, supp2FromDel1, plantFromDel0) ==
+        ([supp2FromDel1, plantFromDel0], 100 + 1e-5)
+end

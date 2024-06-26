@@ -8,25 +8,11 @@ end
 
 supp1FromDel3 = TTGraph.hashToIdx[hash(3, supplier1.hash)]
 supp1FromDel2 = TTGraph.hashToIdx[hash(2, supplier1.hash)]
-supp1FromDel1 = TTGraph.hashToIdx[hash(1, supplier1.hash)]
-
 xdockFromDel2 = TTGraph.hashToIdx[hash(2, xdock.hash)]
 xdockFromDel1 = TTGraph.hashToIdx[hash(1, xdock.hash)]
-
 portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
 plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
 TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
-
-@testset "remove shortcuts" begin
-    path = [supp1FromDel3, supp1FromDel2, xdockFromDel1]
-    OFOND.remove_shortcuts!(path, TTGraph)
-    @test path == [supp1FromDel2, xdockFromDel1]
-    path = [supp1FromDel3, supp1FromDel2, supp1FromDel1, plantFromDel0]
-    OFOND.remove_shortcuts!(path, TTGraph)
-    @test path == [supp1FromDel1, plantFromDel0]
-    OFOND.remove_shortcuts!(TTPath, TTGraph)
-    @test TTPath == [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
-end
 
 sol = OFOND.Solution(TTGraph, TSGraph, bundles)
 
