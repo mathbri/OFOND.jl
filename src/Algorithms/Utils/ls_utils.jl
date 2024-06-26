@@ -133,6 +133,7 @@ end
 function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
     src == dst && return false
     is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
+    TTGraph.stepToDel[src] < TTGraph.stepToDel[dst] && return false
     return true
 end
 
@@ -166,6 +167,7 @@ function get_paths_to_update(
     return paths
 end
 
+# TODO : this info can be stored in the solution to go faster, just a vector of Float64 to be updated in update_solution!
 function bundle_path_linear_cost(
     bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
 )
@@ -179,3 +181,5 @@ function bundle_path_linear_cost(
     end
     return cost
 end
+
+# TODO : create a revert solution function to make it clearer in the code

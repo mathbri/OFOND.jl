@@ -191,17 +191,20 @@ TSGraph = OFOND.TimeSpaceGraph(network, 4)
     # so removing bundle 3 when sharing arcs with bundle 1 remived all commodties, not just bundle3
     # so adding bundle 1 again
     OFOND.update_solution!(sol, instance, [bundle1], [[3, 8, 15]])
+    supp1step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
     @test sol.bins[supp1step3, xdockStep4] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
     @test sol.bins[supp1step3, plantStep1] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     supp1step4 = TSGraph.hashToIdx[hash(4, supplier1.hash)]
     @test sol.bins[supp1step4, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     @test sol.bins[xdockStep4, plantStep1] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     @test sol.bins[supp2step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
 end
 
 @testset "Node selection" begin
     @test !OFOND.are_nodes_candidate(TTGraph, 20, 20)
-    @test OFOND.are_nodes_candidate(TTGraph, 1, 2)
+    @test !OFOND.are_nodes_candidate(TTGraph, 1, 2)
+    @test OFOND.are_nodes_candidate(TTGraph, 2, 1)
     # add second port to check second false case
     network2 = deepcopy(network)
     port_d = OFOND.NetworkNode("005", :port_d, "PortL2", LLA(3, 3), "FR", "EU", true, 0.0)

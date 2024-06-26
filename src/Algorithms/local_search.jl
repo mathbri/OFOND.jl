@@ -121,6 +121,7 @@ function two_node_incremental!(
     sorted::Bool=false,
     current_cost::Bool=false,
 )
+    TTGraph = instance.travelTimeGraph
     twoNodeBundles = get_bundles_to_update(solution, src, dst)
     # If there is no bundles concerned, returning
     length(twoNodeBundles) == 0 && return nothing
@@ -129,22 +130,21 @@ function two_node_incremental!(
     oldBins, costRemoved = save_and_remove_bundle!(
         solution, instance, twoNodeBundles, oldPaths; current_cost=current_cost
     )
-    println("Cost removed : $costRemoved")
     # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
     pathsLinearCost = sum(
         bundle_path_linear_cost(bundle, path, TTGraph) for
         (bundle, path) in zip(twoNodeBundles, oldPaths)
     )
-    println("Linear cost : $pathsLinearCost")
     if costRemoved + pathsLinearCost >= -EPS
-        println("No improvement possible")
         update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
         revert_bins!(solution, oldBins)
         return 0.0
     end
     # Inserting it back
     greedyAddedCost, lbAddedCost, lbSol = 0.0, 0.0, deepcopy(solution)
-    for bundle in twoNodeBundles
+    sortedBundleIdxs = sortperm(twoNodeBundles; by=bun -> bun.maxPackSize, rev=true)
+    for bundleIdx in sortedBundleIdxs
+        bundle = twoNodeBundles[bundleIdx]
         greedyPath, lowerBoundPath = both_insertion(
             solution, instance, bundle, src, dst; sorted=sorted, current_cost=current_cost
         )
@@ -156,24 +156,21 @@ function two_node_incremental!(
             lbSol, instance, [bundle], [lowerBoundPath]; sorted=sorted
         )
     end
-    println("Greedy cost : $greedyAddedCost")
-    println("Lower bound cost : $lbAddedCost")
     # Solution already updated so if it didn't improve, reverting to old state
-    if min(greedyAddedCost, lbAddedCost) + costRemoved < -1e-3
-        println("No improvement with new paths")
-        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+    if min(greedyAddedCost, lbAddedCost) + costRemoved > -1e-3
+        # solution is already updated so needs to remove bundle on nodes again
+        update_solution!(solution, instance, twoNodeBundles, oldPaths; remove=true)
+        update_solution!(solution, instance, twoNodeBundles, oldPaths; skipRefill=true)
         revert_bins!(solution, oldBins)
         return 0.0
     else
         # Choosing the best update (greedy by default)
         if greedyAddedCost > lbAddedCost
-            println("LB insertion improved and is better")
             change_solution_to_other!(
                 solution, lbSol, instance, twoNodeBundles; sorted=sorted
             )
             return lbAddedCost + costRemoved
         else
-            println("Greedy insertion improved and is better")
             return greedyAddedCost + costRemoved
         end
     end
@@ -181,7 +178,7 @@ end
 
 function local_search!(solution::Solution, instance::Instance)
     # Combine the three small neighborhoods
-    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    TTGraph = instance.travelTimeGraph
     sort_order_content!(instance)
     # First, bundle reintroduction to change whole paths
     bundleIdxs = randperm(length(instance.bundles))
@@ -190,7 +187,9 @@ function local_search!(solution::Solution, instance::Instance)
         bundle_reintroduction!(solution, instance, bundle; sorted=true)
     end
     # Second, two node incremental to optimize shared network
-    for src in TTGraph.commonNodes, dst in TTGraph.commonNodes
+    plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
+    two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
+    for src in two_node_nodes, dst in two_node_nodes
         are_nodes_candidate(TTGraph, src, dst) || continue
         two_node_incremental!(solution, instance, src, dst; sorted=true)
     end

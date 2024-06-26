@@ -110,20 +110,39 @@ network2 = deepcopy(network)
 
 xdock2 = OFOND.NetworkNode("006", :xdock, "XDock1", LLA(3, 1), "FR", "EU", true, 1.0)
 xdock3 = OFOND.NetworkNode("007", :xdock, "XDock3", LLA(4, 1), "CN", "AS", true, 1.0)
+supplier3 = OFOND.NetworkNode("008", :supplier, "Supp3", LLA(1, 1), "CN", "AS", false, 0.0)
 OFOND.add_node!(network2, xdock2)
 OFOND.add_node!(network2, xdock3)
+OFOND.add_node!(network2, supplier3)
+
+# TODO : resume from here
 
 xdock1_to_2 = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 5.0, false, 0.0, 50)
 xdock1_to_3 = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 4.0, false, 0.0, 50)
 xdock2_to_3 = OFOND.NetworkArc(:cross_plat, 0.1, 0, true, 2.0, false, 0.0, 50)
 xdock2_to_plant = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 6.0, false, 1.0, 50)
 xdock3_to_plant = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 3.0, false, 1.0, 50)
+
 OFOND.add_arc!(network2, xdock, xdock2, xdock1_to_2)
 OFOND.add_arc!(network2, xdock, xdock3, xdock1_to_3)
+OFOND.add_arc!(network2, xdock2, xdock3, xdock2_to_3)
 OFOND.add_arc!(network2, xdock2, plant, xdock2_to_plant)
 OFOND.add_arc!(network2, xdock3, plant, xdock3_to_plant)
+OFOND.add_arc!(network2, supplier3, xdock, supp_to_plat)
+
+# Modifying bundle 3 to make it not equal anymore to bundle 1
+bundle11 = OFOND.Bundle(supplier1, plant, [order1], 1, bunH1, 10, 3)
+bunH3 = hash(supplier3, hash(plant))
+order33 = OFOND.Order(
+    bunH3, 1, [commodity2, commodity1], hash(1, bunH3), 25, bpDict, 10, 6.0
+)
+order44 = OFOND.Order(
+    bunH3, 2, [commodity1, commodity2], hash(1, bunH3), 25, bpDict, 10, 6.0
+)
+bundle33 = OFOND.Bundle(supplier3, plant, [order33, order44], 3, bunH3, 15, 3)
 
 # Cretaing new instance
+bundles[[1, 3]] = [bundle11, bundle33]
 TTGraph2 = OFOND.TravelTimeGraph(network2, bundles)
 TSGraph2 = OFOND.TimeSpaceGraph(network2, 4)
 instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates)
@@ -132,10 +151,13 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates)
 supp1FromDel3 = TTGraph2.hashToIdx[hash(3, supplier1.hash)]
 xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
 xdock2fromDel1 = TTGraph2.hashToIdx[hash(1, xdock2.hash)]
-plantFromDel0 = TTGraph2.hashToIdx[hash(0, plant.hash)]
-TTPath12 = [supp1FromDel3, xdock1FromDel2, xdock2fromDel1, plantFromDel0]
 xdock3fromDel1 = TTGraph2.hashToIdx[hash(1, xdock3.hash)]
-TTPath13 = [supp1FromDel3, xdock1FromDel2, xdock3fromDel1, plantFromDel0]
+plantFromDel0 = TTGraph2.hashToIdx[hash(0, plant.hash)]
+TTPath112 = [supp1FromDel3, xdock1FromDel2, xdock2fromDel1, plantFromDel0]
+TTPath113 = [supp1FromDel3, xdock1FromDel2, xdock3fromDel1, plantFromDel0]
+
+supp3FromDel3 = TTGraph2.hashToIdx[hash(3, supplier3.hash)]
+TTPath313 = [supp3FromDel3, xdock1FromDel2, xdock3fromDel1, plantFromDel0]
 supp2fromDel1 = TTGraph2.hashToIdx[hash(1, supplier2.hash)]
 
 # New TSPath
@@ -147,24 +169,27 @@ xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
 @testset "Two node incremental" begin
     sol = OFOND.Solution(TTGraph2, TSGraph2, bundles)
     # put bundle 1 on TTPath12 and bundle 3 on TTPath13
-    OFOND.update_solution!(sol, instance2, [bundle1, bundle3], [TTPath12, TTPath13])
+    OFOND.update_solution!(sol, instance2, [bundle11, bundle33], [TTPath112, TTPath313])
     OFOND.update_solution!(sol, instance2, [bundle2], [[supp2fromDel1, plantFromDel0]])
 
+    bundles[1].orders[1].bpUnits[:cross_plat] = 1
     # testing just the bundle1 alone from xdock2 to plant 
     costImprov = OFOND.two_node_incremental!(sol, instance2, xdock2fromDel1, plantFromDel0)
     # initial path is TTPath12
     # new path goes to xdock3 before plant
-    @test costImprov ≈ 0.0
+    @test costImprov ≈ -3.3
+    xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
     @test sol.bundlePaths == [
         [supp1FromDel3, xdock1FromDel2, xdock2fromDel1, xdock3fromDel1, plantFromDel0],
         [supp2fromDel1, plantFromDel0],
-        TTPath13,
+        TTPath313,
     ]
+
     # testing bundle on nodes
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle1, bundle2, bundle3]
-    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle1, bundle3]
-    @test sol.bundlesOnNode[xdock2fromDel1] == [bundle1]
-    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle1, bundle3]
+    @test sol.bundlesOnNode[plantFromDel0] == [bundle11, bundle33, bundle2]
+    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle11, bundle33]
+    @test sol.bundlesOnNode[xdock2fromDel1] == [bundle11]
+    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle33, bundle11]
     # testing bins
     # just bundle 1
     @test sol.bins[xdock1Step3, xdock2Step4] ==
@@ -176,25 +201,27 @@ xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
     @test sol.bins[xdock2Step4, xdock3Step4] ==
         [OFOND.Bin(30, 20, [commodity1, commodity1])]
     # bundle 1 and 3
-    @test sol.bins[xdock2Step4, plantStep1] ==
+    @test sol.bins[xdock3Step4, plantStep1] ==
         [OFOND.Bin(5, 45, [commodity2, commodity1, commodity1, commodity1])]
     # nobody
-    @test sol.bins[xdock3Step4, plantStep1] == OFOND.Bin[]
+    @test sol.bins[xdock2Step4, plantStep1] == OFOND.Bin[]
 
     # now testing bundle 1 and 3 together
-    # without, same propostion so that greedy insertion is better
-    costImprov = OFOND.two_node_incremental!(sol, instance2, xdock1fromDel2, plantFromDel0)
-    @test costImprov ≈ 0.0
-    @test sol.bundlePaths == [TTPath13, [supp2fromDel1, plantFromDel0], TTPath13]
+    xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
+    costImprov = OFOND.two_node_incremental!(sol, instance2, xdock1FromDel2, plantFromDel0)
+    @test costImprov ≈ -7.7
+    @test sol.bundlePaths == [TTPath113, [supp2fromDel1, plantFromDel0], TTPath313]
     # testing bundle on nodes
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle1, bundle2, bundle3]
-    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle1, bundle3]
+    @test sol.bundlesOnNode[plantFromDel0] == [bundle11, bundle33, bundle2]
+    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle11, bundle33]
     @test sol.bundlesOnNode[xdock2fromDel1] == OFOND.Bundle[]
-    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle1, bundle3]
+    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle33, bundle11]
     # testing bins
     @test sol.bins[xdock1Step3, xdock2Step4] == OFOND.Bin[]
     @test sol.bins[xdock1Step3, xdock3Step4] ==
         [OFOND.Bin(5, 45, [commodity2, commodity1, commodity1, commodity1])]
+    xdock1Step4 = TSGraph2.hashToIdx[hash(4, xdock.hash)]
+    xdock3Step1 = TSGraph2.hashToIdx[hash(1, xdock3.hash)]
     @test sol.bins[xdock1Step4, xdock3Step1] ==
         [OFOND.Bin(25, 25, [commodity2, commodity1])]
     @test sol.bins[xdock2Step4, xdock3Step4] == OFOND.Bin[]
@@ -211,11 +238,25 @@ end
     # mix of the above, from bad solution to good
     sol = OFOND.Solution(TTGraph2, TSGraph2, bundles)
     greedySol = deepcopy(sol)
-    OFOND.lower_bound!(sol, instance2)
+    OFOND.lower_bound!(greedySol, instance2)
     # put bundle 1 on TTPath12 and bundle 3 on TTPath13
-    OFOND.update_solution!(sol, instance2, [bundle1, bundle3], [TTPath12, TTPath13])
+    OFOND.update_solution!(sol, instance2, [bundle11, bundle33], [TTPath112, TTPath313])
     OFOND.update_solution!(sol, instance2, [bundle2], [[supp2fromDel1, plantFromDel0]])
     # changing with full local search 
-    OFOND.local_search!(sol, instance2, TSGraph2, TTGraph2, bundles)
-    @test sol == greedySol
+    OFOND.local_search!(sol, instance2)
+    @test sol.bundlePaths == greedySol.bundlePaths
+    for (node, bundlesOnNode) in sol.bundlesOnNode
+        sort!(bundlesOnNode; by=b -> b.idx)
+        sort!(greedySol.bundlesOnNode[node]; by=b -> b.idx)
+    end
+    @test sol.bundlesOnNode == greedySol.bundlesOnNode
+    for arc in edges(TSGraph2.graph)
+        for bin in sol.bins[arc.src, arc.dst]
+            sort!(bin.content)
+        end
+        for bin in greedySol.bins[arc.src, arc.dst]
+            sort!(bin.content)
+        end
+    end
+    @test sol.bins == greedySol.bins
 end
