@@ -68,6 +68,7 @@ function bundle_reintroduction!(
     oldBins, costRemoved = save_and_remove_bundle!(
         solution, instance, bundles, oldPaths; current_cost=current_cost
     )
+    # TODO : this check can be done before actually modifying the current solution to be more efficient
     # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
     pathsLinearCost = bundle_path_linear_cost(bundle, oldPaths[1], TTGraph)
     if costRemoved + pathsLinearCost >= -EPS

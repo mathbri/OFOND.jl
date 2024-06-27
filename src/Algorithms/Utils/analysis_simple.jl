@@ -4,78 +4,9 @@
 # To be used with @time or @profile or @profile_alloc
 
 # First analysis would be to check whether things happen
+global RECOMPUTATION, NEVER_ADMISSIBLE, COST_INCREASE = 0, 0, 0.0
 # Then if it happens a lot, a deeper analysis may be neededs
 # Maybe writing logs in csv file would ease the analysis so that it can be done in a notebook
-
-function lower_bound_insertion_analysis(
-    solution::Solution,
-    TTGraph::TravelTimeGraph,
-    TSGraph::TimeSpaceGraph,
-    bundle::Bundle,
-    src::Int,
-    dst::Int;
-)
-    recomputed, giantBetter, giantDiff = false, true, 0.0
-    update_cost_matrix!(
-        solution,
-        TTGraph,
-        TSGraph,
-        bundle;
-        sorted=sorted,
-        use_bins=true,
-        current_cost=current_cost,
-    )
-    pathCostMatrix = deepcopy(TTGraph.costMatrix)
-    shortestPath, pathCost = lower_bound_path(
-        solution,
-        TTGraph,
-        TSGraph,
-        bundle,
-        src,
-        dst;
-        use_bins=true,
-        current_cost=false,
-        giant=true,
-    )
-    # If the path is not admissible, re-computing it
-    if !is_path_admissible(TTGraph, shortestPath)
-        recomputed = true
-        shortestPath1, pathCost1 = lower_bound_path(
-            solution,
-            TTGraph,
-            TSGraph,
-            bundle,
-            src,
-            dst;
-            use_bins=false,
-            current_cost=false,
-            giant=false,
-        )
-        pathCost1 = get_path_cost(shortestPath1, pathCostMatrix)
-        shortestPath2, pathCost2 = lower_bound_path(
-            solution,
-            TTGraph,
-            TSGraph,
-            bundle,
-            src,
-            dst;
-            use_bins=false,
-            current_cost=false,
-            giant=true,
-        )
-        pathCost2 = get_path_cost(shortestPath2, pathCostMatrix)
-        giantDiff = pathCost2 - pathCost1
-        if pathCost1 < pathCost2 && is_path_admissible(TTGraph, shortestPath1)
-            shortestPath, pathCost = shortestPath1, pathCost1
-            giantBetter = false
-        else
-            shortestPath, pathCost = shortestPath2, pathCost2
-            giantBetter = true
-            giantDiff > 0 && (giantDiff = 0.0)
-        end
-    end
-    return shortestPath, pathCost, recomputed, giantBetter, round(Int, giantDiff)
-end
 
 function greedy_insertion_analysis(
     solution::Solution,
@@ -85,7 +16,6 @@ function greedy_insertion_analysis(
     src::Int,
     dst::Int;
 )
-    recomputed, binUsedBetter, binUsedDiff = false, true, 0.0
     shortestPath, pathCost = greedy_path(
         solution,
         TTGraph,
@@ -99,24 +29,10 @@ function greedy_insertion_analysis(
     )
     # If the path is not admissible, re-computing it
     if !is_path_admissible(TTGraph, shortestPath)
-        recomputed = true
+        global RECOMPUTATION += 1
         # First trying to halve cost for the path computation
         costMatrix = deepcopy(TTGraph.costMatrix)
-        shortestPath1, pathCost = greedy_path(
-            solution,
-            TTGraph,
-            TSGraph,
-            bundle,
-            src,
-            dst;
-            sorted=true,
-            use_bins=true,
-            opening_factor=0.5,
-            current_cost=false,
-        )
-        pathCost1 = get_path_cost(shortestPath1, costMatrix)
-        # Then not taking into account the current solution
-        shortestPath2, pathCost = greedy_path(
+        shortestPath1, pathCost1 = greedy_path(
             solution,
             TTGraph,
             TSGraph,
@@ -127,44 +43,19 @@ function greedy_insertion_analysis(
             use_bins=false,
             current_cost=false,
         )
-        pathCost2 = get_path_cost(shortestPath2, costMatrix)
-        binUsedDiff = pathCost2 - pathCost1
-        if pathCost1 < pathCost2 && is_path_admissible(TTGraph, shortestPath1)
-            shortestPath, pathCost = shortestPath1, pathCost1
-            binUsedBetter = true
-        else
-            shortestPath, pathCost = shortestPath2, pathCost2
-            binUsedBetter = false
-            binUsedDiff > 0 && (binUsedDiff = 0.0)
-        end
+        pathCost1 = get_path_cost(shortestPath1, costMatrix)
+        global COST_INCREASE += pathCost1 - pathCost
+        is_path_admissible(TTGraph, shortestPath1) || (global NEVER_ADMISSIBLE += 1)
+        return shortestPath1, pathCost1
     end
-    return shortestPath, pathCost, recomputed, binUsedBetter, round(Int, binUsedDiff)
-end
-
-function update_counters!(
-    counters::Dict{String,Int},
-    recomputed::Bool,
-    binUsedBetter::Bool,
-    binUsedDiff::Float64;
-    lowerBound::Bool=false,
-)
-    prefix = "Bin"
-    lowerBound && (prefix = "Giant")
-    recomputed && (counters["Recomputed"] += 1)
-    binUsedBetter && (counters["$prefix Used Better"] += 1)
-    if binUsedBetter
-        counters["$prefix Used Diff"] += binUsedDiff
-    else
-        counters["$prefix Not Used Diff"] += binUsedDiff
-    end
+    return shortestPath, pathCost
 end
 
 function greedy_analysis(solution::Solution, instance::Instance; shuffle::Bool=false)
+    println("\nGreedy analysis :")
     sol, inst = deepcopy(solution), deepcopy(instance)
+    global RECOMPUTATION, NEVER_ADMISSIBLE, COST_INCREASE = 0, 0, 0.0
     TTGraph, TSGraph = inst.travelTimeGraph, inst.timeSpaceGraph
-    counters = init_counters([
-        "Recomputed", "Bin Used Better", "Bin Used Diff", "Bin Not Used Diff"
-    ])
     # Sorting commodities in orders and bundles between them
     sort_order_content!(inst)
     sortedBundleIdxs = if !shuffle
@@ -173,43 +64,44 @@ function greedy_analysis(solution::Solution, instance::Instance; shuffle::Bool=f
         randperm(length(bundles))
     end
     # Computing the greedy delivery possible for each bundle
+    cost = 0.0
     for bundleIdx in sortedBundleIdxs
         bundle = inst.bundles[bundleIdx]
-
         # Retrieving bundle start and end nodes
         suppNode = TTGraph.bundleStartNodes[bundleIdx]
         custNode = TTGraph.bundleEndNodes[bundleIdx]
         # Computing shortest path
-        shortestPath, pathCost, recomputed, binUsedBetter, binUsedDiff = greedy_insertion_analysis(
+        shortestPath, pathCost = greedy_insertion_analysis(
             sol, TTGraph, TSGraph, bundle, suppNode, custNode
         )
-
-        update_counters!(counters, recomputed, binUsedBetter, binUsedDiff)
-
         # Adding path to solution
-        update_solution!(sol, inst, [bundle], [shortestPath]; sorted=true)
+        cost += update_solution!(sol, inst, [bundle], [shortestPath]; sorted=true)
     end
-    println("Solution cost : $(compute_cost(inst, sol))")
-    counters["Bin Used Mean Diff"] = counters["Bin Used Diff"] / counters["Bin Used Better"]
-    binNotUsedBetter = counters["Recomputed"] - counters["Bin Used Better"]
-    counters["Bin Not Used Mean Diff"] = counters["Bin Not Used Diff"] / binNotUsedBetter
-    print_counters(counters)
-
-    return sol, inst
+    println("Solution cost : $cost")
+    println(
+        "Recomputations : $RECOMPUTATION done with $NEVER_ADMISSIBLE never admissible and a cost increase of $COST_INCREASE \n",
+    )
+    return sol, inst, cost
 end
 
 function greedy_shuffle_analysis(solution::Solution, instance::Instance; n_iter::Int=10)
-    meancost = 0.0
+    meanRecomp, meanNever, meanCostIncr, meanCost = 0.0
     for _ in 1:n_iter
-        sol, inst = greedy_analysis(solution, instance; shuffle=true)
-        meancost += compute_cost(inst, sol)
+        sol, inst, cost = greedy_analysis(solution, instance; shuffle=true)
+        meancost += cost
+        meanRecomp += RECOMPUTATION
+        meanNever += NEVER_ADMISSIBLE
+        meanCostIncr += COST_INCREASE
     end
-    meancost /= n_iter
-    return println("Mean cost: $meancost")
+    println("Mean cost: $(meancost / n_iter)")
+    println("Mean recomputation: $(meanRecomp / n_iter)")
+    println("Mean never admissible: $(meanNever / n_iter)")
+    return println("Mean cost increase: $(meanCostIncr / n_iter) \n")
 end
 
 # Running bin packing improvement with analysis logging and no change in data
 function packing_recomputation_analysis!(sol::Solution, inst::Instance)
+    println("\nPacking recomputation analysis :")
     costImprov = 0.0
     counters = init_counters([
         "One Bin", "Linear", "Boud Reached", "BFD Better", "New Better"
@@ -252,102 +144,137 @@ function packing_recomputation_analysis!(sol::Solution, inst::Instance)
     end
     println("Cost improvement with recomputation: $costImprov")
     print_counters(counters)
+    print_counters(gapCounters)
+    println()
     return costImprov
 end
 
-function bundle_reintroduction_analysis!(sol::Solution, inst::Instance)
+global RECOMPUTATION_LB, NEVER_ADMISSIBLE_LB, COST_INCREASE_LB = 0, 0, 0.0
+
+function lower_bound_insertion_analysis(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    src::Int,
+    dst::Int;
+)
+    update_cost_matrix!(
+        solution, TTGraph, TSGraph, bundle; sorted=sorted, use_bins=true, current_cost=false
+    )
+    pathCostMatrix = deepcopy(TTGraph.costMatrix)
+    shortestPath, pathCost = lower_bound_path(
+        solution,
+        TTGraph,
+        TSGraph,
+        bundle,
+        src,
+        dst;
+        use_bins=true,
+        current_cost=false,
+        giant=true,
+    )
+    pathCost = get_path_cost(shortestPath, pathCostMatrix)
+    # If the path is not admissible, re-computing it
+    if !is_path_admissible(TTGraph, shortestPath)
+        global RECOMPUTATION_LB += 1
+        shortestPath1, pathCost1 = lower_bound_path(
+            solution,
+            TTGraph,
+            TSGraph,
+            bundle,
+            src,
+            dst;
+            use_bins=false,
+            current_cost=false,
+            giant=false,
+        )
+        pathCost1 = get_path_cost(shortestPath1, pathCostMatrix)
+        global COST_INCREASE_LB += pathCost1 - pathCost
+        is_path_admissible(TTGraph, shortestPath1) || (global NEVER_ADMISSIBLE_LB += 1)
+        return shortestPath1, pathCost1
+    end
+    return shortestPath, pathCost
+end
+
+global NO_IMROV_POSSIBLE, NO_IMPROV_DONE = 0, 0
+global LB_BETTER, LB_BETTER_DIFF, G_BETTER_DIFF = 0, 0.0, 0.0
+
+function bundle_reintroduction_analysis!(solution::Solution, instance::Instance)
+    println("\nBundle reintroduction analysis :")
+    global RECOMPUTATION, NEVER_ADMISSIBLE, COST_INCREASE = 0, 0, 0.0
+    global RECOMPUTATION_LB, NEVER_ADMISSIBLE_LB, COST_INCREASE_LB = 0, 0, 0.0
+    global NO_IMPROV_DONE, NO_IMROV_POSSIBLE, LB_BETTER, LB_BETTER_DIFF, G_BETTER_DIFF = 0,
+    0, 0, 0.0,
+    0.0
+    sol, inst = deepcopy(solution), deepcopy(instance)
     costImprov = 0.0
-
-    counters = init_counters(["Negative Removal", "No Improv", "Same Path", "LB Better"])
-    greedyCounters = init_counters([
-        "Recomputed", "Bin Used Better", "Bin Used Diff", "Bin Not Used Diff"
-    ])
-    lbCounters = init_counters([
-        "Recomputed", "Giant Used Better", "Giant Used Diff", "Giant Not Used Diff"
-    ])
-    improvCharac = init_counters([
-        "Total", "Greedy", "LB", "On Direct", "Mean Orders", "Mean Commo", "Mean Volume"
-    ])
-
-    for bundle in inst.bundles
+    bundleIdxs = randperm(length(inst.bundles))
+    for bundleIdx in bundleIdxs
+        bundle = inst.bundles[bundleIdx]
         TTGraph, TSGraph = inst.travelTimeGraph, inst.timeSpaceGraph
         bundles, paths = [bundle], [sol.bundlePaths[bundle.idx]]
         # Saving previous solution state 
         previousBins, costRemoved = save_and_remove_bundle!(
             sol, inst, bundles, paths; current_cost=false
         )
-        # If the cost removed is negative or null, no chance of improving 
-        if costRemoved <= 0
-            counters["Negative Removal"] += 1
-            update_solution!(solution, instance, bundles, paths; skipRefill=true)
+        # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
+        pathsLinearCost = bundle_path_linear_cost(bundle, oldPaths[1], TTGraph)
+        if costRemoved + pathsLinearCost >= -EPS
+            global NO_IMROV_POSSIBLE += 1
+            update_solution!(sol, inst, bundles, oldPaths; skipRefill=true)
             # Reverting bins to the previous state
-            revert_bins!(sol, previousBins)
+            revert_bins!(sol, oldBins)
             continue
         end
         # Inserting it back
         suppNode = TTGraph.bundleStartNodes[bundle.idx]
         custNode = TTGraph.bundleEndNodes[bundle.idx]
-
         # Computing shortest path
-        bestCost, bestPath, recomputedG, binUsedBetter, binUsedDiff = greedy_insertion_analysis(
+        bestPath, bestCost = greedy_insertion_analysis(
             sol, TTGraph, TSGraph, bundle, suppNode, custNode
         )
-        lbPath, lbCost, recomputedLB, giantBetter, giantDiff = lower_bound_insertion_analysis(
-            solution, TTGraph, TSGraph, bundle, suppNode, custNode
+        lbPath, lbCost = lower_bound_insertion_analysis(
+            sol, TTGraph, TSGraph, bundle, suppNode, custNode
         )
-        # Computing real cost of lbPath
-        update_cost_matrix!(
-            solution, TTGraph, TSGraph, bundle; sorted=sorted, use_bins=true
-        )
-        lbCost = get_path_cost(lbPath, TTGraph.costMatrix)
         # Selecting the best one
-        if bestCost > lbCost
-            counters["LB Better"] += 1
-            pathCost < costRemoved && (improvCharac["LB"] += costRemoved - pathCost)
-            bestCost, bestPath = lbCost, lbPath
-            update_counters!(
-                lbCounters, recomputedLB, giantBetter, giantDiff; lowerBound=true
-            )
+        if greedyCost > lbCost
+            global LB_BETTER += 1
+            global LB_BETTER_DIFF += greedyCost - lbCost
+            bestPath, bestCost = lbPath, lbCost
         else
-            update_counters!(greedyCounters, recomputedG, binUsedBetter, binUsedDiff)
-            pathCost < costRemoved && (improvCharac["Greedy"] += costRemoved - pathCost)
+            global G_BETTER_DIFF += lbCost - greedyCost
         end
 
         # Updating path if it improves the cost
-        if pathCost < costRemoved
+        if bestCost + costRemoved < -EPS
             costImprov += costRemoved - pathCost
-            improvCharac["Total"] += 1
-            length(paths[1]) == 2 && (improvCharac["On Direct"] += 1)
-            improvCharac["Mean Orders"] += length(bundle.orders)
-            improvCharac["Mean Commo"] += sum(o -> length(o.content), bundle.orders)
-            improvCharac["Mean Volume"] += sum(o -> o.volume, bundle.orders)
-            update_solution!(solution, instance, bundles, [bestPath]; sorted=true)
+            update_solution!(sol, inst, bundles, [bestPath]; sorted=true)
         else
-            counters["No Improv"] += 1
-            paths[1] == bestPath && (counters["Same Path"] += 1)
-            update_solution!(
-                solution, instance, bundles, paths; remove=true, skipRefill=true
-            )
-            revert_bins!(sol, previousBins)
+            global NO_IMPROV_DONE += 1
+            update_solution!(sol, inst, bundles, oldPaths; skipRefill=true)
+            # Reverting bins to the previous state
+            revert_bins!(sol, oldBins)
         end
     end
     println("\nCost improvement : $costImprov")
-    greedyCounters["Bin Used Mean Diff"] =
-        greedyCounters["Bin Used Diff"] / greedyCounters["Bin Used Better"]
-    binNotUsedBetter = greedyCounters["Recomputed"] - greedyCounters["Bin Used Better"]
-    greedyCounters["Bin Not Used Mean Diff"] =
-        greedyCounters["Bin Not Used Diff"] / binNotUsedBetter
-    println("Geedy counters : \n$(print_counters(greedyCounters))")
-    lbCounters["Giant Better Mean Diff"] =
-        lbCounters["Giant Better Diff"] / lbCounters["Giant Better"]
-    binNotUsedBetter = lbCounters["Recomputed"] - lbCounters["Giant Better"]
-    lbCounters["Giant Worse Mean Diff"] =
-        lbCounters["giant Not Used Diff"] / binNotUsedBetter
-    println("Lower bound counters : \n$(print_counters(lbCounters))")
-    println("Improvement characteristic : \n$(print_counters(lbCounters))")
-    println()
+    improvDone = length(bundleIdxs) - (NO_IMPROV_DONE + NO_IMROV_POSSIBLE)
+    println(
+        "Improvements : $improvDone done for $NO_IMROV_POSSIBLE not possible and $NO_IMPROV_DONE not improving",
+    )
+    println(
+        "Insertion comparison : LB insertion better for $LB_BETTER insertions with difference of $LB_BETTER_DIFF and Greedy for $G_BETTER_DIFF",
+    )
+    println(
+        "Greedy recomputations : $RECOMPUTATION done with $NEVER_ADMISSIBLE never admissible and a cost increase of $COST_INCREASE",
+    )
+    println(
+        "Lower bound recomputations : $RECOMPUTATION_LB done with $NEVER_ADMISSIBLE_LB never admissible and a cost increase of $COST_INCREASE_LB \n",
+    )
     return costImprov
 end
+
+# TODO : resume from here
 
 # Create 3 solutions for the analysis : one with all greedy, one with best and one with all lower bound
 function two_node_incremental_analysis!(sol::Solution, inst::Instance)
