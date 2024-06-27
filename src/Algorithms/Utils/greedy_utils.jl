@@ -1,7 +1,5 @@
 # Utils function only used in greedy
 
-# TODO : carbon cost for direct arcs are not linear
-
 # Check whether the arc is fit for a cost update
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]
@@ -95,6 +93,7 @@ function arc_update_cost(
     return arcBundleCost
 end
 
+# Find the other start node starting for the source node given as argument
 function find_other_src_node(travelTimeGraph::TravelTimeGraph, src::Int)
     otherSrcIdx = findfirst(
         dst -> travelTimeGraph.networkArcs[src, dst].type == :shortcut,
@@ -118,11 +117,6 @@ function get_all_start_nodes(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
     end
     return startNodes
 end
-
-# TODO : moving order loop to the most outer one allow to directly project src node before looping over dst node
-# Once the src node is projected, doesn't need to project dst, just looping over outneighbors of projected node
-# How do i get the dst in the TTGraph for the cost update ?
-# How do I handle the fact that the final arc cost will be known at the end of the order loop ?
 
 # Updating cost matrix on the travel time graph for a specific bundle 
 function update_cost_matrix!(
@@ -164,6 +158,7 @@ function is_path_admissible(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
     # Too long ? Too many node ? To be difined
 end
 
+# Computing the cost of a path with the arc cost matrix given
 function path_cost(path::Vector{Int}, costMatrix::SparseMatrixCSC{Float64,Int})
     cost = 0.0
     for (i, j) in partition(path, 2, 1)

@@ -1,12 +1,13 @@
 # Updating functions for the solution
 
-# TODO : could be merged with add_path function
+# Check whether a path is partial 
 function is_path_partial(TTGraph::TravelTimeGraph, bundle::Bundle, path::Vector{Int};)
     bundle.supplier != TTGraph.networkNodes[path[1]] && return true
     bundle.customer != TTGraph.networkNodes[path[end]] && return true
     return false
 end
 
+# Add the bundle to the solution
 function add_bundle!(
     solution::Solution,
     instance::Instance,
@@ -26,7 +27,6 @@ function add_bundle!(
     return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
 end
 
-# TODO : consider BitArray as it contains only boolean values
 # Combine all bundles paths in arguments into a sparse matrix indicating the arcs to work with
 function get_bins_updated(
     TSGraph::TimeSpaceGraph,
@@ -49,6 +49,7 @@ function get_bins_updated(
     return sparse(I, J, V)
 end
 
+# Refill bins
 function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
     allCommodities = get_all_commodities(bins)
     binsBefore = length(bins)
@@ -96,8 +97,6 @@ function remove_bundle!(
     costRemoved = update_bins!(solution, TSGraph, TTGraph, bundle, oldPart; remove=true)
     return (costRemoved, oldPart)
 end
-
-# TODO : write this function only for a bundle and a path, it is weird to always put bracket
 
 # Update the current solution
 # Providing a path with remove option means to remove the bundle only on the path portion provided

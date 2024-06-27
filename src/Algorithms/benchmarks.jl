@@ -1,5 +1,3 @@
-# TODO : add a random delivery mode option (in arc cost ? direct or outsource ?)
-
 # For every bundle :
 #     Compute network arc cost, either precomputed ffd bin-packing or volume * linear cost
 #     Compute the shortest path from supplier to customer on the netwotk graph
@@ -27,9 +25,3 @@ function shortest_delivery!(solution::Solution, instance::Instance)
         update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
     end
 end
-
-# TODO 
-# Average orders volume and either create solution from lower bound solve idea or from milp solve idea
-# Averaging could be done in another way
-
-function average_delivery_heuristic() end

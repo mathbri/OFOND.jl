@@ -1,5 +1,6 @@
 # Utils function for local search neighborhoods
 
+# Check wether a bin is suited for bin packing improvement
 function is_bin_candidate(bins::Vector{Bin}, arcData::NetworkArc; skipLinear::Bool)
     # If there is no bins, one bin or the arc is linear, skipping arc
     length(bins) <= 1 && return false
@@ -10,10 +11,10 @@ function is_bin_candidate(bins::Vector{Bin}, arcData::NetworkArc; skipLinear::Bo
     return true
 end
 
+# Compute new bins for the commodities and arc data
 function compute_new_bins(
     arcData::NetworkArc, allCommodities::Vector{Commodity}; sorted::Bool
 )
-    # TODO : parrallelize the recomputations with the different heuristics
     newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
     bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
     length(newBins) > length(bfdBins) && (newBins = bfdBins)
@@ -154,6 +155,7 @@ function get_bundles_to_update(solution::Solution, node1::Int, node2::Int=-1)
     return intersect(solution.bundlesOnNode[node1], solution.bundlesOnNode[node2])
 end
 
+# return a vector of path (parts or complete) used in neighborhood relying on bundlesOnNode
 function get_paths_to_update(
     solution::Solution, bundles::Vector{Bundle}, node1::Int, node2::Int
 )
@@ -167,7 +169,7 @@ function get_paths_to_update(
     return paths
 end
 
-# TODO : this info can be stored in the solution to go faster, just a vector of Float64 to be updated in update_solution!
+# Compute bundle linear cost on the path used
 function bundle_path_linear_cost(
     bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
 )
@@ -181,5 +183,3 @@ function bundle_path_linear_cost(
     end
     return cost
 end
-
-# TODO : create a revert solution function to make it clearer in the code

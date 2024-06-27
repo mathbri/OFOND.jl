@@ -1,24 +1,5 @@
 # Local search heuristic and building blocks
 
-# There will be a need to adapt to the new route design formulation
-# For the bundles that do not need / already use an oversea arc :
-#    - just changing the bundle def / creation will solve things
-# For the bundle that use oversea arc :
-#    - reintroduce once with the old formulation (one route / 3 months)
-#    - then try to optimize path to and from ports with the new formulation
-# This double calculation can be done for every bundle if we want to add / remove oversea arcs from routes
-# How to handle the two node incremental ? 
-#    - a simple solution is to exclude bundles use oversea arcs
-# Bin packing neighborhood does not change
-
-# For the minimal flow on maritime arcs, one solution is to check at removal time if the quantities left satisfy the minimal flow, if not just recomuting path to and from oversea arc 
-# At insertion time, if the added flow don't make enough for the constraint, arc is forbidden (INF) cost
-# Another option for insertion is to make a first round of insertion without constraint and if there is arcs that does not satisfy, take all bundles of it, forbid arc for every one and recompute insertion and repaeat until constraint are good
-
-# Other question : 
-# Instead of computing greedy and lower boud paths, would it be better to divide it into two different operators ?
-# Like reintroduce all bundles with greedy path and then reintroduce all bundles with lower bound paths ?
-
 # Improving all bin packings if possible
 # The idea is to put skip linear to false just before returning the solution to get a more compact solution but it does not affect the cost
 function bin_packing_improvement!(
@@ -43,13 +24,6 @@ function bin_packing_improvement!(
         costImprov += arcData.unitCost * (length(arcBins) - length(newBins))
     end
     return costImprov
-end
-
-# All arcs are independant when computing bin-packing so can be parrallelized
-function parrallel_bin_packing_improvement!(
-    solution::Solution, instance::Instance; sorted::Bool=false, skipLinear::Bool=true
-)
-    # TODO : parrallelize here with native @threads
 end
 
 # Removing and inserting back the bundle in the solution.
@@ -102,15 +76,6 @@ function bundle_reintroduction!(
         return 0.0
     end
 end
-
-# TODO : do Oscar's trick for memory efficient computation
-# Define solution2 (or lbSol) outside of the function, modify them both in the function 
-# and permute the return to choose the best, the other being the one not needed 
-# ie return (sol, sol2) or (sol2, sol)
-# is it really applicable here as we have to start from the same solution ?
-# not exactly as we have to make them both equal at the end of the neighborhood function 
-# but just need to create this function that make them equal and we can avoid allocating memory for all the old paths and bins
-# this trick could be used also for the other neighborhoods
 
 # Remove and insert back all bundles flowing from src to dst 
 function two_node_incremental!(

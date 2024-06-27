@@ -103,28 +103,3 @@ function lower_bound!(solution::Solution, instance::Instance)
     println("Lower Bound Computed : $lowerBound")
     return lowerBound
 end
-
-function parrallel_lower_bound!(solution::Solution, instance::Instance)
-    lowerBound = 0.0
-    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    # Sorting commodities in orders and bundles between them
-    sort_order_content!(instance)
-    # Computing the lower bound delivery for each bundle
-    # TODO : parrallelize here with native @threads
-    # cut the instance by bundles and merge them at the end
-    return println("Lower Bound Computed : $lowerBound")
-end
-
-# TODO : use this heuristic as a filtering operation on the instance ?
-# I run the lower bound heuristic : it splits my instance between directs and non-directs 
-# Because the cost is lower bound, the directs are sure to be one ?
-# Than I can just consider the non-directs for the LNS
-
-function lower_bound_filtering!(instance::Instance, solution::Solution)
-    # solution is supposed to be one from lower bound heuristic
-    # (or run lower bound heuristic first)
-    # two mode : aggressive or not 
-    # aggressive : all bundle taking direct paths are filtered from instance
-    # not aggressive : all bundle taking direct paths and BP lower bound is reached for orders are filtered from instance
-    # use milp packing for order bp precomputation ?
-end

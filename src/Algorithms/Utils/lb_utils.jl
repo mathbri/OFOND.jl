@@ -1,5 +1,6 @@
 # Functions used for lower bound computation
 
+# Computing the transport units for an order
 function lb_transport_units(
     solution::Solution,
     TSGraph::TimeSpaceGraph,
@@ -25,6 +26,7 @@ function lb_transport_units(
     return orderTrucks
 end
 
+# Computing the lower bound cost for a bundle on the arc src->dst
 function arc_lb_update_cost(
     solution::Solution,
     TTGraph::TravelTimeGraph,

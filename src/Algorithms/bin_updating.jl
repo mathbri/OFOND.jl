@@ -1,6 +1,6 @@
 # Updating functions for the bins
 
-# TODO : add current_cost option for this all all other functions
+# Computes the new cof bins
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}
 )
@@ -53,6 +53,7 @@ function remove_order!(
     return costAdded
 end
 
+# Update the bins (adding or removing) according to the path given for a bundle
 function update_bins!(
     solution::Solution,
     TSGraph::TimeSpaceGraph,
