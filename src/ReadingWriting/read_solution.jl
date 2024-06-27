@@ -1,6 +1,3 @@
-# TODO : maybe do some bin packing improvement to obtain the best current solution for fair comparison ?
-# TODO : check feasibility ?
-
 # Check that the bundle exists in the instance and return it if found
 function check_bundle(instance::Instance, row::CSV.Row)
     suppNode = NetworkNode(
@@ -64,6 +61,7 @@ function find_next_node(TTGraph::TravelTimeGraph, ttNode::Int, node::NetworkNode
     return inNodes[nextNodeIdx]
 end
 
+# Project a path on the travel-time graph
 function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::Int)
     # The travel time path is re-created backward by searching for corresponding nodes
     ttPath = [TTGraph.bundleDst[idx]]
@@ -109,6 +107,7 @@ function repair_paths!(paths::Vector{Vector{Int}}, instance::Instance)
     return count
 end
 
+# Read solution from CSV file
 function read_solution(instance::Instance, solution_file::String)
     # Reading .csv file
     csv_reader = CSV.File(

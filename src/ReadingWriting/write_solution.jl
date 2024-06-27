@@ -1,3 +1,4 @@
+# Returns shipments ids to be written on the network design
 function get_shipments_ids(
     solution::Solution, path::Vector{Int}, node::Int, idx::Int, coommodity::Commodity
 )
@@ -8,6 +9,7 @@ function get_shipments_ids(
     return string.([bin.idx for bin in bins[binIdxs]])
 end
 
+# Writes network design
 function write_network_design(io::IO, solution::Solution, instance::Instance)
     # push data into a vector 
     data = Vector{Any}(undef, length(NETWORK_DESIGN_COLUMNS))
@@ -42,6 +44,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
     end
 end
 
+# Writes shipment info
 function write_shipment_info(io::IO, solution::Solution, instance::Instance)
     data = Vector{Any}(undef, length(SHIPMENT_INFO_COLUMNS))
     TSGraph = instance.timeSpaceGraph
@@ -75,6 +78,7 @@ function find_bundle(instance::Instance, com::Commodity)
     end
 end
 
+# Writes shipment content
 function write_shipment_content(io::IO, solution::Solution, instance::Instance)
     data = Vector{Any}(undef, length(SHIPMENT_CONTENT_COLUMNS))
     data[1] = 1  # content_id
@@ -98,6 +102,7 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
     end
 end
 
+# Write solution
 function write_solution(solution::Solution, instance::Instance; suffix::String="")
     # network design file 
     open("network_design_$suffix.csv", "w") do io
