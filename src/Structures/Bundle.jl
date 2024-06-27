@@ -1,9 +1,5 @@
 # Bundle structure (group of orders with the same origin and destination)
 
-# TODO : implement the following
-# As he way to create bundles will evolve, the hash will become the unique identifier of bundles 
-# and won't be computed upon object creation but directly be a data given by files
-
 struct Bundle
     # Core fields
     supplier::NetworkNode  # supplier node

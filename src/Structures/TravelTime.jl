@@ -1,11 +1,5 @@
 # Graph structure used to compute bundle paths 
 
-# TODO : change name to delivery graph to avoid confusion with arc travel times ?
-
-# TODO : question the usage of sparse matrices because thay have slower getting times but uses less memory
-
-# TODO : overload all graphs function used to not have to do TTGraph.graph ?
-
 # Travel Time Graph
 struct TravelTimeGraph
     # Core fields
@@ -235,7 +229,6 @@ function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
     return (firstNode - 1) * EPS
 end
 
-# TODO : see the actual use for this function after thorough anaysis of algorithms
 # Shortcut for computing shortest paths
 function shortest_path(travelTimeGraph::TravelTimeGraph, src::Int, dst::Int)
     dijkstraState = dijkstra_shortest_paths(

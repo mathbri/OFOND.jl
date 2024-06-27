@@ -1,7 +1,5 @@
 # Useful functions using / connecting multiple structures
 
-# TODO : check whether these constructirs are still useful !
-
 function Order(bundle::Bundle, deliveryDate::Int)
     return Order(bundle.hash, deliveryDate)
 end

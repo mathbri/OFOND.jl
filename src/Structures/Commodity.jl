@@ -1,10 +1,5 @@
 # Commodity structure to store corresponding metadata
 
-# This contruction makes the commodity mutable, which may impede performance
-# Maybe an option is to hash directly the partNumber and keep a dictionnary for the reverse function at writing time 
-# TODO : to test
-
-# TODO : a lot of commodities so maybe use the most lightwieght data structures like string15 and Int8 if memory problems occurs
 struct CommodityData
     partNumber::String     # part number of the commodity
     size::Int              # size of one package in m3 / 100 

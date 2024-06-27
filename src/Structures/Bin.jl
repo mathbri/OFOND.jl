@@ -1,7 +1,5 @@
 # Bin structure used in for bin-packing
 
-# TODO : Changing form mutable to immutable could be a way to improve efficiency
-
 mutable struct Bin
     idx::Int                    # index for output purposes
     capacity::Int               # space left in the bin

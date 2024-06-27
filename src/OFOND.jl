@@ -34,10 +34,9 @@ include("Structures/Instance.jl")
 include("Structures/Solution.jl")
 
 # Import and Export of data
-include("Reading/read_instance.jl")
-include("Reading/read_solution.jl")
-include("Writing/write_instance.jl")
-include("Writing/write_solution.jl")
+include("ReadingWriting/read_instance.jl")
+include("ReadingWriting/read_solution.jl")
+include("ReadingWriting/write_solution.jl")
 
 # Algorithms
 include("Algorithms/bin_packing.jl")
@@ -55,20 +54,7 @@ include("Algorithms/lower_bound.jl")
 include("Algorithms/Utils/ls_utils.jl")
 include("Algorithms/local_search.jl")
 
-# TODO : before handing over the package, create a branch on which :
-# - all lns files are deleted
-# - docs are done for exported functions
-# - unimplemented functions are removed (parrallel stuff on things like that)
-
-# Large Neighborhood Search
-# include("Algorithms/LNS/lns_utils.jl")
-# include("Algorithms/LNS/two_node.jl")
-# include("Algorithms/LNS/attract_reduce.jl")
-# include("Algorithms/LNS/single_plant.jl")
-# include("Algorithms/LNS/lns.jl")
-
 include("run.jl")
-include("Algorithms/Utils/analysis.jl")
 
 # Functions / Structures to be made public
 # With the following export, you can test the different benchmark and heuristic developped (and play with a little) 
