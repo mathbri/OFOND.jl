@@ -6,19 +6,20 @@
 #         Compute the updated unit cost : unit cost = unit_capacity * volume_cost
 # Use this new costs in all the other heuristics
 
-function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph)
+function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::Solution)
     for arc in edges(timeSpaceGraph.graph)
         arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
         # No update for linear arcs
         arcData.isLinear && continue
         # Total volume on arc
-        arcVolume = sum(arcData.capacity - bin.availableCapacity for bin in arcBins)
-        # All arc bins
-        arcBins = timeSpaceGraph.bins[src(arc), dst(arc)]
+        arcBins = solution.bins[src(arc), dst(arc)]
+        arcVolume = sum(bin.load for bin in arcBins)
         # Updating current cost
-        baseCost = (arcData.unitCost + arcData.carbonCost)
+        timeSpaceGraph.currentCost[src(arc), dst(arc)] = arcData.unitCost
+        # No scaling for arcs with no volume
+        arcVolume <= EPS && continue
         costFactor = length(arcBins) * arcData.capacity / arcVolume
-        timeSpaceGraph.currentCost[src(arc), dst(arc)] = baseCost * costFactor
+        timeSpaceGraph.currentCost[src(arc), dst(arc)] *= costFactor
     end
 end
 
@@ -29,20 +30,24 @@ function add_variables!(
 )
     travelTimeGraph, timeSpaceGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Variable x[b, a] in {0, 1} indicate if bundle b uses arc a in the travel time graph
-    arcs = map(arc -> (src(arc), dst(arc)), edges(travelTimeGraph.graph))
+    arcs = [(src(arc), dst(arc)) for arc in edges(travelTimeGraph.graph)]
     @variable(model, x[idx(bundles), arcs], Bin)
     if neighborhood == :attract_reduce
         # Variable z[b] in {0, 1} indicate if bundle b uses old or new path
         @variable(model, z[[bundle.idx for bundle in bundles]], Bin)
     end
     # Varible tau_a indicate the number of transport units used on arc a in the time space graph
-    I, J = [src(arc) for arc in timeSpaceGraph.commonArcs],
-    [dst(arc) for arc in timeSpaceGraph.commonArcs]
-    @variable(model, tau[i in I, j in J], Int)
+    arcs = [(src(arc), dst(arc)) for arc in timeSpaceGraph.commonArcs]
+    @variable(model, tau[arc in arcs], Int)
 end
 
 # Adding constraints
 
+# TODO : think about the following
+# If you can give any vector of bundles, than by slecting the bundles of a two shared node neighborhood and doing it the single plant way, we have another nieghborhood
+# can be done by changing the nieghborhood name in the function called when doing the two shared node 
+
+# Construct the matrix of right-hand side of paths constraints
 function get_e_matrix(
     neighborhood::Symbol,
     bundles::Vector{Bundle},
@@ -50,127 +55,116 @@ function get_e_matrix(
     src::Int=-1,
     dst::Int=-1,
 )
-    I = repeat(idx(bundles); inner=2)
-    J = Vector{Int}(undef, length(I))
-    if neighborhood == :two_shared_node
-        J = repeat([src, dst]; outer=length(bundles))
-    else
-        for bundle in bundles
-            append!(J, [TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]])
-        end
+    I = repeat(idx(bundles); outer=2)
+    J = vcat(TTGraph.bundleSrc[idx(bundles)], TTGraph.bundleDst[idx(bundles)])
+    if neighborhood == :two_shared_node && src != -1 && dst != -1
+        J = vcat(repeat(src, length(bundles)), repeat(dst, length(bundles)))
     end
-    V = repeat([1, -1]; outer=length(bundles))
+    V = vcat(ones(length(bundles)), -1 * ones(length(bundles)))
     return sparse(I, J, V)
 end
 
 # Add path constraints on the travel time graph to the model
 function add_path_constraints!(
     model::Model,
-    travelTimeGraph::TravelTimeGraph,
+    TTGraph::TravelTimeGraph,
     bundles::Vector{Bundle},
-    e::SparseMatrixCSC{Int,Int},
+    e::SparseMatrixCSC{Float64,Int},
 )
-    incidence_matrix = incidence_matrix(travelTimeGraph.graph)
-    bundlesIndexes = [bundle.idx for bundle in bundles]
+    incidence_matrix = incidence_matrix(TTGraph.graph)
     x = model[:x]
-    @constraint(model, path[b in bundlesIndexes], incidence_matrix .* x[b, :] .== e[b, :])
+    # Is the incicdence matrix constructed by iterating the same way as edges ? Seems yes from the documentation
+    @constraint(model, path[b in idx(bundles)], incidence_matrix * x[b, :] .== e[b, :])
 end
 
 # Adds equality constraints for the old and new path formulation
 function add_old_new_path_constraints!(
-    model::Model, bundles::Vector{Bundle}, oldPaths::Vector{Int}, newPaths::Vector{Int}
+    model::Model,
+    bundles::Vector{Bundle},
+    oldPaths::Vector{Vector{Int}},
+    newPaths::Vector{Vector{Int}},
 )
     x, z = model[:x], model[:z]
     for (bundle, oldPath, newPath) in zip(bundles, oldPaths, newPaths)
-        for (src, dst) in partition(oldPath, 2, 1)
-            @constraint(model, 1 - z[bundle.idx] == x[bundle.idx, (src, dst)])
+        for arc in partition(oldPath, 2, 1)
+            @constraint(model, 1 - z[bundle.idx] == x[bundle.idx, arc])
         end
-        for (src, dst) in partition(newPath, 2, 1)
-            @constraint(model, z[bundle.idx] == x[bundle.idx, (src, dst)])
+        for arc in partition(newPath, 2, 1)
+            @constraint(model, z[bundle.idx] == x[bundle.idx, arc])
         end
         # Because both paths start and end at the desired nodes, we don't have to constrain the other arcs to zero
     end
 end
 
 # Initialize the packing expression as sparse matrix with space used and tau variables
-function init_packing_expr(model::Model, TSGraph::TimeSpaceGraph)
-    I, J, E, tau = Int[], Int[], AffExpr[], model[:tau]
+function init_packing_expr(model::Model, TSGraph::TimeSpaceGraph, solution::Solution)
+    I = [src(arc) for arc in TSGraph.commonArcs]
+    J = [dst(arc) for arc in TSGraph.commonArcs]
+    E, tau = AffExpr[], model[:tau]
     for arc in TSGraph.commonArcs
         src, dst = src(arc), dst(arc)
         capacity = TSGraph.networkArcs[src, dst].capacity
-        expr = AffExpr(sum(TSGraph.binLoads[src, dst]), tau[src, dst] => -capacity)
-        push!(I, src(arc))
-        push!(J, dst(arc))
+        expr = AffExpr(
+            sum(bin.load for bin in solution.bins[src, dst]), tau[src, dst] => -capacity
+        )
         push!(E, expr)
     end
     return sparse(I, J, E)
 end
 
-# Add all relaxed packing constraints on shared arc of the time space graph
-function add_packing_constraints!(
-    model::Model, TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundles::Vector{Bundle}
+# Add path variables (after projection) with order volume coeffs to packing expressions 
+function complete_packing_expr!(
+    expr::SparseMatrixCSC{AffExpr,Int}, instance::Instance, bundles::Vector{Bundle}
 )
-    x = model[:x]
-    packing_expr = init_packing_expr(model, TSGraph)
+    x, TTGraph, TSGraph = model[:x], instance.travelTimeGraph, instance.timeSpaceGraph
     for bundle in bundles
-        idx = bundle.idx
-        for order in bundle.orders
-            volume = order.volume
-            for arc in TSGraph.commonArcs
-                src, dst = src(arc), dst(arc)
-                # Projecting back on the travel time graph
-                ttSrc, ttDst = travel_time_projector(
-                    TTGraph, TSGraph, src(arc), dst(arc), order
-                )
-                # Checking the arc is for the bundle
-                (ttSrc == -1 || ttDst == -1) || continue
-                # Add the corresponding bundle variable and order volume to the expression
-                add_to_expression!(packing_expr[src, dst], x[idx, (ttSrc, ttDst)], volume)
-            end
+        for order in bundle.orders, arc in TSGraph.commonArcs
+            src, dst, volume = src(arc), dst(arc), order.volume
+            # Projecting back on the travel time graph
+            ttSrc, ttDst = travel_time_projector(TTGraph, TSGraph, src, dst, order)
+            # Checking the arc is for the bundle
+            (ttSrc == -1 || ttDst == -1) || continue
+            # Add the corresponding bundle variable and order volume to the expression
+            add_to_expression!(expr[src, dst], x[bundle.idx, (ttSrc, ttDst)], volume)
         end
     end
+end
+
+# Add all relaxed packing constraints on shared arc of the time space graph
+function add_packing_constraints!(
+    model::Model, instance::Instance, bundles::Vector{Bundle}, solution::Solution
+)
+    TSGraph = instance.timeSpaceGraph
+    packing_expr = init_packing_expr(model, TSGraph, solution)
+    complete_packing_expr!(packing_expr, instance, bundles)
     @constraint(
         model, packing[arc in TSGraph.commonArcs], packing_expr[src(arc), dst(arc)] <= 0
     )
 end
 
-function add_single_plant_constraints!(
-    model::Model, instance::Instance, bundles::Vector{Bundle}
-)
-    travelTimeGraph, timeSpaceGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    # Path constraints on the travel time graph
-    e = get_e_matrix(:single_plant, bundles, travelTimeGraph)
-    add_path_constraints!(model, travelTimeGraph, bundles, e)
-    # Relaxed packing constraint on the time space graph
-    return add_packing_constraints!(model, travelTimeGraph, timeSpaceGraph, bundles)
-end
-
-function add_two_node_constraints!(
-    model::Model, instance::Instance, bundles::Vector{Bundle}, src::Int, dst::Int
-)
-    travelTimeGraph, timeSpaceGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    # Path constraints on the travel time graph
-    e = get_e_matrix(:two_shared_node, bundles, travelTimeGraph, src, dst)
-    add_path_constraints!(model, travelTimeGraph, bundles, e)
-    # Relaxed packing constraint on the time space graph
-    return add_packing_constraints!(model, travelTimeGraph, timeSpaceGraph, bundles)
-end
-
-function add_attract_reduce_constraints!(
+# Add all constraints needed for the specified neighborhood
+# TODO : separate attract_reduce to attract and reduce
+function add_constraints!(
     model::Model,
+    neighborhood::Symbol,
     instance::Instance,
+    solution::Solution,
     bundles::Vector{Bundle},
-    oldPaths::Vector{Vector{Int}},
-    newPaths::Vector{Vector{Int}},
+    src::Int=-1,
+    dst::Int=-1,
 )
-    travelTimeGraph, timeSpaceGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Path constraints on the travel time graph
-    e = get_e_matrix(:attract_reduce, bundles, travelTimeGraph)
-    add_path_constraints!(model, travelTimeGraph, bundles, e)
-    # TODO : decide randomly on attract or reduce ?
-    add_old_new_path_constraints!(model, bundles, oldPaths, newPaths)
+    e = get_e_matrix(:single_plant, bundles, TTGraph, src, dst)
+    add_path_constraints!(model, TTGraph, bundles, e)
+    if neighborhood == :attract_reduce
+        # TODO : is random the best option ?
+        oldPaths = solution.bundlePaths[idx(bundles)]
+        newPaths = generate_new_paths()
+        add_old_new_path_constraints!(model, bundles, oldPaths, newPaths)
+    end
     # Relaxed packing constraint on the time space graph
-    return add_packing_constraints!(model, travelTimeGraph, timeSpaceGraph, bundles)
+    return add_packing_constraints!(model, instance, bundles, solution)
 end
 
 # Constructing the objective
