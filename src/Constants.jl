@@ -16,7 +16,7 @@ const VOLUME_FACTOR = 100
 const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
 
-const PERTURBATIONS = [:single_plant, :two_shared_node, :attract_reduce]
+const PERTURBATIONS = [:single_plant, :two_shared_node, :attract, :reduce]
 
 const NETWORK_DESIGN_COLUMNS = [
     "route_id",
