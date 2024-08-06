@@ -4,29 +4,36 @@ function get_elapsed_time(startTime::Float64)
     return round((time() - startTime) * 1000) / 1000
 end
 
-function run_heuristic(instance::Instance, heuristic::Function; timeLimit::Int=-1)
+function run_heuristic(
+    instance::Instance,
+    heuristic::Function;
+    timeLimit::Int=-1,
+    preSolve::Bool=true,
+    startSol::Solution=Solution(instance),
+)
     # Initialize start time
     startTime = time()
     # Complete Instance object with all properties needed
-    instance = add_properties(instance, first_fit_decreasing)
-    # Initialize solution object
-    solution = Solution(instance)
-
-    # Saving pre-solve time
+    if preSolve
+        instance = add_properties(instance, first_fit_decreasing)
+    end
     preSolveTime = get_elapsed_time(startTime)
-    println("Pre-solve time : $(preSolveTime) s")
+    # Initialize solution object
+    solution = deepcopy(startSol)
 
     # Run the corresponding heuristic
-    heuristic(solution, instance, timeLimit)
+    heuristic(solution, instance)
     while get_elapsed_time(preSolveTime) < timeLimit
-        heuristic(solution, instance, timeLimit)
+        heuristic(solution, instance)
     end
 
-    # Saving solve time
     solveTime = get_elapsed_time(preSolveTime)
-    println("Solve time : $solveTime s")
-    println("Feasible : $(is_feasible(instance, solution))")
-    println("Total Cost : $(compute_cost(instance, solution))")
+    @info "Running heuristic $heuristic" :pre_solve_time =
+        preSolveTime, :solve_time =
+            solveTime, :feasible =
+                is_feasible(instance, solution), :total_cost = compute_cost(
+                    instance, solution
+                )
 
     return instance, solution
 end
@@ -45,6 +52,8 @@ function lower_bound_heuristic(instance::Instance)
     return run_heuristic(instance, lower_bound!)
 end
 
-function local_search_heuristic(instance::Instance, timeLimit::Int)
-    return run_heuristic(instance, local_search!; timeLimit=timeLimit)
+function local_search_heuristic(instance::Instance, solution::Solution; timeLimit::Int)
+    return run_heuristic(
+        instance, local_search!; timeLimit=timeLimit, preSolve=false, startSol=solution
+    )
 end
