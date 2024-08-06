@@ -2,11 +2,11 @@
 
 @testset "Node readers" begin
     # Constants
-    @test OFOND.NODE_TYPES == [:supplier, :plant, :xdock, :iln, :port_l, :port_d]
-    @test OFOND.COMMON_NODE_TYPES == [:xdock, :iln, :port_l, :port_d]
+    @test OFOND.NODE_TYPES == [:supplier, :plant, :xdock, :iln, :pol, :pod]
+    @test OFOND.COMMON_NODE_TYPES == [:xdock, :iln, :pol, :pod]
     counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     @test counts == Dict{Symbol,Int}(
-        :supplier => 0, :xdock => 0, :iln => 0, :port_l => 0, :port_d => 0, :plant => 0
+        :supplier => 0, :xdock => 0, :iln => 0, :pol => 0, :pod => 0, :plant => 0
     )
 
     # Read node
@@ -21,14 +21,14 @@
     @test node ==
         OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
     @test counts == Dict{Symbol,Int}(
-        :supplier => 1, :xdock => 0, :port_l => 0, :port_d => 0, :plant => 0, :iln => 0
+        :supplier => 1, :xdock => 0, :pol => 0, :pod => 0, :plant => 0, :iln => 0
     )
 
     node = OFOND.read_node!(counts, row4)
     @test node ==
         OFOND.NetworkNode("003", :other, "Other1", LLA(0, 0), "FR", "EU", false, 0.0)
     @test counts == Dict{Symbol,Int}(
-        :supplier => 1, :xdock => 0, :port_l => 0, :port_d => 0, :plant => 0, :iln => 0
+        :supplier => 1, :xdock => 0, :pol => 0, :pod => 0, :plant => 0, :iln => 0
     )
 end
 
@@ -50,7 +50,7 @@ end
     @test node1.volumeCost == supplier1.volumeCost
     @test network.graph[hash("002", hash(:supplier))] == supplier2
     @test network.graph[hash("004", hash(:xdock))] == xdock
-    @test network.graph[hash("005", hash(:port_l))] == port_l
+    @test network.graph[hash("005", hash(:pol))] == port_l
     @test network.graph[hash("003", hash(:plant))] == plant
 end
 
@@ -237,8 +237,8 @@ end
         joinpath(@__DIR__, "dummy_commodities.csv"),
     )
     @test instance.networkGraph.graph == network.graph
-    @test instance.travelTimeGraph.graph == OFOND.TravelTimeGraph().graph
-    @test instance.timeSpaceGraph.graph == OFOND.TimeSpaceGraph().graph
     @test instance.bundles == [bundle1, bundle2]
     @test instance.dateHorizon == [Dates.Date(2024, 1, 1), Dates.Date(2024, 1, 8)]
+    @test instance.travelTimeGraph.graph == OFOND.TravelTimeGraph().graph
+    @test instance.timeSpaceGraph.graph == OFOND.TimeSpaceGraph().graph
 end

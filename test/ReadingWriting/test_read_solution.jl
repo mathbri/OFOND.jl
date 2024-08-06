@@ -73,19 +73,19 @@ end
 
 @testset "Project and repair" begin
     # project path
-    ttPath, errors = OFOND.project_path([supplier2, xdock, plant], TTGraph, 1)
+    ttPath, errors = OFOND.project_path([plant, xdock, supplier2], TTGraph, 1)
     @test !errors
     @test ttPath == [supp2FromDel2, xdockFromDel1, plantFromDel0]
     ttPath, errors = @test_warn "Next node not found, path not projectable for bundle 1" OFOND.project_path(
-        [supplier2, OFOND.zero(OFOND.NetworkNode), plant], TTGraph, 1
+        [plant, OFOND.zero(OFOND.NetworkNode), supplier2], TTGraph, 1
     )
     @test errors
     @test ttPath == [plantFromDel0]
     # all paths
-    paths = [[supplier2, xdock, plant], [supplier1, zero(OFOND.NetworkNode), plant]]
+    paths = [[plant, xdock, supplier2], [plant, zero(OFOND.NetworkNode), supplier1]]
     @test OFOND.project_all_paths(paths, TTGraph) ==
         [[supp2FromDel2, xdockFromDel1, plantFromDel0], []]
-    paths = [[supplier2, xdock, plant], [supplier1, plant, xdock]]
+    paths = [[plant, xdock, supplier2], [supplier1, plant, xdock]]
     allPaths = @test_warn "Next node not found, path not projectable for bundle 2" OFOND.project_all_paths(
         paths, TTGraph
     )

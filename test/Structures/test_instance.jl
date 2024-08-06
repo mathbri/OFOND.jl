@@ -1,8 +1,8 @@
 # Define supplier, platform, and plant
 supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
-supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
+supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "GE", "EU", false, 0.0)
 xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-port_l = OFOND.NetworkNode("005", :port_l, "PortL1", LLA(3, 3), "GE", "EU", true, 0.0)
+port_l = OFOND.NetworkNode("005", :pol, "PortL1", LLA(3, 3), "GE", "EU", true, 0.0)
 plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0)
 
 # Define arcs between the nodes
@@ -150,14 +150,26 @@ end
 end
 
 @testset "sub instance extraction" begin
+    push!(
+        instance.bundles[3].orders,
+        OFOND.Order(hash(supplier1, hash(plant)), 4, [commodity1, commodity2]),
+    )
     subInst = OFOND.extract_sub_instance(instance; country="FR")
+    # testing horizon
     @test subInst.timeHorizon == 3
     @test subInst.dateHorizon ==
         [Dates.Date(2020, 1, 1), Dates.Date(2020, 1, 2), Dates.Date(2020, 1, 3)]
-    @test nv(subInst.networkGraph.graph) == 4
-    @test ne(subInst.networkGraph.graph) == 7
+    # testing network
+    @test nv(subInst.networkGraph.graph) == 3
+    @test ne(subInst.networkGraph.graph) == 4
     @test all(
         n -> OFOND.is_node_in_country(subInst.networkGraph, n, "FR"),
         vertices(subInst.networkGraph.graph),
     )
+    # testing bundles
+    @test length(subInst.bundles) == 2
+    @test all(bun -> OFOND.is_bundle_in_country(bun, "FR"), subInst.bundles)
+    @test OFOND.idx(subInst.bundles) == [1, 2]
+    @test subInst.bundles[1].orders == [order1]
+    @test subInst.bundles[2].orders == [order3]
 end

@@ -11,6 +11,8 @@ using HiGHS
 
 println("Testing OFO Network Design Package")
 
+# TODO : add functions to create the test instance (easier to maintain)
+
 @testset "OFOND.jl" begin
     # Utils file
     @testset "Utils (general)" begin

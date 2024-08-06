@@ -37,3 +37,13 @@ function get_transport_units(order::Order, arcData::NetworkArc)
     # If the arc is consolidated
     return get(order.bpUnits, arcData.type, 0)
 end
+
+function is_node_filterable(networkGraph::NetworkGraph, node::Int, bundles::Vector{Bundle})
+    nodeData = networkGraph.graph[label_for(networkGraph.graph, node)]
+    !(nodeData.type in [:supplier, :plant]) && return false
+    if nodeData.type == :supplier
+        return findfirst(b -> b.supplier == nodeData, bundles) === nothing
+    else
+        return findfirst(b -> b.customer == nodeData, bundles) === nothing
+    end
+end

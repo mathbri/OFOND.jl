@@ -71,3 +71,19 @@ bundle4 = OFOND.Bundle(supplier2, customer2, idx + 2)
     @test OFOND.is_bundle_in_continent(bundle, "EU")
     @test !OFOND.is_bundle_in_continent(bundle4, "EU")
 end
+
+# test change index method
+@testset "Change index" begin
+    @test bundle4.idx == 4
+    @test OFOND.change_idx(bundle4, 5).idx == 5
+    bundle45 = OFOND.change_idx(bundle4, 5)
+    @test bundle45.idx == 5
+end
+
+# test remove orders outside horizon
+@testset "Remove orders outside horizon" begin
+    order2 = OFOND.Order(hash("A123"), 5, [commodity1, commodity1])
+    push!(bundle.orders, order2)
+    @test length(bundle.orders) == 2
+    @test OFOND.remove_orders_outside_horizon(bundle, 4).orders == [order1]
+end

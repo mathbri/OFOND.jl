@@ -68,24 +68,24 @@ end
     # linear arc
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; use_bins=false
-    ) ≈ 1e-5 + 1.6 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; giant=true
-    ) ≈ 1e-5 + 1.6 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
     # consolidated arc with nothing on it
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
-    ) ≈ 1e-5 + 1.6 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; giant=true
-    ) ≈ 1e-5 + 4 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 4 + 0 + 0.004 + 5
     # consolidated arc with things on it
     OFOND.first_fit_decreasing!(
         sol.bins[xdockStep4, plantStep1], 40, [commodity1, commodity1]
     )
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
-    ) ≈ 1e-5 + 1.6 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
     TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
     @test OFOND.arc_lb_update_cost(
         sol,
@@ -97,10 +97,10 @@ end
         use_bins=false,
         current_cost=true,
         giant=true,
-    ) ≈ 1e-5 + 1 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1 + 0 + 0.004 + 5
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0;
-    ) ≈ 1e-5 + 0 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 0 + 0 + 0.004 + 5
 end
 
 @testset "Cost matrix update" begin
@@ -126,7 +126,7 @@ end
     #     fill(1e-5, 4),
     # )
     V = fill(1e-5, 15)
-    V[[1, 2, 5, 7]] .+= [6.8, 6.8, 20.2, 9.2]
+    V[[1, 2, 5, 7]] .+= [6.604, 6.604, 20.004, 9.004]
     V[8:11] .= 1e9
     @test all([TTGraph3.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 
@@ -147,7 +147,49 @@ end
     #     fill(1e-5, 4),
     # )
     V = fill(1e-5, 15)
-    V[[1, 2, 5, 7]] .+= [6.8, 6.8, 20.2, 5.2]
+    V[[1, 2, 5, 7]] .+= [6.604, 6.604, 20.004, 5.004]
     V[8:11] .= 1e9
     @test all([TTGraph2.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
+end
+
+@testset "Filtering transport units" begin
+    @test OFOND.lb_filtering_transport_units(TSGraph, supp1Step2, xdockStep3, order1) ≈ 0.4
+    @test OFOND.lb_filtering_transport_units(TSGraph, supp1Step3, plantStep1, order2) ≈ 2.0
+end
+
+@testset "Filtering arc cost" begin
+    # forbidden arc
+    @test OFOND.arc_lb_filtering_update_cost(
+        TTGraph, TSGraph, bundle1, portFromDel1, plantFromDel0;
+    ) ≈ 1e9
+    # linear arc
+    @test OFOND.arc_lb_filtering_update_cost(
+        TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
+    @test OFOND.arc_lb_filtering_update_cost(
+        TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
+    # direct arc
+    @test OFOND.arc_lb_filtering_update_cost(
+        TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
+    ) ≈ 1e-5 + 4.0 + 0 + 0.004 + 5
+end
+
+@testset "Filtering cost matrix update" begin
+    OFOND.update_lb_filtering_cost_matrix!(sol, TTGraph, TSGraph, bundle1)
+    @test TTGraph.costMatrix == TTGraph2.costMatrix
+    # V = vcat(
+    #     fill(1e-5 + 6.8, 3), third supp1-xdock starts before supp1 src so stays 1e-5
+    #     1e-5,
+    #     1e-5 + 110.2, giant(order1) = 1 and unitCost = 10, distance = 2 so 10 for leadTime and 0.2 for carbon
+    #     1e-5,
+    #     1e-5 + 9.2, giant(order1) = 1 and unitCost = 4 and distance = 1 so 5 for leadTime and 0.2 for carbon
+    #     OFOND.INFINITY,
+    #     fill(OFOND.INFINITY, 3),
+    #     fill(1e-5, 4),
+    # )
+    V = fill(1e-5, 15)
+    V[[1, 2, 5, 7]] .+= [6.604, 6.604, 20.004, 9.004]
+    V[8:11] .= 1e9
+    @test all([TTGraph3.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 end

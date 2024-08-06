@@ -14,6 +14,7 @@ mutable struct Bin
     end
     Bin(capacity::Int) = new(rand(Int), capacity, 0, Vector{Commodity}())
     function Bin(fullCapacity::Int, commodity::Commodity)
+        size(commodity) > fullCapacity && return Bin(0, fullCapacity, [commodity])
         return Bin(fullCapacity - size(commodity), size(commodity), [commodity])
     end
 end

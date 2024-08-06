@@ -1,3 +1,4 @@
 /Manifest.toml
 *test.csv
-/scripts/data/*
+scripts/data/*
+scripts/export/*

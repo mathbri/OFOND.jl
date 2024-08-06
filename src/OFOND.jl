@@ -6,12 +6,12 @@ using Graphs
 using Graphs.LinAlg
 using MetaGraphsNext
 using CSV
-using JLD2
+using JLD2 # useful ?
 using IterTools
 using Random
-using Statistics
-using Dates
-using Geodesy
+using Statistics # useful ?
+using Dates # useful ?
+using Geodesy # useful ?
 using JuMP
 using HiGHS
 using SparseArrays
@@ -71,16 +71,20 @@ include("Algorithms/LNS/lns.jl")
 include("run.jl")
 include("Algorithms/Utils/analysis.jl")
 
+# needed for package compilation
+include("julia_main.jl")
+
 # Functions / Structures to be made public
 # With the following export, you can test the different benchmark and heuristic developped (and play with a little) 
 
-export Instance, Solution
-export read_instance, read_solution
+export Instance, Solution, read_instance, read_solution
+export add_properties, tentative_first_fit, extract_sub_instance, extract_sub_solution
 export shortest_delivery_heuristic, average_delivery_heuristic
 export greedy_heuristic
-export local_search_heuristic
-export semi_linear_bound, semi_linear_bound_heuristic
-export lns_heuristic
+export local_search_heuristic, greedy_then_ls_heuristic
+export lower_bound_heuristic
+# export lns_heuristic
 export write_instance, write_solution
+export julia_main
 
 end

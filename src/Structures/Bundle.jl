@@ -43,3 +43,27 @@ end
 function is_bundle_in_continent(bundle::Bundle, continent::String)
     return bundle.supplier.continent == continent && bundle.customer.continent == continent
 end
+
+function change_idx(bundle::Bundle, idx::Int)
+    return Bundle(
+        bundle.supplier,
+        bundle.customer,
+        bundle.orders,
+        idx,
+        bundle.hash,
+        bundle.maxPackSize,
+        bundle.maxDelTime,
+    )
+end
+
+function remove_orders_outside_horizon(bundle::Bundle, timeHorizon::Int)
+    return Bundle(
+        bundle.supplier,
+        bundle.customer,
+        [order for order in bundle.orders if order.deliveryDate <= timeHorizon],
+        bundle.idx,
+        bundle.hash,
+        bundle.maxPackSize,
+        bundle.maxDelTime,
+    )
+end

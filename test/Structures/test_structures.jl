@@ -16,6 +16,8 @@ end
     include("test_bin.jl")
 end
 
+# TODO : put instance creation here so its common to all following files (easier to maintain)
+
 # Network
 @testset "Network" begin
     include("test_network.jl")

@@ -36,18 +36,18 @@ network = OFOND.NetworkGraph()
     @test isa(network.graph.graph, DiGraph)
 end
 
-newNode = OFOND.change_node_type(node, :port_d)
+newNode = OFOND.change_node_type(node, :pod)
 @testset "change_node_type" begin
     # Testing changing node type
     @test newNode.account == "account"
-    @test newNode.type == :port_d
+    @test newNode.type == :pod
     @test newNode.name == "name"
     @test newNode.coordinates == LLA(1, 1)
     @test newNode.country == "country"
     @test newNode.continent == "continent"
     @test newNode.isCommon == false
     @test newNode.volumeCost == 1.0
-    @test newNode.hash == hash("account", hash(:port_d))
+    @test newNode.hash == hash("account", hash(:pod))
 end
 
 newNode2 = OFOND.change_node_type(node, :iln)

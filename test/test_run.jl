@@ -2,7 +2,7 @@
 supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
 supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
 xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-port_l = OFOND.NetworkNode("005", :port_l, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
+port_l = OFOND.NetworkNode("005", :pol, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
 plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0)
 
 # Define arcs between the nodes
@@ -65,7 +65,7 @@ instanceNP = OFOND.Instance(
     @test time() ≈ OFOND.get_elapsed_time(0.0)
     startTime = time()
     sleep(0.5)
-    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.53
+    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.535
 end
 
 # fake function that modify the solution

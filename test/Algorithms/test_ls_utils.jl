@@ -140,7 +140,7 @@ end
     @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(45, 5, [commodity3])]
     @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(45, 5, [commodity3])]
     @test sol.bins[supp2Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
-    @test costRemoved ≈ -25.0
+    @test costRemoved ≈ -24.608
 end
 
 @testset "Both re-insertion" begin
@@ -207,7 +207,7 @@ end
     @test OFOND.are_nodes_candidate(TTGraph, 2, 1)
     # add second port to check second false case
     network2 = deepcopy(network)
-    port_d = OFOND.NetworkNode("005", :port_d, "PortL2", LLA(3, 3), "FR", "EU", true, 0.0)
+    port_d = OFOND.NetworkNode("005", :pod, "PortL2", LLA(3, 3), "FR", "EU", true, 0.0)
     OFOND.add_node!(network2, port_d)
     TTGraph2 = OFOND.TravelTimeGraph(network2, bundles)
     portlFromDel2 = TTGraph2.hashToIdx[hash(2, port_l.hash)]
@@ -234,6 +234,7 @@ end
     @test OFOND.get_bundles_to_update(sol, xdockFromDel1) == [bundle1, bundle3]
     # bundle 1 and bundle 3 have the same hash so they are equal for intersect function
     @test OFOND.get_bundles_to_update(sol, xdockFromDel1, plantFromDel0) == [bundle1]
+    @test OFOND.get_bundles_to_update(sol, plantFromDel0, xdockFromDel1) == OFOND.Bundle[]
     @test OFOND.get_bundles_to_update(sol, xdockFromDel2, plantFromDel0) == OFOND.Bundle[]
     # Path selection
     @test OFOND.get_paths_to_update(sol, [bundle1], xdockFromDel1, plantFromDel0) ==
@@ -245,5 +246,15 @@ end
 
 @testset "Bundle path linear cost" begin
     # bundle 3 on TTPath
-    @test OFOND.bundle_path_linear_cost(bundle3, TTPath, TTGraph) ≈ 41.0
+    @test OFOND.bundle_path_linear_cost(bundle3, TTPath, TTGraph) ≈ 40.02
+end
+
+@testset "Node order" begin
+    @test OFOND.is_node1_before_node2([0, 1, 2, 3], 1, 2)
+    @test !OFOND.is_node1_before_node2([0, 1, 2, 3], 3, 2)
+end
+
+@testset "Bundle max removal cost" begin
+    # bundle 3 on TTPath
+    @test OFOND.bundle_path_linear_cost(bundle3, TTPath, TTGraph) ≈ 40.02
 end

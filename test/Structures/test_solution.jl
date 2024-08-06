@@ -2,7 +2,7 @@
 supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
 supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
 xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-port_l = OFOND.NetworkNode("005", :port_l, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
+port_l = OFOND.NetworkNode("005", :pol, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
 plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0)
 
 # Define arcs between the nodes
@@ -238,43 +238,14 @@ sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test !OFOND.check_supplier(instance, bundle2, supp1FromDel3; verbose=false)
 end
 
-OFOND.add_path!(sol, bundle1, TTPath)
-@testset "Check quantities" begin
-    # add quantities on a arc to test get routed
-    xdockStep3 = TSGraph.hashToIdx[hash(3, xdock.hash)]
-    portStep3 = TSGraph.hashToIdx[hash(3, port_l.hash)]
-    @test OFOND.get_routed_commodities(sol, order1, xdockStep3, portStep3) ==
-        OFOND.Commodity[]
-    portStep4 = TSGraph.hashToIdx[hash(4, port_l.hash)]
-    push!(sol.bins[xdockStep3, portStep4], OFOND.Bin(50))
-    for com in [commodity1, commodity2, commodity1, commodity3]
-        OFOND.add!(sol.bins[xdockStep3, portStep4][1], com)
-    end
-    @test OFOND.get_routed_commodities(sol, order1, xdockStep3, portStep4) ==
-        [commodity1, commodity1]
-    @test OFOND.get_routed_commodities(sol, order2, xdockStep3, portStep4) == [commodity2]
-    @test OFOND.get_routed_commodities(sol, order3, xdockStep3, portStep4) ==
-        [commodity1, commodity1, commodity2]
-    # check that checker returns false
-    @test !OFOND.check_quantities(
-        instance, sol, portFromDel1, plantFromDel0, order1; verbose=false
+@testset "Check path continuity" begin
+    @test !OFOND.check_path_continuity(
+        instance, [supp1FromDel3, plantFromDel0]; verbose=false
     )
-    @test_warn "Infeasible solution" OFOND.check_quantities(
-        instance, sol, portFromDel1, plantFromDel0, order1; verbose=true
+    @test_warn "Infeasible solution" OFOND.check_path_continuity(
+        instance, [supp1FromDel3, plantFromDel0]; verbose=true
     )
-    # add the right quantities on the last arc of order1 
-    plantStep1 = TSGraph.hashToIdx[hash(1, plant.hash)]
-    push!(sol.bins[portStep4, plantStep1], OFOND.Bin(50))
-    for com in [commodity1, commodity1]
-        OFOND.add!(sol.bins[portStep4, plantStep1][1], com)
-    end
-    # check that the checker retrurns true
-    @test OFOND.check_quantities(
-        instance, sol, portFromDel1, plantFromDel0, order1; verbose=false
-    )
-    @test OFOND.check_quantities(
-        instance, sol, portFromDel1, plantFromDel0, order1; verbose=true
-    )
+    @test OFOND.check_path_continuity(instance, TTPath; verbose=false)
 end
 
 supp1step2 = TSGraph.hashToIdx[hash(2, supplier1.hash)]
@@ -285,29 +256,96 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
 supp1FromDel2 = TTGraph.hashToIdx[hash(2, supplier1.hash)]
 supp1step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
 supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
+supp1Step4 = TSGraph.hashToIdx[hash(4, supplier1.hash)]
+
+@testset "Asked and Routed quantity helpers" begin
+    # creators 
+    asked, routed = OFOND.create_asked_routed_quantities(instance)
+    @test asked == Dict(hash(t, plant.hash) => Dict{UInt,Int}() for t in 1:4)
+    @test routed == Dict(hash(t, plant.hash) => Dict{UInt,Int}() for t in 1:4)
+    # updaters
+    OFOND.update_asked_quantities!(asked, bundle1)
+    @test asked == Dict(
+        hash(1, plant.hash) => Dict(hash("A123") => 2),
+        hash(2, plant.hash) => Dict{UInt,Int}(),
+        hash(3, plant.hash) => Dict{UInt,Int}(),
+        hash(4, plant.hash) => Dict{UInt,Int}(),
+    )
+    push!(sol.bins[supp1step2, xdockStep3], OFOND.Bin(30, 20, [commodity1, commodity1]))
+    push!(sol.bins[xdockStep3, portStep4], OFOND.Bin(30, 20, [commodity1, commodity1]))
+    push!(sol.bins[portStep4, plantStep1], OFOND.Bin(30, 20, [commodity1, commodity1]))
+    OFOND.update_routed_quantities!(routed, instance, sol)
+    @test routed == Dict(
+        hash(1, plant.hash) => Dict(hash("A123") => 2),
+        hash(2, plant.hash) => Dict{UInt,Int}(),
+        hash(3, plant.hash) => Dict{UInt,Int}(),
+        hash(4, plant.hash) => Dict{UInt,Int}(),
+    )
+    plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
+    push!(sol.bins[supp1Step4, plantStep2], OFOND.Bin(30, 20, [commodity1, commodity2]))
+    OFOND.update_routed_quantities!(routed, instance, sol)
+    @test routed == Dict(
+        hash(1, plant.hash) => Dict(hash("A123") => 4),
+        hash(2, plant.hash) => Dict(hash("A123") => 1, hash("B456") => 1),
+        hash(3, plant.hash) => Dict{UInt,Int}(),
+        hash(4, plant.hash) => Dict{UInt,Int}(),
+    )
+end
+
+OFOND.add_path!(sol, bundle1, TTPath)
+@testset "Check quantities" begin
+    # empty
+    asked, routed = OFOND.create_asked_routed_quantities(instance)
+    @test OFOND.check_quantities(asked, routed; verbose=false)
+    @test OFOND.check_quantities(asked, routed; verbose=true)
+    # not empty
+    asked = Dict(
+        hash(1, plant.hash) => Dict(hash("A123") => 2),
+        hash(2, plant.hash) => Dict{UInt,Int}(),
+        hash(3, plant.hash) => Dict{UInt,Int}(),
+        hash(4, plant.hash) => Dict{UInt,Int}(),
+    )
+    routed = Dict(
+        hash(1, plant.hash) => Dict(hash("A123") => 2),
+        hash(2, plant.hash) => Dict{UInt,Int}(),
+        hash(3, plant.hash) => Dict{UInt,Int}(),
+        hash(4, plant.hash) => Dict{UInt,Int}(),
+    )
+    @test OFOND.check_quantities(asked, routed; verbose=false)
+    @test OFOND.check_quantities(asked, routed; verbose=true)
+    routed = Dict(
+        hash(1, plant.hash) => Dict(hash("A123") => 5, hash("B456") => 1),
+        hash(2, plant.hash) => Dict(hash("A123") => 1, hash("B456") => 1),
+        hash(3, plant.hash) => Dict{UInt,Int}(),
+        hash(4, plant.hash) => Dict{UInt,Int}(),
+    )
+    @test !OFOND.check_quantities(asked, routed; verbose=false)
+    same = @test_warn "Infeasible solution" OFOND.check_quantities(
+        asked, routed; verbose=true
+    )
+    @test !same
+end
+
+sol = OFOND.Solution(TTGraph, TSGraph, bundles)
+
+OFOND.add_path!(sol, bundle1, TTPath)
+OFOND.add_path!(sol, bundle2, [1, 1])
+OFOND.add_path!(sol, bundle3, [1, 1])
 
 @testset "is_feasible" begin
     # check that is_feasible returns false
     @test !OFOND.is_feasible(instance, sol)
     @test_warn "Infeasible solution" OFOND.is_feasible(instance, sol; verbose=true)
-    # add commities on first and last arc of TTPath
-    push!(sol.bins[supp1step2, xdockStep3], OFOND.Bin(50))
-    for com in [commodity1, commodity1]
-        OFOND.add!(sol.bins[supp1step2, xdockStep3][1], com)
-    end
     # add direct paths for the other bundles
     OFOND.add_path!(sol, bundle2, [supp2fromDel1, plantFromDel0])
     OFOND.add_path!(sol, bundle3, [supp1FromDel2, plantFromDel0])
     # add commodities on direct arc
-    push!(sol.bins[supp1step3, plantStep1], OFOND.Bin(50))
-    for com in [commodity2, commodity1]
-        OFOND.add!(sol.bins[supp1step3, plantStep1][1], com)
-    end
-    push!(sol.bins[supp2step4, plantStep1], OFOND.Bin(50))
-    for com in [commodity2, commodity2]
-        arcBins = sol.bins[supp2step4, plantStep1]
-        OFOND.add!(arcBins[1], com)
-    end
+    push!(
+        sol.bins[supp1step3, plantStep1],
+        OFOND.Bin(5, 45, [commodity2, commodity1, commodity1, commodity1]),
+    )
+    supp2Step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
+    push!(sol.bins[supp2Step4, plantStep1], OFOND.Bin(25, 25, [commodity2, commodity2]))
     # check that is_feasible returns true
     @test OFOND.is_feasible(instance, sol)
     @test OFOND.is_feasible(instance, sol; verbose=true)
@@ -318,19 +356,91 @@ end
     for com in [commodity1, commodity2, commodity3]
         OFOND.add!(bins[1], com)
     end
-    # volume = 30/VOLUME_FACTOR, stockCost = 10.5, distance = 2, unitCost = 10, carbonCost = 1
+    # volume = 30/VOLUME_FACTOR/capacity, stockCost = 10.5, distance = 2, unitCost = 10, carbonCost = 1
     @test OFOND.compute_arc_cost(
         TSGraph, bins, supp2step4, plantStep1; current_cost=false
-    ) ≈ 31.3
+    ) ≈ 31.006
     # volume = 30, stockCost = 10.5, distance = 1, unitCost = 4, carbonCost = 1
     @test OFOND.compute_arc_cost(TSGraph, bins, portStep4, plantStep1; current_cost=false) ≈
-        14.8
+        14.506
     # volume = 30, stockCost = 10.5, distance = 1, unitCost = 4, carbonCost = 0, nodeCost = 1, linear
     # 10.5 + 3/5 * 4 + 30/100*1 = 13.2
     xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]
     @test OFOND.compute_arc_cost(
         TSGraph, bins, supp2step4, xdockStep1; current_cost=false
-    ) ≈ 13.2
+    ) ≈ 12.906
     # test on the whole solution
-    @test OFOND.compute_cost(instance, sol; current_cost=false) ≈ 79.55
+    @test OFOND.compute_cost(instance, sol; current_cost=false) ≈ 56.014
+    @test OFOND.compute_cost(instance, sol) ≈ 56.014
+end
+
+# Re-Define bundles
+bunH1 = hash(supplier1, hash(plant))
+order1 = OFOND.Order(bunH1, 1, [commodity1, commodity1], 0, 20, bpDict, 10, 5.0)
+bundle1 = OFOND.Bundle(supplier1, plant, [order1], 1, bunH1, 10, 2)
+
+bunH2 = hash(supplier2, hash(plant))
+order2 = OFOND.Order(bunH2, 1, [commodity2, commodity2], 1, 30, bpDict, 15, 7.0)
+bundle2 = OFOND.Bundle(supplier2, plant, [order2], 2, bunH2, 15, 1)
+
+order3 = OFOND.Order(bunH1, 1, [commodity2, commodity1], 0, 25, bpDict, 10, 6.0)
+order4 = OFOND.Order(bunH1, 2, [commodity1, commodity2])
+bundle3 = OFOND.Bundle(supplier1, plant, [order3], 3, bunH1, 10, 3)
+
+subInstance = OFOND.Instance(
+    network, deepcopy(TTGraph), TSGraph, [bundle1, OFOND.change_idx(bundle3, 2)], 4, dates
+)
+# adding commodities to be filtered
+push!(sol.bins[supp1step3, plantStep1], OFOND.Bin(20, 30, [commodity2, commodity2]))
+# adding dummy node on instance travel time graph to not have them equal
+OFOND.add_network_node!(
+    instance.travelTimeGraph, zero(OFOND.NetworkNode), Dict{UInt,Vector{OFOND.Bundle}}(), 2
+)
+
+@testset "project / repair paths" begin
+    # project paths	
+    @test OFOND.project_on_sub_instance(
+        [supp1FromDel2, xdockFromDel1, plantFromDel0], instance, subInstance
+    ) == [supp1FromDel2, xdockFromDel1, plantFromDel0]
+    @test OFOND.project_on_sub_instance([supp1FromDel2, 17], instance, subInstance) == Int[]
+    # repair paths
+    allPaths = [[supp1FromDel2, xdockFromDel1, plantFromDel0], Int[]]
+    OFOND.repair_paths!(allPaths, instance)
+    @test allPaths ==
+        [[supp1FromDel2, xdockFromDel1, plantFromDel0], [supp2FromDel1, plantFromDel0]]
+end
+
+subSol = OFOND.extract_sub_solution(sol, instance, subInstance)
+@testset "Extract sub solution" begin
+    @test subSol.bundlePaths == sol.bundlePaths[[1, 3]]
+    @test subSol.bins != sol.bins
+    @test subSol.bins[supp1step2, xdockStep3] ==
+        [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    @test subSol.bins[portStep4, plantStep1] ==
+        [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    @test subSol.bins[supp2step4, plantStep1] == OFOND.Bin[]
+    @test subSol.bins[supp1step3, plantStep1] ==
+        [OFOND.Bin(25, 25, [commodity2, commodity1])]
+end
+
+@testset "Extract filtered instance" begin
+    subInstance2 = OFOND.extract_filtered_instance(subInstance, subSol)
+    # Only the bundle 1 stays 
+    @test subInstance2.bundles == [bundle1]
+    @test nv(subInstance2.networkGraph) == 4
+    @test ne(subInstance2.networkGraph) == 5
+end
+
+@testset "Fuse solutions" begin
+    fusedSol = OFOND.fuse_solutions(sol, subSol, instance, subInstance)
+    @test fusedSol.bundlePaths == sol.bundlePaths
+    @test subSol.bins != sol.bins
+    @test subSol.bins[supp1step2, xdockStep3] ==
+        [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    @test subSol.bins[portStep4, plantStep1] ==
+        [OFOND.Bin(30, 20, [commodity1, commodity1])]
+    @test subSol.bins[supp2step4, plantStep1] ==
+        OFOND.Bin[OFOND.Bin(20, 30, [commodity2, commodity2])]
+    @test subSol.bins[supp1step3, plantStep1] ==
+        [OFOND.Bin(25, 25, [commodity2, commodity1])]
 end

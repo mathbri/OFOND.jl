@@ -1,13 +1,16 @@
 # Updating functions for the bins
 
 # TODO : add current_cost option for this all all other functions
+# TODO : harmonize arc cost computation
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}
 )
     volume = sum(size(com) for com in commodities)
     leadTimeCost = sum(lead_time_cost(com) for com in commodities)
     # Node cost 
-    cost = (dstData.volumeCost + arcData.carbonCost) * volume / VOLUME_FACTOR
+    cost =
+        (dstData.volumeCost + arcData.carbonCost) * volume /
+        (VOLUME_FACTOR * arcData.capacity)
     # Transport cost 
     addedBins = arcData.isLinear ? (volume / arcData.capacity) : newBins
     cost += addedBins * arcData.unitCost

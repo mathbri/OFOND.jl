@@ -50,10 +50,10 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         row.distance,
         floor(Int, row.travel_time),
         isCommon,
-        row.unitCost,
-        row.isLinear,
-        row.carbonCost,
-        row.capacity,
+        row.shipment_cost,
+        row.is_linear,
+        row.carbon_cost,
+        row.capacity * VOLUME_FACTOR,
     )
 end
 
@@ -76,7 +76,7 @@ function bundle_hash(row::CSV.Row)
 end
 
 function order_hash(row::CSV.Row)
-    return hash(row.delivery_time_step, bundle_hash(row))
+    return hash(row.delivery_time_step + 1, bundle_hash(row))
 end
 
 function com_size(row::CSV.Row)
@@ -104,8 +104,9 @@ function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkG
     end
 end
 
+# Vectors starts at index 0 in Python so adding 1 to get the right index in Julia
 function get_order!(orders::Dict{UInt,Order}, row::CSV.Row, bundle::Bundle)
-    return get!(orders, order_hash(row), Order(bundle, row.delivery_time_step))
+    return get!(orders, order_hash(row), Order(bundle, row.delivery_time_step + 1))
 end
 
 function get_com_data!(comDatas::Dict{UInt,CommodityData}, row::CSV.Row)

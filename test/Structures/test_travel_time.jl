@@ -2,7 +2,7 @@
 supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
 supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
 xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-port_l = OFOND.NetworkNode("005", :port_l, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
+port_l = OFOND.NetworkNode("005", :pol, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
 plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0)
 
 # Define arcs between the nodes
@@ -269,4 +269,21 @@ supp2FromDel1 = ttg.hashToIdx[hash(1, supplier2.hash)]
         ([supp1FromDel2, plantFromDel0], 20 + 1e-5)
     @test OFOND.shortest_path(ttg, supp2FromDel1, plantFromDel0) ==
         ([supp2FromDel1, plantFromDel0], 100 + 1e-5)
+end
+
+@testset "New node index" begin
+    network2 = OFOND.NetworkGraph()
+    OFOND.add_node!(network2, supplier1)
+    OFOND.add_node!(network2, xdock)
+    OFOND.add_node!(network2, plant)
+    OFOND.add_arc!(network2, xdock, plant, plat_to_plant)
+    OFOND.add_arc!(network2, supplier1, xdock, supp1_to_plat)
+    OFOND.add_arc!(network2, supplier1, plant, supp1_to_plant)
+    ttg2 = OFOND.TravelTimeGraph(network2, [OFOND.change_idx(bundle3, 1)])
+    @test OFOND.new_node_index(ttg2, ttg, supp1FromDel3) == supp1FromDel3 == 4
+    @test OFOND.new_node_index(ttg2, ttg, xdockFromDel2) != xdockFromDel2
+    @test OFOND.new_node_index(ttg2, ttg, xdockFromDel2) == 7
+    @test OFOND.new_node_index(ttg2, ttg, plantFromDel0) != plantFromDel0
+    @test OFOND.new_node_index(ttg2, ttg, plantFromDel0) == 9
+    @test OFOND.new_node_index(ttg2, ttg, portFromDel1) == -1
 end

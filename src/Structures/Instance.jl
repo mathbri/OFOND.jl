@@ -22,6 +22,7 @@ end
 
 # Computing all objects properties
 function add_properties(instance::Instance, bin_packing::Function)
+    @info "Adding properties to instance"
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
@@ -31,7 +32,9 @@ function add_properties(instance::Instance, bin_packing::Function)
         append!(bundle.orders, newOrders)
     end
     newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
+    @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
+    @info "Time-space graph has $(nv(newTSGraph.graph)) nodes and $(ne(newTSGraph.graph)) arcs"
     return Instance(
         instance.networkGraph,
         newTTGraph,
@@ -76,12 +79,20 @@ function extract_sub_instance(
             n -> is_node_in_continent(newNetwork, n, continent), vertices(newNetwork.graph)
         )
     end
+    length(newBundles) == 0 && @warn "No bundles in the sub instance"
+    # Filtering bundle and orders
+    newBundles = [
+        remove_orders_outside_horizon(bundle, timeHorizon) for bundle in newBundles
+    ]
+    newBundles = [bundle for bundle in newBundles if length(bundle.orders) > 0]
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
     newNetGraph, _ = induced_subgraph(instance.networkGraph.graph, newVertices)
     newNetwork = NetworkGraph(newNetGraph)
     nNode, nLeg, nBun = nv(newNetGraph), ne(newNetGraph), length(newBundles)
-    nOrd = sum(length(bundle.orders) for bundle in newBundles)
+    nOrd = sum(length(bundle.orders) for bundle in newBundles; init=0)
     nCom = sum(
-        sum(length(order.content) for order in bundle.orders) for bundle in newBundles
+        sum(length(order.content) for order in bundle.orders) for bundle in newBundles;
+        init=0,
     )
     @info "Extracted instance has $nNode nodes, $nLeg legs, $nBun bundles, $nOrd orders and $nCom commodities on a $timeHorizon steps time horizon"
     return Instance(

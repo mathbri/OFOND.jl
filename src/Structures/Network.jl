@@ -102,7 +102,7 @@ function add_node!(network::NetworkGraph, node::NetworkNode)
         @warn "Same node already in the network" :nodeInGraph = network.graph[node.hash] :nodeToAdd =
             node
     elseif !(node.type in NODE_TYPES)
-        @warn "Node type not in NodeTypes" :node = node :nodeTypes = NODE_TYPES
+        @warn "Node type not in NodeTypes" :node = node :nodeTypes = join(NODE_TYPES, ", ")
     else
         # Adding the node to the network graph
         network.graph[node.hash] = node
@@ -121,7 +121,7 @@ function add_arc!(network::NetworkGraph, src::UInt, dst::UInt, arc::NetworkArc)
     elseif !haskey(network.graph, dst)
         @warn "Destination unknown in the network" :destination = dst
     elseif !(arc.type in ARC_TYPES)
-        @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = ARC_TYPES
+        @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = join(ARC_TYPES, ", ")
     else
         # Adding the leg to the network graph (if no anomaly)
         network.graph[src, dst] = arc

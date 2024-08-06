@@ -17,17 +17,15 @@ end
 function is_forbidden(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     # If it is an inland bundle, I want to avoid ports
     inlandBundle = (bundle.customer.continent == bundle.supplier.continent)
-    srcIsPort = TTGraph.networkNodes[src].type in [:port_l, :port_d]
-    dstIsPort = TTGraph.networkNodes[dst].type in [:port_l, :port_d]
-    return (inlandBundle && (srcIsPort || dstIsPort))
+    return (inlandBundle && (is_port(TTGraph, src) || is_port(TTGraph, dst)))
 end
 
 # Computes volume and lead time costs for an order
 function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
     dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
     # Node volume cost + Arc carbon cost + Commodity last time cost
-    return (dstData.volumeCost + arcData.carbonCost) * order.volume / VOLUME_FACTOR +
-           arcData.distance * order.leadTimeCost
+    return (dstData.volumeCost + arcData.carbonCost) * order.volume /
+           (VOLUME_FACTOR * arcData.capacity) + arcData.distance * order.leadTimeCost
 end
 
 # Computes transport units for an order

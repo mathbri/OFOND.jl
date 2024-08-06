@@ -9,14 +9,14 @@ plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
     )
     @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
-    @test cost ≈ 2 * (1e-5 + 1.6 + 0 + 0.2 + 5)
+    @test cost ≈ 2 * (1e-5 + 1.6 + 0 + 0.004 + 5)
     # change bins to change cost 
     push!(sol.bins[xdockStep4, plantStep1], OFOND.Bin(50))
     path, cost = OFOND.lower_bound_path(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; use_bins=true
     )
     @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
-    @test cost ≈ (1e-5 + 1.6 + 0 + 0.2 + 5) + (1e-5 + 0 + 0 + 0.2 + 5)
+    @test cost ≈ (1e-5 + 1.6 + 0 + 0.004 + 5) + (1e-5 + 0 + 0 + 0.004 + 5)
     # change current cost to change path 
     empty!(sol.bins[xdockStep4, plantStep1])
     # TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
@@ -24,7 +24,7 @@ plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; current_cost=true
     )
     @test path == [supp1FromDel2, plantFromDel0]
-    @test cost ≈ (2e-5 + 0 + 0.2 + 10)
+    @test cost ≈ (2e-5 + 0 + 0.004 + 10)
 end
 
 # Modifying instance a little for testing
@@ -56,7 +56,7 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     xdockFromDel1 = TTGraph2.hashToIdx[hash(1, xdock.hash)]
     plantFromDel0 = TTGraph2.hashToIdx[hash(0, plant.hash)]
     @test path1 == [supp3FromDel2, xdockFromDel1, plantFromDel0]
-    @test cost1 ≈ 2e-5 + 16.5
+    @test cost1 ≈ 2e-5 + 16.01
     @test OFOND.is_path_admissible(TTGraph2, path1)
     # one neither : change scale of others to force the path
     TSGraph2.currentCost .*= 1e7
@@ -79,14 +79,14 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     portFromDel1 = TTGraph2.hashToIdx[hash(1, port_l.hash)]
     @test path2 ==
         [supp3FromDel3, xdockFromDel2, portFromDel1, xdockFromDel1, plantFromDel0]
-    @test cost2 ≈ 6.250015 + 6.000015 + 6.250015 + 6.250015
+    @test cost2 ≈ 6.005015 + 6.000015 + 6.005015 + 6.005015
     @test !OFOND.is_path_admissible(TTGraph2, path2)
     # path3 should and be equal to path1
     path3, cost3 = OFOND.lower_bound_insertion(
         sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx; current_cost=true
     )
     @test path3 == path1
-    @test cost3 ≈ 16.5 + 2e-5
+    @test cost3 ≈ 16.01 + 2e-5
     @test OFOND.is_path_admissible(TTGraph2, path1)
 end
 
@@ -121,5 +121,25 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     @test sol.bins[supp2Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     filledArcs = filter(x -> length(x) > 0, findnz(sol.bins)[3])
     @test length(filledArcs) == 5
-    @test lowerBound ≈ 70.9 + 5e-5
+    @test lowerBound ≈ 69.234 + 5e-5
+end
+
+@testset "Lower bound filtering path" begin
+    path, cost = OFOND.lower_bound_filtering_path(
+        TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
+    )
+    @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
+    @test cost ≈ 2 * (1e-5 + 1.6 + 0 + 0.004 + 5)
+end
+
+@testset "Filtering computaion" begin
+    sol = OFOND.Solution(TTGraph, TSGraph, bundles)
+    OFOND.lower_bound_filtering!(sol, instance)
+    @test sol.bundlePaths == [
+        [supp1FromDel2, xdockFromDel1, plantFromDel0],
+        [supp2fromDel1, plantFromDel0],
+        [supp1FromDel2, xdockFromDel1, plantFromDel0],
+    ]
+    @test OFOND.is_feasible(sol, instance)
+    @test OFOND.compute_cost(sol, instance) ≈ 69.234 + 5e-5
 end

@@ -25,9 +25,10 @@ end
 
 part_number(commodity::Commodity) = commodity.data.partNumber
 
+# TODO : this overloads the base size function, maybe change name ?
 size(commodity::Commodity) = commodity.data.size
 
-lead_time_cost(commodity::Commodity) = commodity.data.leadTimeCost
+lead_time_cost(commodity::Commodity)::Float64 = commodity.data.leadTimeCost
 
 # Defining isless to simplify sorting operations by size for commodities
 function Base.isless(com1::Commodity, com2::Commodity)

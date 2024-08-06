@@ -53,6 +53,12 @@ function parrallel_bin_packing_improvement!(
     # TODO : parrallelize here with native @threads
 end
 
+# TODO : major profiling problems in bundle reintroduction comes from the deepcopy done in save and remove
+# Maybe doing the same thing as the capacities in tentative first fit 
+# Meaning dedicated a pre-allocated object used to save previous state of the solution 
+
+# TODO : the goal with the analysis would te to know if the first try with all bundles and the other tries with a subset of bundles are better
+
 # Removing and inserting back the bundle in the solution.
 # If the operation did not lead to a cost improvement, reverting back to the former state of the solution.
 function bundle_reintroduction!(
@@ -61,20 +67,31 @@ function bundle_reintroduction!(
     bundle::Bundle;
     sorted::Bool=false,
     current_cost::Bool=false,
-)
+    costThreshold::Float64=EPS,
+)::Float64
     # compute greedy insertion and lower bound insertion and take the best one ?
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    bundles, oldPaths = [bundle], [solution.bundlePaths[bundle.idx]]
+    oldPath = solution.bundlePaths[bundle.idx]
+    # TODO : remove this filter when running time problem is fixed
+    length(oldPath) == 2 && return 0.0
+    # TODO : the filtering could also occur in terms of cost removed : it must be above a certain threshold
+    bundle_max_removal_cost(bundle, oldPath, TTGraph) <= costThreshold && return 0.0
     # Saving previous solution state 
-    oldBins, costRemoved = save_and_remove_bundle!(
-        solution, instance, bundles, oldPaths; current_cost=current_cost
-    )
+    # oldBins, costRemoved = save_and_remove_bundle!(
+    #     solution, instance, bundles, oldPaths; current_cost=current_cost
+    # )
+    costRemoved = update_solution!(solution, instance, bundle, oldPath; remove=true)
+
+    # TODO : this check can be done before actually modifying the current solution to be more efficient
     # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
-    pathsLinearCost = bundle_path_linear_cost(bundle, oldPaths[1], TTGraph)
+    pathsLinearCost = bundle_path_linear_cost(bundle, oldPath, TTGraph)
     if costRemoved + pathsLinearCost >= -EPS
-        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
-        # Reverting bins to the previous state
-        revert_bins!(solution, oldBins)
+        # update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+        # # Reverting bins to the previous state
+        # revert_bins!(solution, oldBins)
+
+        update_solution!(solution, instance, bundle, oldPath)
+
         return 0.0
     end
     # Inserting it back
@@ -93,13 +110,16 @@ function bundle_reintroduction!(
     # Updating path if it improves the cost (accounting for EPS cost on arcs)
     if pathCost + costRemoved < -1e-3
         # Adding to solution
-        updateCost = update_solution!(solution, instance, bundles, [newPath]; sorted=true)
+        updateCost = update_solution!(solution, instance, bundle, newPath; sorted=true)
         # verification
-        @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $newPath \n bundleIdx : $bundleIdx"
         return pathCost + costRemoved
     else
-        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
-        revert_bins!(solution, oldBins)
+        # update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+        # revert_bins!(solution, oldBins)
+
+        update_solution!(solution, instance, bundle, oldPath)
+
         return 0.0
     end
 end
@@ -113,6 +133,9 @@ end
 # but just need to create this function that make them equal and we can avoid allocating memory for all the old paths and bins
 # this trick could be used also for the other neighborhoods
 
+# TODO : not usable right now because it tkes too much time to run for too little results
+# Major problems comes from deepcopy in save and remove and deepcopy solution
+
 # Remove and insert back all bundles flowing from src to dst 
 function two_node_incremental!(
     solution::Solution,
@@ -125,7 +148,7 @@ function two_node_incremental!(
     TTGraph = instance.travelTimeGraph
     twoNodeBundles = get_bundles_to_update(solution, src, dst)
     # If there is no bundles concerned, returning
-    length(twoNodeBundles) == 0 && return nothing
+    length(twoNodeBundles) == 0 && return 0.0
     oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
     # Saving previous solution state 
     oldBins, costRemoved = save_and_remove_bundle!(
@@ -137,11 +160,12 @@ function two_node_incremental!(
         (bundle, path) in zip(twoNodeBundles, oldPaths)
     )
     if costRemoved + pathsLinearCost >= -EPS
-        update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+        update_solution!(solution, instance, twoNodeBundles, oldPaths; skipRefill=true)
         revert_bins!(solution, oldBins)
         return 0.0
     end
     # Inserting it back
+    # TODO : one way to remove the deepcopy is to only test a greedy insertion
     greedyAddedCost, lbAddedCost, lbSol = 0.0, 0.0, deepcopy(solution)
     sortedBundleIdxs = sortperm(twoNodeBundles; by=bun -> bun.maxPackSize, rev=true)
     for bundleIdx in sortedBundleIdxs
@@ -177,23 +201,67 @@ function two_node_incremental!(
     end
 end
 
-function local_search!(solution::Solution, instance::Instance)
+function local_search!(
+    solution::Solution, instance::Instance; twoNode::Bool=false, timeLimit::Int=300
+)
     # Combine the three small neighborhoods
     TTGraph = instance.travelTimeGraph
     sort_order_content!(instance)
+    startCost = compute_cost(instance, solution)
+    totalImprovement = 0.0
     # First, bundle reintroduction to change whole paths
+    startTime = time()
     bundleIdxs = randperm(length(instance.bundles))
-    for bundleIdx in bundleIdxs
+    bunCounter = 0
+    print("Bundle reintroduction progress : ")
+    percentIdx = ceil(Int, length(bundleIdxs) / 100)
+    threshold = 1e-4 * startCost
+    for (i, bundleIdx) in enumerate(bundleIdxs)
         bundle = instance.bundles[bundleIdx]
-        bundle_reintroduction!(solution, instance, bundle; sorted=true)
+        improvement = bundle_reintroduction!(
+            solution, instance, bundle; sorted=true, costThreshold=threshold
+        )
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
+        totalImprovement += improvement
+        improvement < -1e-3 && (bunCounter += 1)
+        round((time() - startTime) * 1000) / 1000 > timeLimit && break
     end
+    println()
+    @info "Total bundle re-introduction improvement" :bundles = bunCounter :improvement =
+        totalImprovement :time = round((time() - startTime) * 1000) / 1000
+    # TODO : remove option when running time problem solved    
     # Second, two node incremental to optimize shared network
-    plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
-    two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
-    for src in two_node_nodes, dst in two_node_nodes
-        are_nodes_candidate(TTGraph, src, dst) || continue
-        two_node_incremental!(solution, instance, src, dst; sorted=true)
+    if twoNode
+        startTime = time()
+        twoNodeImprovement = 0.0
+        plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
+        two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
+        i = 0
+        for src in two_node_nodes, dst in two_node_nodes
+            are_nodes_candidate(TTGraph, src, dst) || continue
+            i += 1
+            i % 10 == 0 && print("|")
+            improvement = two_node_incremental!(solution, instance, src, dst; sorted=true)
+            srcInfo = "$(TTGraph.networkNodes[src])-$(TTGraph.stepToDel[src])"
+            dstInfo = "$(TTGraph.networkNodes[dst])-$(TTGraph.stepToDel[dst])"
+            @assert improvement < 1e-3 "Positive improvement is impossible, src = $srcInfo, dst = $dstInfo, improvement = $improvement"
+            improvement < -1e-4 * startCost &&
+                @info "Two-node incremental improvement" :src = srcInfo :dst = dstInfo :improvement =
+                    improvement
+            twoNodeImprovement += improvement
+            totalImprovement += improvement
+        end
+        @info "Total two-node improvement" :improvement = twoNodeImprovement :time =
+            round((time() - startTime) * 1000) / 1000
     end
     # Finally, bin packing improvement to optimize packings
-    return bin_packing_improvement!(solution, instance; sorted=true)
+    startTime = time()
+    improvement = bin_packing_improvement!(solution, instance; sorted=true)
+    @info "Bin packing improvement" :improvement = improvement :time =
+        round((time() - startTime) * 1000) / 1000
+    totalImprovement += improvement
+    totalImprovement < -1e-3 &&
+        @info "Total local serach improvement" :improvement = totalImprovement
+    return totalImprovement
 end

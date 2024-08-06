@@ -36,10 +36,10 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
 
 @testset "Arc order Cost" begin
     # volume stock cost function
-    @test OFOND.volume_stock_cost(TTGraph, supp1FromDel3, xdockFromDel2, order1) ≈ 0.2 + 5
-    @test OFOND.volume_stock_cost(TTGraph, supp1FromDel3, xdockFromDel2, order2) ≈ 0.3 + 7
-    @test OFOND.volume_stock_cost(TTGraph, xdockFromDel1, plantFromDel0, order1) ≈ 0.2 + 5
-    @test OFOND.volume_stock_cost(TTGraph, xdockFromDel1, plantFromDel0, order2) ≈ 0.3 + 7
+    @test OFOND.volume_stock_cost(TTGraph, supp1FromDel3, xdockFromDel2, order1) ≈ 0.004 + 5
+    @test OFOND.volume_stock_cost(TTGraph, supp1FromDel3, xdockFromDel2, order2) ≈ 0.006 + 7
+    @test OFOND.volume_stock_cost(TTGraph, xdockFromDel1, plantFromDel0, order1) ≈ 0.004 + 5
+    @test OFOND.volume_stock_cost(TTGraph, xdockFromDel1, plantFromDel0, order2) ≈ 0.006 + 7
     # transport units 
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test OFOND.transport_units(
@@ -106,24 +106,24 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
     # linear arc
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; use_bins=false
-    ) ≈ 1e-5 + 1.6 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; opening_factor=10.0
-    ) ≈ 1e-5 + 16 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 16 + 0 + 0.004 + 5
     # consolidated arc with nothing on it (tentaive first fit shouldn't activate)
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
-    ) ≈ 1e-5 + 8 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 8 + 0 + 0.004 + 5
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
-    ) ≈ 1e-5 + 80 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 80 + 0 + 0.004 + 5
     # consolidated arc with things on it
     OFOND.first_fit_decreasing!(
         sol.bins[xdockStep4, plantStep1], 40, [commodity1, commodity1]
     )
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
-    ) ≈ 1e-5 + 8 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 8 + 0 + 0.004 + 5
     TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
     @test OFOND.arc_update_cost(
         sol,
@@ -134,10 +134,10 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         plantFromDel0;
         use_bins=false,
         current_cost=true,
-    ) ≈ 1e-5 + 2 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 2 + 0 + 0.004 + 5
     @test OFOND.arc_update_cost(
         sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
-    ) ≈ 1e-5 + 0 + 0 + 0.2 + 5
+    ) ≈ 1e-5 + 0 + 0 + 0.004 + 5
 end
 
 @testset "Source nodes finding" begin
@@ -195,7 +195,7 @@ J = vcat(
     #     fill(1e-5, 4),
     # )
     V = fill(1e-5, 15)
-    V[[1, 2, 5, 7]] .+= [21.2, 21.2, 310.2, 85.2]
+    V[[1, 2, 5, 7]] .+= [21.004, 21.004, 310.004, 85.004]
     V[8:11] .= 1e9
     @test all([TTGraph3.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 
@@ -216,7 +216,7 @@ J = vcat(
     #     fill(1e-5, 4),
     # )
     V = fill(1e-5, 15)
-    V[[1, 2, 5, 7]] .+= [6.8, 6.8, 40.2, 5.2]
+    V[[1, 2, 5, 7]] .+= [6.604, 6.604, 40.004, 5.004]
     V[8:11] .= 1e9
     @test all([TTGraph2.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 end

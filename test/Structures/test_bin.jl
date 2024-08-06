@@ -9,6 +9,8 @@ commodity2 = OFOND.Commodity(2, 2, comData)
         OFOND.Bin(10, 0, [OFOND.Commodity(1, 1, comData)])
     @test_throws AssertionError OFOND.Bin(-1, 0, OFOND.Commodity[])
     @test_throws AssertionError OFOND.Bin(10, -1, OFOND.Commodity[])
+    @test OFOND.Bin(10, commodity1) == OFOND.Bin(5, 5, [OFOND.Commodity(1, 1, comData)])
+    @test OFOND.Bin(4, commodity1) == OFOND.Bin(0, 4, [OFOND.Commodity(1, 1, comData)])
 end
 
 @testset "Testing add!" begin

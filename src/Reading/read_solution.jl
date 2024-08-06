@@ -67,11 +67,15 @@ end
 function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::Int)
     # The travel time path is re-created backward by searching for corresponding nodes
     ttPath = [TTGraph.bundleDst[idx]]
-    for node in reverse(path[1:(end - 1)])
+    # Paths in data files are already backwards
+    for node in path[2:end]
         # For each node of the path, we search its inneighbor having the same information
         nextNode = find_next_node(TTGraph, ttPath[end], node)
         if nextNode === nothing
-            @warn "Next node not found, path not projectable for bundle $(idx)" :node = node :ttNode = ttPath[end]
+            pathStr = join(string.(path), ", ")
+            prev_node = TTGraph.networkNodes[ttPath[end]]
+            @warn "Next node not found, path not projectable for bundle $(idx) (either the node doesn't exist or the maximum delivery time is exceeded)" :node =
+                node :prev_node = prev_node :path = pathStr
             break
         end
         push!(ttPath, nextNode)
@@ -91,22 +95,6 @@ function project_all_paths(paths::Vector{Vector{NetworkNode}}, TTGraph::TravelTi
         errors || (ttPaths[idx] = ttPath)
     end
     return ttPaths
-end
-
-# Repair paths by putting direct paths for bundles with errors
-function repair_paths!(paths::Vector{Vector{Int}}, instance::Instance)
-    TTGraph = instance.travelTimeGraph
-    count = 0
-    for (idx, path) in enumerate(paths)
-        if length(path) == 0
-            suppNode, custNode = TTGraph.bundleSrc[idx], TTGraph.bundleDst[idx]
-            # Computing shortest path
-            shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
-            append!(path, shortestPath)
-            count += 1
-        end
-    end
-    return count
 end
 
 function read_solution(instance::Instance, solution_file::String)
@@ -131,15 +119,15 @@ function read_solution(instance::Instance, solution_file::String)
         # Add node to path 
         add_node_to_path!(paths[bundle.idx], node, row.point_number)
     end
-    @info "Read $(length(paths)) paths"
     check_paths(paths)
-    @info "Projecting paths on the travel-time graph"
     allPaths = project_all_paths(paths, instance.travelTimeGraph)
-    # check_paths(allPaths)
     repaired = repair_paths!(allPaths, instance)
-    @info "Repaired $(repaired) paths for bundles with errors"
+    @info "Read $(length(paths)) paths, repaired $(repaired) paths for bundles with errors"
     # Creating and updating solution
     solution = Solution(instance)
     update_solution!(solution, instance, instance.bundles, allPaths)
+    feasible = is_feasible(instance, solution; verbose=true)
+    totalCost = compute_cost(instance, solution)
+    @info "Current solution properties" :feasible = feasible :total_cost = totalCost
     return solution
 end

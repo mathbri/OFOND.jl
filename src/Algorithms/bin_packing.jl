@@ -10,6 +10,16 @@
 
 # TODO : add other bin packing computations to improve this neighborhood
 
+# TODO :check if it is a good idea
+# To remove the push operation, good idea to create a 4d tensor of booleans indicating true if commodity c is in bin b of arc i-j ?
+# Really sparse matrix but could be optimized with BitArray
+# One matrix per arc ?
+# Thats for the content and we have a matrix (or vertor per arc) for capacities and same for loads
+#
+# This option will be easier to implement
+# Store only commodity hashes for the bin content ? (keep the push but makes bin way lighter ?)
+# Store size of commodity for fast removal computation ?
+
 function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
@@ -18,12 +28,9 @@ function first_fit_decreasing!(
     lengthBefore = length(bins)
     # Adding commodities on top of others
     for commodity in commodities
-        added = false
-        for bin in bins
-            added = add!(bin, commodity)
-            added && break
-        end
-        added || push!(bins, Bin(fullCapacity, commodity))
+        idxB = findfirst(bin -> add!(bin, commodity), bins)
+        # TODO : this push! operation is taking most of the time in different profiling, probably because of garbage collecting and reallocation
+        idxB === nothing && push!(bins, Bin(fullCapacity, commodity))
     end
     return length(bins) - lengthBefore
 end
@@ -45,6 +52,39 @@ function first_fit_decreasing!(
     return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
+# TODO : the mapping operation takes alsmost all of this function time, probably because of garbage collecting
+# TODO : maybe a single, global, pre-allocated vector for all tentative first fit will speed up computation, 
+# instead of creating a new array with each function call, it would just update values inside the vector, growing it only when needed 
+# Maybe do all this in a seperate file, like whats below
+global CAPACITIES = [-1]
+global MAX_LENGTH = 1
+
+function get_capacities(bins::Vector{Bin})
+    # if the vector of bins is larger than the current cpapcity vector, growing it
+    if length(bins) > length(CAPACITIES)
+        append!(CAPACITIES, fill(0, length(bins) - length(CAPACITIES)))
+    end
+    # updating values in capcities vector
+    for (idx, bin) in enumerate(bins)
+        CAPACITIES[idx] = bin.capacity
+    end
+    # filling with -1 for not opened bins
+    CAPACITIES[(length(bins) + 1):end] .= -1
+    return CAPACITIES
+end
+
+function add_capacity(idx::Int, capacity::Int)
+    if idx > length(CAPACITIES)
+        push!(CAPACITIES, capacity)
+    else
+        CAPACITIES[idx] = capacity
+    end
+end
+
+function length_capacities()
+    return findfirst(x -> x == -1, CAPACITIES) - 1
+end
+
 # First fit decreasing computed on loads to return only the number of bins added by the vector of commodities
 function tentative_first_fit(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
@@ -55,16 +95,14 @@ function tentative_first_fit(
     lengthBefore = length(capacities)
     # Adding commodities on top of others
     for commodity in commodities
-        added = false
-        for (idxL, capacity) in enumerate(capacities)
-            if capacity >= size(commodity)
-                added = true
-                capacities[idxL] -= size(commodity)
-                break
-            end
+        idxC = findfirst(cap -> cap >= size(commodity), capacities)
+        if idxC !== nothing
+            capacities[idxC] -= size(commodity)
+        else
+            push!(capacities, fullCapacity - size(commodity))
         end
-        added || push!(capacities, fullCapacity - size(commodity))
     end
+    global MAX_LENGTH = max(MAX_LENGTH, length(capacities))
     return length(capacities) - lengthBefore
 end
 

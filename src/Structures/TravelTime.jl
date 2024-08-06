@@ -216,7 +216,7 @@ function is_path_elementary(travelTimeGraph::TravelTimeGraph, path::Vector{Int})
 end
 
 function is_port(travelTimeGraph::TravelTimeGraph, node::Int)
-    return travelTimeGraph.networkNodes[node].type in [:port_l, :port_d]
+    return travelTimeGraph.networkNodes[node].type in [:pol, :pod]
 end
 
 function is_platform(travelTimeGraph::TravelTimeGraph, node::Int)
@@ -246,4 +246,13 @@ function shortest_path(travelTimeGraph::TravelTimeGraph, src::Int, dst::Int)
     removedCost = remove_shortcuts!(shortestPath, travelTimeGraph)
     pathCost = dijkstraState.dists[dst]
     return shortestPath, pathCost - removedCost
+end
+
+# get new index of a node according to a new travel time graph
+function new_node_index(
+    newTTGraph::TravelTimeGraph, oldTTGraph::TravelTimeGraph, oldTTNode::Int
+)
+    oldHash = hash(oldTTGraph.stepToDel[oldTTNode], oldTTGraph.networkNodes[oldTTNode].hash)
+    !haskey(newTTGraph.hashToIdx, oldHash) && return -1
+    return newTTGraph.hashToIdx[oldHash]
 end

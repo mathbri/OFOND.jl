@@ -11,20 +11,20 @@ plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
         sol, TTGraph, TSGraph, bundle11, supp1FromDel2, plantFromDel0
     )
     @test path == [supp1FromDel2, plantFromDel0]
-    @test cost ≈ 10.2 + 1e-5
+    @test cost ≈ 10.004 + 1e-5
     # change opening factor to change path 
     path, cost = OFOND.greedy_path(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
     )
     @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
-    @test cost ≈ 20 + 2e-5
+    @test cost ≈ 19.608 + 2e-5
     # change current cost to change path 
     # TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
     path, cost = OFOND.greedy_path(
         sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; current_cost=true
     )
     @test path == [supp1FromDel2, plantFromDel0]
-    @test cost ≈ 10.2 + 3e-5 + 1e-5
+    @test cost ≈ 10.004 + 3e-5 + 1e-5
 end
 
 # Modifying instance a little for testing
@@ -56,8 +56,8 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     xdockFromDel1 = TTGraph2.hashToIdx[hash(1, xdock.hash)]
     plantFromDel0 = TTGraph2.hashToIdx[hash(0, plant.hash)]
     @test path1 == [supp3FromDel2, xdockFromDel1, plantFromDel0]
-    # 3 base arc cost + 12 for lead + 0.5 for carbon and xdock + 2*4 + 0.5*4 for units
-    @test cost1 ≈ 2e-5 + 12 + 0.5 + 10
+    # 3 base arc cost + 12 for lead + 0.5/50 for carbon and xdock + 2*4 + 0.5*4 for units
+    @test cost1 ≈ 2e-5 + 12 + 0.01 + 10
     @test OFOND.is_path_admissible(TTGraph2, path1)
     # one neither : change scale of others to force the path
     TSGraph2.currentCost .*= 1e7
@@ -80,14 +80,14 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
     portFromDel1 = TTGraph2.hashToIdx[hash(1, port_l.hash)]
     @test path2 ==
         [supp3FromDel3, xdockFromDel2, portFromDel1, xdockFromDel1, plantFromDel0]
-    @test cost2 ≈ 6.250015 + 6.00003 + 6.25003 + 6.25003
+    @test cost2 ≈ 6.005015 + 6.00003 + 6.00503 + 6.00503
     @test !OFOND.is_path_admissible(TTGraph2, path2)
     # path3 should and be equal to path1
     path3, cost3 = OFOND.greedy_insertion(
         sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx; current_cost=true
     )
     @test path3 == path1
-    @test cost3 ≈ 56.25001 + 6.25003
+    @test cost3 ≈ 56.00501 + 6.00503
     @test OFOND.is_path_admissible(TTGraph2, path3)
 end
 
@@ -123,5 +123,5 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     @test sol.bins[supp2Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     filledArcs = filter(x -> length(x) > 0, findnz(sol.bins)[3])
     @test length(filledArcs) == 5
-    @test cost ≈ 73.3
+    @test cost ≈ 71.634
 end

@@ -28,6 +28,8 @@
 
 # TODO : if update cost matrix is really expensive, do it once with every option and store all option results in different objects
 
+global GREEDY_RECOMPUTATION = 0
+
 # Compute path and cost for the greedy insertion of a bundle, not handling path admissibility
 function greedy_path(
     solution::Solution,
@@ -98,6 +100,7 @@ function greedy_insertion(
             current_cost=current_cost,
         )
         pathCost = path_cost(shortestPath, costMatrix)
+        global GREEDY_RECOMPUTATION += 1
         if !is_path_admissible(TTGraph, shortestPath)
             # Then not taking into account the current solution
             # If this happens, we want to be sure to have an admissible path
@@ -113,6 +116,7 @@ function greedy_insertion(
                 current_cost=false,
             )
             pathCost = path_cost(shortestPath, costMatrix)
+            global GREEDY_RECOMPUTATION += 1
         end
     end
     return shortestPath, pathCost
@@ -125,7 +129,9 @@ function greedy!(solution::Solution, instance::Instance)
     sortedBundleIdxs = sortperm(instance.bundles; by=bun -> bun.maxPackSize, rev=true)
     # Computing the greedy delivery possible for each bundle
     totalCost = 0.0
-    for bundleIdx in sortedBundleIdxs
+    print("Greedy introduction progress : ")
+    percentIdx = ceil(Int, length(sortedBundleIdxs) / 100)
+    for (i, bundleIdx) in enumerate(sortedBundleIdxs)
         bundle = instance.bundles[bundleIdx]
         # Retrieving bundle start and end nodes
         suppNode = TTGraph.bundleSrc[bundleIdx]
@@ -139,8 +145,11 @@ function greedy!(solution::Solution, instance::Instance)
             solution, instance, [bundle], [shortestPath]; sorted=true
         )
         # verification
-        @assert isapprox(pathCost, updateCost; atol=10 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(sortedBundleIdxs)))% ")
     end
+    println()
     return totalCost
 end

@@ -132,9 +132,9 @@ end
 end
 
 @testset "Write solution" begin
-    OFOND.write_solution(solution, instance; suffix="test")
+    OFOND.write_solution(solution, instance; suffix="test", directory=@__DIR__)
     # test file existence
-    @test isfile("network_design_test.csv")
-    @test isfile("shipment_info_test.csv")
-    @test isfile("shipment_content_test.csv")
+    @test isfile("ReadingWriting\\network_design_test.csv")
+    @test isfile("ReadingWriting\\shipment_info_test.csv")
+    @test isfile("ReadingWriting\\shipment_content_test.csv")
 end

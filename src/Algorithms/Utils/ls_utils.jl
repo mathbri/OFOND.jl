@@ -146,12 +146,22 @@ function select_two_nodes(TTGraph::TravelTimeGraph)
     return node1, node2
 end
 
+function is_node1_before_node2(path::Vector{Int}, node1::Int, node2::Int)
+    # look for the first node encountered
+    idx = findfirst(node -> (node == node1) || (node == node2), path)
+    return path[idx] == node1
+end
+
 # Return a vector of bundles to update 
 # If node 1 and node 2 are given : bundles that flow from 1 to 2
 # If only node 1 : bundle that have node 1 for destination
 function get_bundles_to_update(solution::Solution, node1::Int, node2::Int=-1)
     node2 == -1 && return solution.bundlesOnNode[node1]
-    return intersect(solution.bundlesOnNode[node1], solution.bundlesOnNode[node2])
+    twoNodeBundles = intersect(solution.bundlesOnNode[node1], solution.bundlesOnNode[node2])
+    return filter(
+        b -> is_node1_before_node2(solution.bundlePaths[b.idx], node1, node2),
+        twoNodeBundles,
+    )
 end
 
 function get_paths_to_update(
@@ -177,6 +187,19 @@ function bundle_path_linear_cost(
         arcData = TTGraph.networkArcs[i, j]
         !arcData.isLinear && continue
         # for linear arcs, adding transport cost 
+        cost += get_transport_units(order, arcData) * arcData.unitCost
+    end
+    return cost
+end
+
+# compute the maximum removal cost of a bundle
+function bundle_max_removal_cost(
+    bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
+)
+    cost = 0.0
+    for (i, j) in partition(path, 2, 1), order in bundle.orders
+        cost += volume_stock_cost(TTGraph, i, j, order)
+        arcData = TTGraph.networkArcs[i, j]
         cost += get_transport_units(order, arcData) * arcData.unitCost
     end
     return cost

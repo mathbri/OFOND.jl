@@ -88,7 +88,9 @@ function lower_bound!(solution::Solution, instance::Instance)
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
     # Computing the lower bound delivery for each bundle
-    for bundle in instance.bundles
+    println("Lower Bound insertion progress : ")
+    percentIdx = ceil(Int, length(instance.bundles) / 100)
+    for (i, bundle) in enumerate(instance.bundles)
         # Retrieving bundle start and end nodes
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
@@ -99,8 +101,10 @@ function lower_bound!(solution::Solution, instance::Instance)
         lowerBound += pathCost
         # Adding to solution
         update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(instance.bundles)))% ")
     end
-    println("Lower Bound Computed : $lowerBound")
+    println("\nLower Bound Computed : $lowerBound")
     return lowerBound
 end
 
@@ -127,4 +131,38 @@ function lower_bound_filtering!(instance::Instance, solution::Solution)
     # aggressive : all bundle taking direct paths are filtered from instance
     # not aggressive : all bundle taking direct paths and BP lower bound is reached for orders are filtered from instance
     # use milp packing for order bp precomputation ?
+end
+
+function lower_bound_filtering_path(
+    TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundle::Bundle, src::Int, dst::Int
+)
+    update_lb_filtering_cost_matrix!(TTGraph, TSGraph, bundle)
+    dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
+    shortestPath = enumerate_paths(dijkstraState, dst)
+    removedCost = remove_shortcuts!(shortestPath, TTGraph)
+    pathCost = dijkstraState.dists[dst]
+    return shortestPath, pathCost - removedCost
+end
+
+function lower_bound_filtering!(solution::Solution, instance::Instance)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Sorting commodities in orders and bundles between them
+    sort_order_content!(instance)
+    # Computing the lower bound delivery for each bundle
+    println("Lower Bound filtering insertion progress : ")
+    percentIdx = ceil(Int, length(instance.bundles) / 100)
+    for (i, bundle) in enumerate(instance.bundles)
+        # Retrieving bundle start and end nodes
+        suppNode = TTGraph.bundleSrc[bundle.idx]
+        custNode = TTGraph.bundleDst[bundle.idx]
+        # Computing shortest path
+        shortestPath, pathCost = lower_bound_filtering_path(
+            TTGraph, TSGraph, bundle, suppNode, custNode;
+        )
+        # Adding to solution
+        update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(instance.bundles)))% ")
+    end
+    return println()
 end

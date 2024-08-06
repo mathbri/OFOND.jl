@@ -177,7 +177,7 @@ xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
     costImprov = OFOND.two_node_incremental!(sol, instance2, xdock2fromDel1, plantFromDel0)
     # initial path is TTPath12
     # new path goes to xdock3 before plant
-    @test costImprov ≈ -3.3
+    @test costImprov ≈ -3.496
     xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
     @test sol.bundlePaths == [
         [supp1FromDel3, xdock1FromDel2, xdock2fromDel1, xdock3fromDel1, plantFromDel0],
@@ -209,7 +209,7 @@ xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
     # now testing bundle 1 and 3 together
     xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
     costImprov = OFOND.two_node_incremental!(sol, instance2, xdock1FromDel2, plantFromDel0)
-    @test costImprov ≈ -7.7
+    @test costImprov ≈ -7.504
     @test sol.bundlePaths == [TTPath113, [supp2fromDel1, plantFromDel0], TTPath313]
     # testing bundle on nodes
     @test sol.bundlesOnNode[plantFromDel0] == [bundle11, bundle33, bundle2]
@@ -243,7 +243,7 @@ end
     OFOND.update_solution!(sol, instance2, [bundle11, bundle33], [TTPath112, TTPath313])
     OFOND.update_solution!(sol, instance2, [bundle2], [[supp2fromDel1, plantFromDel0]])
     # changing with full local search 
-    OFOND.local_search!(sol, instance2)
+    OFOND.local_search!(sol, instance2; twoNode=true)
     @test sol.bundlePaths == greedySol.bundlePaths
     for (node, bundlesOnNode) in sol.bundlesOnNode
         sort!(bundlesOnNode; by=b -> b.idx)

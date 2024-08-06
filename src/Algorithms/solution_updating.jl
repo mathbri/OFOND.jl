@@ -49,11 +49,22 @@ function get_bins_updated(
     return sparse(I, J, V)
 end
 
+# global ALL_COMMODITIES = Commodity[]
+# get all commodities update the global variable and returns the number of commodities to take in the view
+
+# TODO : this function appears to be the real bottlneck in the local search
 function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
+    # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
+    ceil(sum(bin.load for bin in bins) / fullCapacity) == length(bins) && return 0
+    # TODO : This get all commodities use a lot of garbage collection
+    # Use a pre-allocated vector to store the commodities to be refilled and give a view to the first fit function ?
     allCommodities = get_all_commodities(bins)
     binsBefore = length(bins)
     empty!(bins)
     # Filling it back again
+    # TODO : the sorting operation this follows use also a lot of grabage collection
+    # TODO : also the fact that the bin vector is emptied than filled again
+    # For the last point, one way would be to accept empty bins ?
     first_fit_decreasing!(bins, fullCapacity, allCommodities; sorted=false)
     return length(bins) - binsBefore
 end
@@ -82,6 +93,32 @@ function refill_bins!(
     return costAdded
 end
 
+# Refill bins on the path given, to be used after single bundle removal
+function refill_bins!(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    path::Vector{Int};
+    current_cost::Bool=false,
+)
+    costAdded = 0.0
+    # Projecting path for every order
+    for order in bundle.orders
+        timedPath = time_space_projector(TTGraph, TSGraph, path, order)
+        # Refilling all bins on this path
+        for (tSrc, tDst) in partition(timedPath, 2, 1)
+            arcData = TSGraph.networkArcs[tSrc, tDst]
+            # No need to refill bins on linear arcs
+            arcData.isLinear && continue
+            # Adding new bins cost
+            costAdded +=
+                refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
+        end
+    end
+    return costAdded
+end
+
 # Remove the bundle only on the path portion provided
 function remove_bundle!(
     solution::Solution, instance::Instance, bundle::Bundle, path::Vector{Int};
@@ -97,9 +134,7 @@ function remove_bundle!(
     return (costRemoved, oldPart)
 end
 
-# TODO : write this function only for a bundle and a path, it is weird to always put bracket
-
-# Update the current solution
+# Update the current solution for several bundles
 # Providing a path with remove option means to remove the bundle only on the path portion provided
 function update_solution!(
     solution::Solution,
@@ -137,14 +172,35 @@ function update_solution!(
     return costAdded
 end
 
+# Update the current solution (optimized for a unique bundle)
+# Providing a path with remove option means to remove the bundle only on the path portion provided
+function update_solution!(
+    solution::Solution,
+    instance::Instance,
+    bundle::Bundle,
+    path::Vector{Int}=Int[];
+    remove::Bool=false,
+    sorted::Bool=false,
+    skipRefill::Bool=false,
+)
+    # If remove = false, adding the bundle to the solution
+    !remove && return add_bundle!(
+        solution, instance, bundle, path; sorted=sorted, skipFill=skipRefill
+    )
+    # Otherwise, removing it from the solution
+    costRemoved, oldPart = remove_bundle!(solution, instance, bundle, path)
+    # If skipRefill than no recomputation
+    skipRefill && return costRemoved
+    # Than refilling the bins
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    costRemoved += refill_bins!(solution, TTGraph, TSGraph, bundle, oldPart)
+    return costRemoved
+end
+
 # Removing all empty bins from the linear arcs (to be used before extraction)
 function clean_empty_bins!(solution::Solution, instance::Instance)
     TSGraph = instance.timeSpaceGraph
     for arc in edges(TSGraph.graph)
-        arcData = TSGraph.networkArcs[src(arc), dst(arc)]
-        # No update for consolidated arcs
-        # !arcData.isLinear && continue
-        # Removing empty bins
         filter!(bin -> bin.load > 0, solution.bins[src(arc), dst(arc)])
     end
 end
