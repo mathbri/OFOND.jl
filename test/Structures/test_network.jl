@@ -114,3 +114,10 @@ end
     @test OFOND.zero(OFOND.NetworkArc) ==
         OFOND.NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end
+
+@testset "Node in contry / continent" begin
+    @test !OFOND.is_node_in_country(network, 1, "Fra")
+    @test OFOND.is_node_in_country(network, 1, "country")
+    @test !OFOND.is_node_in_continent(network, 1, "EU")
+    @test OFOND.is_node_in_continent(network, 1, "continent")
+end

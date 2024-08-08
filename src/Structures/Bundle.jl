@@ -35,3 +35,11 @@ end
 function Base.show(io::IO, bundle::Bundle)
     return print(io, "Bundle($(bundle.supplier), $(bundle.customer), idx=$(bundle.idx))")
 end
+
+function is_bundle_in_country(bundle::Bundle, country::String)
+    return bundle.supplier.country == country && bundle.customer.country == country
+end
+
+function is_bundle_in_continent(bundle::Bundle, continent::String)
+    return bundle.supplier.continent == continent && bundle.customer.continent == continent
+end
