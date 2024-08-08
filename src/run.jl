@@ -11,29 +11,27 @@ function run_heuristic(
     preSolve::Bool=true,
     startSol::Solution=Solution(instance),
 )
+    @info "Running heuristic $heuristic"
     # Initialize start time
     startTime = time()
     # Complete Instance object with all properties needed
     if preSolve
         instance = add_properties(instance, first_fit_decreasing)
+        @info "Pre-solve done" :pre_solve_time = get_elapsed_time(startTime)
     end
-    preSolveTime = get_elapsed_time(startTime)
     # Initialize solution object
     solution = deepcopy(startSol)
 
     # Run the corresponding heuristic
     heuristic(solution, instance)
-    while get_elapsed_time(preSolveTime) < timeLimit
+    while get_elapsed_time(startTime) < timeLimit
         heuristic(solution, instance)
     end
 
-    solveTime = get_elapsed_time(preSolveTime)
-    @info "Running heuristic $heuristic" :pre_solve_time =
-        preSolveTime, :solve_time =
-            solveTime, :feasible =
-                is_feasible(instance, solution), :total_cost = compute_cost(
-                    instance, solution
-                )
+    solveTime = get_elapsed_time(startTime)
+    @info "$heuristic heuristic run with success" :solve_time =
+        solveTime, :feasible =
+            is_feasible(instance, solution), :total_cost = compute_cost(instance, solution)
 
     return instance, solution
 end
