@@ -13,7 +13,8 @@
 
 # For the minimal flow on maritime arcs, one solution is to check at removal time if the quantities left satisfy the minimal flow, if not just recomuting path to and from oversea arc 
 # At insertion time, if the added flow don't make enough for the constraint, arc is forbidden (INF) cost
-# Another option for insertion is to make a first round of insertion without constraint and if there is arcs that does not satisfy, take all bundles of it, forbid arc for every one and recompute insertion and repaeat until constraint are good
+# Another option for insertion is to make a first round of insertion without constraint and if there is arcs that does not satisfy, 
+#    - take all bundles of it, forbid arc for every one and recompute insertion and repaeat until constraint are good
 
 # Other question : 
 # Instead of computing greedy and lower boud paths, would it be better to divide it into two different operators ?

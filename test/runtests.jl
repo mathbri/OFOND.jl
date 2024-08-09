@@ -6,6 +6,8 @@ using MetaGraphsNext
 using SparseArrays
 using Dates
 using CSV
+using JuMP
+using HiGHS
 
 println("Testing OFO Network Design Package")
 

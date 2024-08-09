@@ -26,17 +26,11 @@ function run_heuristic(
         Solution(instance)
     end
 
-    println(solution.bundlePaths)
-    println(solution.bins[1, 1])
-
     # Run the corresponding heuristic
     heuristic(solution, instance)
     while get_elapsed_time(startTime) < timeLimit
         heuristic(solution, instance)
     end
-
-    println(solution.bundlePaths)
-    println(solution.bins[1, 1])
 
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solution)

@@ -9,13 +9,13 @@
 function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::Solution)
     for arc in edges(timeSpaceGraph.graph)
         arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
-        # No update for linear arcs
+        # Updating current cost
+        timeSpaceGraph.currentCost[src(arc), dst(arc)] = arcData.unitCost
+        # No scaling for linear arcs
         arcData.isLinear && continue
         # Total volume on arc
         arcBins = solution.bins[src(arc), dst(arc)]
-        arcVolume = sum(bin.load for bin in arcBins)
-        # Updating current cost
-        timeSpaceGraph.currentCost[src(arc), dst(arc)] = arcData.unitCost
+        arcVolume = sum(bin.load for bin in arcBins; init=0)
         # No scaling for arcs with no volume
         arcVolume <= EPS && continue
         costFactor = length(arcBins) * arcData.capacity / arcVolume
@@ -32,7 +32,7 @@ function add_variables!(
     # Variable x[b, a] in {0, 1} indicate if bundle b uses arc a in the travel time graph
     arcs = [(src(arc), dst(arc)) for arc in edges(travelTimeGraph.graph)]
     @variable(model, x[idx(bundles), arcs], Bin)
-    if neighborhood == :attract_reduce
+    if neighborhood == :attract || neighborhood == :reduce
         # Variable z[b] in {0, 1} indicate if bundle b uses old or new path
         @variable(model, z[[bundle.idx for bundle in bundles]], Bin)
     end
@@ -62,8 +62,9 @@ function get_e_matrix(
     if neighborhood == :two_shared_node
         if !has_vertex(TTGraph.graph, src) || !has_vertex(TTGraph.graph, dst)
             @warn "$neighborhood : src or dst is unknown. Switching to full paths for those bundles."
+        else
+            J = repeat([src, dst]; inner=length(bundles))
         end
-        J = vcat(repeat(src, length(bundles)), repeat(dst, length(bundles)))
     end
     return sparse(I, J, V)
 end
@@ -75,34 +76,39 @@ function add_path_constraints!(
     bundles::Vector{Bundle},
     e::SparseMatrixCSC{Float64,Int},
 )
-    incidence_matrix = incidence_matrix(TTGraph.graph)
-    x = model[:x]
+    incMatrix, x = incidence_matrix(TTGraph.graph), model[:x]
     # Is the incicdence matrix constructed by iterating the same way as edges ? Seems yes from the documentation
-    @constraint(model, path[b in idx(bundles)], incidence_matrix * x[b, :] .== e[b, :])
+    @constraint(
+        model,
+        path[b in idx(bundles)],
+        sum(incMatrix[:, a] * x[b, arc] for (a, arc) in enumerate(edges(TTGraph.graph))) .==
+            e[b, :]
+    )
 end
 
 # Generate an attract path for arc src-dst and bundle
-function generate_attract_paths(
-    TTGraph::TravelTimeGraph, bundles::Vector{Bundle}, src::Int, dst::Int
+function generate_attract_path(
+    instance::Instance, solution::Solution, bundle::Bundle, src::Int, dst::Int
 )
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Update cost matrix 
+    update_lb_cost_matrix!(solution, TTGraph, TSGraph, bundle; giant=true)
     # Compute path from bundleSrc to src and from dst to bundleDst
-    startParts = [
-        shortest_path(TTGraph, bSrc, src) for bSrc in TTGraph.bundleSrc[idx(bundles)]
-    ]
-    endParts = [
-        shortest_path(TTGraph, dst, bDst) for bDst in TTGraph.bundleDst[idx(bundles)]
-    ]
-    return [vcat(startPart, endPart) for (startPart, endPart) in zip(startParts, endParts)]
+    bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
+    return vcat(shortest_path(TTGraph, bSrc, src), shortest_path(TTGraph, dst, bDst))
 end
 
-# Generate reduce path for arc src-dst and bundle
-function generate_reduce_paths(
-    TTGraph::TravelTimeGraph, bundles::Vector{Bundle}, src::Int, dst::Int
+# Generate a reduce path for arc src-dst and bundle
+function generate_reduce_path(
+    instance::Instance, solution::Solution, bundle::Bundle, src::Int, dst::Int
 )
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Update cost matrix 
+    update_lb_cost_matrix!(solution, TTGraph, TSGraph, bundle; giant=true)
     TTGraph.costMatrix[src, dst] = INFINITY
-    # Compute path from bundleSrc to bundleDst
-    bundleSrcDst = map(i -> (TTGraph.bundleSrc[i], TTGraph.bundleDst[i]), idx(bundles))
-    return [shortest_path(TTGraph, bSrc, bDst) for (bSrc, bDst) in bundleSrcDst]
+    # Compute path from bundleSrc to src and from dst to bundleDst
+    bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
+    return shortest_path(TTGraph, bSrc, bDst)
 end
 
 # Generate new paths for the attract or reduce neighborhood
@@ -114,19 +120,21 @@ function generate_new_paths(
     src::Int,
     dst::Int,
 )
-    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    # Update cost matrix 
-    update_lb_cost_matrix!(solution, TTGraph, TSGraph, bundle; giant=true)
     # If attract neighborhood and the edge is known
     if neighborhood == :attarct
-        if has_edge(TTGraph.graph, src, dst)
-            return generate_attract_paths(TTGraph, bundles, src, dst)
+        if has_edge(instance.travelTimeGraph.graph, src, dst)
+            return [
+                generate_attract_path(instance, solution, bundle, src, dst) for
+                bundle in bundles
+            ]
         else
-            @warn "$neighborhood : src-dst arc is unknown. New paths generated won't take it into account."
+            @warn "$neighborhood : src-dst arc is unknown. Switching to reduce path generation."
         end
     end
     # Default case (chosen or not) is reduce
-    return generate_reduce_paths(TTGraph, bundles, src, dst)
+    return [
+        generate_reduce_path(instance, solution, bundle, src, dst) for bundle in bundles
+    ]
 end
 
 # Adds equality constraints for the old and new path formulation
@@ -137,30 +145,53 @@ function add_old_new_path_constraints!(
     newPaths::Vector{Vector{Int}},
 )
     x, z = model[:x], model[:z]
-    for (bundle, oldPath, newPath) in zip(bundles, oldPaths, newPaths)
-        for arc in partition(oldPath, 2, 1)
-            @constraint(model, 1 - z[bundle.idx] == x[bundle.idx, arc])
-        end
-        for arc in partition(newPath, 2, 1)
-            @constraint(model, z[bundle.idx] == x[bundle.idx, arc])
-        end
-        # Because both paths start and end at the desired nodes, we don't have to constrain the other arcs to zero
-    end
+    # oldPathIndex, newPathIndex = Tuple{Int,Tuple{Int,Int}}[], Tuple{Int,Tuple{Int,Int}}[]
+    # for (bundle, oldPath, newPath) in zip(bundles, oldPaths, newPaths)
+    #     for arc in partition(oldPath, 2, 1)
+    #         push!(oldPathIndex, (bundle.idx, arc))
+    #     end
+    #     for arc in partition(newPath, 2, 1)
+    #         push!(newPathIndex, (bundle.idx, arc))
+    #     end
+    #     # Because both paths start and end at the desired nodes, we don't have to constrain the other arcs to zero
+    # end
+    # TODO : check whether this is possible !
+    oldPathIndex = [
+        (bundle.idx, arc) for (bundle, oldPath) in zip(bundles, oldPaths),
+        arc in partition(oldPath, 2, 1)
+    ]
+    @constraint(model, oldPaths[(b, a) in oldPathIndex], 1 - z[b] == x[b, a])
+    newPathIndex = [
+        (bundle.idx, arc) for (bundle, newPath) in zip(bundles, newPaths),
+        arc in partition(newPath, 2, 1)
+    ]
+    @constraint(model, newPaths[(b, a) in newPathIndex], z[b] == x[b, a])
 end
 
 # Initialize the packing expression as sparse matrix with space used and tau variables
 function init_packing_expr(model::Model, TSGraph::TimeSpaceGraph, solution::Solution)
     I = [src(arc) for arc in TSGraph.commonArcs]
     J = [dst(arc) for arc in TSGraph.commonArcs]
-    E, tau = AffExpr[], model[:tau]
-    for arc in TSGraph.commonArcs
-        src, dst = src(arc), dst(arc)
-        capacity = TSGraph.networkArcs[src, dst].capacity
-        expr = AffExpr(
-            sum(bin.load for bin in solution.bins[src, dst]), tau[src, dst] => -capacity
-        )
-        push!(E, expr)
-    end
+    # E, tau = AffExpr[], model[:tau]
+    tau, bins, netArcs = model[:tau], solution.bins, TSGraph.networkArcs
+    # for arc in TSGraph.commonArcs
+    #     # src, dst = src(arc), dst(arc)
+    #     capacity = TSGraph.networkArcs[src(arc), dst(arc)].capacity
+    #     push!(
+    #         E,
+    #         AffExpr(
+    #             sum(bin.load for bin in solution.bins[src(arc), dst(arc)]),
+    #             tau[src(arc), dst(arc)] => -capacity,
+    #         ),
+    #     )
+    #     # push!(E, expr)
+    # end
+    E = [
+        AffExpr(
+            sum(bin.load for bin in bins[src(arc), dst(arc)]; init=0.0),
+            tau[src(arc), dst(arc)] => -netArcs[src(arc), dst(arc)].capacity,
+        ) for arc in TSGraph.commonArcs
+    ]
     return sparse(I, J, E)
 end
 
@@ -206,7 +237,7 @@ function add_constraints!(
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Path constraints on the travel time graph
-    e = get_e_matrix(:single_plant, bundles, TTGraph, src, dst)
+    e = get_e_matrix(neighborhood, bundles, TTGraph, src, dst)
     add_path_constraints!(model, TTGraph, bundles, e)
     if neighborhood == :attract || neighborhood == :reduce
         oldPaths = solution.bundlePaths[idx(bundles)]
@@ -235,7 +266,7 @@ end
 function milp_travel_time_arc_cost(
     TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundles::Vector{Bundle}
 )
-    I, J, V, sol = Int[], Int[], Float64[], Solution()
+    I, J, V, sol = Int[], Int[], Float64[], Solution(TTGraph, TSGraph, bundles)
     for (a, arc) in enumerate(edges(TTGraph.graph))
         # If the arc is not direct or outsource, cost is 0 (handled by tau variables)
         !is_direct_outsource(TTGraph, arc) && continue
@@ -244,7 +275,7 @@ function milp_travel_time_arc_cost(
         length(arcBundles) == 0 && continue
         # Otherwise, computing giant container for direct and linear for outsource
         append!(I, idx(arcBundles))
-        append!(J, repeat(a, length(arcBundles)))
+        append!(J, fill(a, length(arcBundles)))
         # With empty solution no need to put use_bins=false
         arcCosts = [
             arc_lb_update_cost(
@@ -261,7 +292,14 @@ function add_objective!(model::Model, instance::Instance, bundles::Vector{Bundle
     x, tau = model[:x], model[:tau]
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     x_cost = milp_travel_time_arc_cost(TTGraph, TSGraph, bundles)
-    @objective(model, Min, sum(TSGraph.currentCost .* tau) + sum(x_cost .* x))
+    @objective(
+        model,
+        Min,
+        sum(
+            TSGraph.currentCost[src(arc), dst(arc)] .* tau[(src(arc), dst(arc))] for
+            arc in TSGraph.commonArcs
+        ) + sum(x_cost[:, a] .* x[:, arc] for (a, arc) in enumerate(edges(TTGraph.graph)))
+    )
 end
 
 # Getting the solution
@@ -318,7 +356,11 @@ function select_random_plant(instance::Instance)
     )
 end
 
-function select_common_network_arc(instance::Instance)
+function select_common_arc(instance::Instance)
     TTGraph = instance.travelTimeGraph
     return rand(filter(arc -> !is_direct_outsource(TTGraph, arc), edges(TTGraph.graph)))
+end
+
+function get_lns_bundles_to_update()
+    # TODO : adapt to each perturbation    
 end

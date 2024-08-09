@@ -3,6 +3,7 @@ module OFOND
 # Packages needed across the project
 
 using Graphs
+using Graphs.LinAlg
 using MetaGraphsNext
 using CSV
 using JLD2
@@ -61,11 +62,11 @@ include("Algorithms/local_search.jl")
 # - unimplemented functions are removed (parrallel stuff on things like that)
 
 # Large Neighborhood Search
-# include("Algorithms/LNS/lns_utils.jl")
+include("Algorithms/LNS/lns_utils.jl")
 # include("Algorithms/LNS/two_node.jl")
 # include("Algorithms/LNS/attract_reduce.jl")
 # include("Algorithms/LNS/single_plant.jl")
-# include("Algorithms/LNS/lns.jl")
+include("Algorithms/LNS/lns.jl")
 
 include("run.jl")
 include("Algorithms/Utils/analysis.jl")

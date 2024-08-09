@@ -141,3 +141,13 @@ end
 @testset "Local Search" begin
     include("test_local_search.jl")
 end
+
+# Large Neighborhood Search 
+
+@testset "LNS Utils" begin
+    include("test_lns_utils.jl")
+end
+
+@testset "LNS" begin
+    include("test_lns.jl")
+end

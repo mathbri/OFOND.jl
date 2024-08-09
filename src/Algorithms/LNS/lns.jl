@@ -3,18 +3,11 @@
 # - a solution to store the current viable / feasible solution
 # - objects, with some constituing the solution, on which you actually work 
 
+# For the attarct reduce neighborhood, switching to multiple paths proposed can be done 
+# by adding a binary variable per path and a Special Ordered Set of Type 1 constraint on those, 
+# possibly ordered by (real) path cost
+
 # TODO : warm start the milp solving with the current solution to gain performance
-
-function single_plant_perturbation!() end
-
-function two_shared_node_perturbation!() end
-
-# TODO : question generating the new paths 
-# Maybe make the old one infinitely expensive and compute the new one in a lower bound way to be fast
-# Other option is greedy without use_bins
-# allow direct for new path ? 
-function shared_arc_attract_reduce_perturbation!() end
-
 function solve_lns_milp(
     instance::Instance,
     solution::Solution,
@@ -44,6 +37,25 @@ function solve_lns_milp(
     @assert is_solved_and_feasible(model)
     # Getting the solution paths and returning it
     return get_paths(model, bundles, incidence_matrix(instance.travelTimeGraph.graph))
+end
+
+function single_plant_perturbation!()
+    # select a random plant 
+    plant = select_random_plant(instance)
+    # get bundles that share the plant
+    return plantBundles = TTGraph.bundlesOnNode[plant]
+    # apply perturbation
+
+end
+
+function two_shared_node_perturbation!() end
+
+# TODO : question generating the new paths 
+# Maybe make the old one infinitely expensive and compute the new one in a lower bound way to be fast
+# Other option is greedy without use_bins
+# allow direct for new path ? 
+function shared_arc_attract_reduce_perturbation!()
+    # TODO : is random the best option ?
 end
 
 # Common part of all perturbations
@@ -85,6 +97,8 @@ end
 function LNS!(solution::Solution, instance::Instance)
     # Add previous and best solution
     oldSolution, bestSolution = deepcopy(solution), deepcopy(solution)
+    # Slope scaling cost update  
+    slope_scaling_cost_update!(instance.timeSpaceGraph, bestSolution)
     # Apply perturbations in random order
     for neighborhood in shuffle(PERTURBATIONS)
         # Apply perturbation and get correponding solution
@@ -92,7 +106,6 @@ function LNS!(solution::Solution, instance::Instance)
         # Go to the next perturbation
     end
     # Final local search
-    # Slope scaling cost update  
     return nothing
 end
 
