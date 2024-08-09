@@ -60,34 +60,34 @@ function extract_sub_instance(
     noExtraction = (country == "" && continent == "") || (country != "" && continent != "")
     noExtraction && return instance
     # Redifining network and bundles
-    newNetGraph = deepcopy(instance.networkGraph)
+    newNetwork = deepcopy(instance.networkGraph)
     newBundles = Bundle[]
+    newVertices = Int[]
     # If country arg is not empty, filtering with it
     if country != ""
         newBundles = filter(bun -> is_bundle_in_country(bun, country), instance.bundles)
-        verticesToRemove = filter(
-            n -> is_node_in_country(newNetGraph, n, country), vertices(newNetGraph.graph)
+        newVertices = filter(
+            n -> is_node_in_country(newNetwork, n, country), vertices(newNetwork.graph)
         )
-        rem_vertices!(newNetGraph.graph, verticesToRemove)
-        # Otherwise, the contient arg is not empty
     else
+        # Otherwise, the contient arg is not empty
         newBundles = filter(bun -> is_bundle_in_continent(bun, continent), instance.bundles)
-        verticesToRemove = filter(
-            n -> is_node_in_continent(newNetGraph, n, continent),
-            vertices(newNetGraph.graph),
+        newVertices = filter(
+            n -> is_node_in_continent(newNetwork, n, continent), vertices(newNetwork.graph)
         )
-        rem_vertices!(newNetGraph.graph, verticesToRemove)
     end
-    nNode, nLeg, nBun = nv(newNetGraph.graph), ne(newNetGraph.graph), length(newBundles)
+    newNetGraph, _ = induced_subgraph(instance.networkGraph.graph, newVertices)
+    newNetwork = NetworkGraph(newNetGraph)
+    nNode, nLeg, nBun = nv(newNetGraph), ne(newNetGraph), length(newBundles)
     nOrd = sum(length(bundle.orders) for bundle in newBundles)
     nCom = sum(
         sum(length(order.content) for order in bundle.orders) for bundle in newBundles
     )
     @info "Extracted instance has $nNode nodes, $nLeg legs, $nBun bundles, $nOrd orders and $nCom commodities on a $timeHorizon steps time horizon"
     return Instance(
-        newNetGraph,
-        TravelTimeGraph(newNetGraph, newBundles),
-        TimeSpaceGraph(newNetGraph, timeHorizon),
+        newNetwork,
+        TravelTimeGraph(newNetwork, newBundles),
+        TimeSpaceGraph(newNetwork, timeHorizon),
         newBundles,
         timeHorizon,
         instance.dateHorizon[1:timeHorizon],

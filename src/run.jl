@@ -16,11 +16,18 @@ function run_heuristic(
     startTime = time()
     # Complete Instance object with all properties needed
     if preSolve
-        instance = add_properties(instance, first_fit_decreasing)
+        instance = add_properties(instance, tentative_first_fit)
         @info "Pre-solve done" :pre_solve_time = get_elapsed_time(startTime)
     end
     # Initialize solution object
-    solution = deepcopy(startSol)
+    solution = if Base.size(startSol.bins) != (0, 0)
+        deepcopy(startSol)
+    else
+        Solution(instance)
+    end
+
+    println(solution.bundlePaths)
+    println(solution.bins[1, 1])
 
     # Run the corresponding heuristic
     heuristic(solution, instance)
@@ -28,10 +35,14 @@ function run_heuristic(
         heuristic(solution, instance)
     end
 
+    println(solution.bundlePaths)
+    println(solution.bins[1, 1])
+
     solveTime = get_elapsed_time(startTime)
-    @info "$heuristic heuristic run with success" :solve_time =
-        solveTime, :feasible =
-            is_feasible(instance, solution), :total_cost = compute_cost(instance, solution)
+    feasible = is_feasible(instance, solution)
+    totalCost = compute_cost(instance, solution)
+    @info "$heuristic heuristic results" :solve_time = solveTime :feasible = feasible :total_cost =
+        totalCost
 
     return instance, solution
 end

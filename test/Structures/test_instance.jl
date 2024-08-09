@@ -155,7 +155,7 @@ end
     @test subInst.dateHorizon ==
         [Dates.Date(2020, 1, 1), Dates.Date(2020, 1, 2), Dates.Date(2020, 1, 3)]
     @test nv(subInst.networkGraph.graph) == 4
-    @test ne(subInst.networkGraph.graph) == 5
+    @test ne(subInst.networkGraph.graph) == 7
     @test all(
         n -> OFOND.is_node_in_country(subInst.networkGraph, n, "FR"),
         vertices(subInst.networkGraph.graph),

@@ -163,9 +163,9 @@ function Base.show(io::IO, node::NetworkNode)
 end
 
 function is_node_in_country(networkGraph::NetworkGraph, node::Int, country::String)
-    return networkGraph[label_for(networkGraph, node)].country == country
+    return networkGraph.graph[label_for(networkGraph.graph, node)].country == country
 end
 
 function is_node_in_continent(networkGraph::NetworkGraph, node::Int, continent::String)
-    return networkGraph[label_for(networkGraph, node)].continent == continent
+    return networkGraph.graph[label_for(networkGraph.graph, node)].continent == continent
 end

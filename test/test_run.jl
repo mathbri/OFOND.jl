@@ -49,8 +49,8 @@ bundlesNP = [bundleNP1, bundleNP2, bundleNP3]
 # Defining instance with empty graphs unless network
 instanceNP = OFOND.Instance(
     network,
-    OFOND.TravelTimeGraph(),
-    OFOND.TimeSpaceGraph(),
+    OFOND.TravelTimeGraph(network, bundlesNP),
+    OFOND.TimeSpaceGraph(network, 4),
     bundlesNP,
     4,
     [
@@ -62,49 +62,58 @@ instanceNP = OFOND.Instance(
 )
 
 @testset "Elpased time" begin
-    @test time() ≈ OFOND.get_elpased_time(0.0)
+    @test time() ≈ OFOND.get_elapsed_time(0.0)
     startTime = time()
     sleep(0.5)
-    @test OFOND.get_elpased_time(startTime) ≈ 0.5
+    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.53
 end
 
 # fake function that modify the solution
 function dummy!(solution, instance)
-    return push!(solution.bins[1, 1], OFOND.Bin(10, 10, [commodity1]))
+    solution.bundlePaths[1:end] = [[1, 1] for _ in 1:length(instance.bundles)]
+    if length(solution.bins[1, 1]) == 0
+        solution.bins[1, 1] = [OFOND.Bin(10, 10, [commodity1])]
+    elseif length(solution.bins[1, 1]) <= 10
+        push!(solution.bins[1, 1], OFOND.Bin(10, 10, [commodity1]))
+    end
 end
 
 @testset "Run heuristic" begin
     instance, solution = OFOND.run_heuristic(instanceNP, dummy!)
     # verify that instance has properties now 
     @test instance.bundles[1].maxPackSize == 10
-    @test instance.bundles[2].orders[1].volume == 25
+    @test instance.bundles[2].orders[1].volume == 30
     @test instance.bundles[3].orders[1].bpUnits[:delivery] == 1
     # verify solution has been modified
-    I1, J1, V1 = findnz(Solution(instanceNP).bins)
+    I1, J1, V1 = findnz(Solution(instance).bins)
     I2, J2, V2 = findnz(solution.bins)
+    println(solution.bins[1, 1])
     @test length(I1) + 1 == length(I2)
     @test I1 == I2[2:end]
     @test J1 == J2[2:end]
     @test V1 == V2[2:end]
-    @test V1[1] == [OFOND.Bin(10, 10, [commodity1])]
+    @test V2[1] == [OFOND.Bin(10, 10, [commodity1])]
     # run second time with time limit, without presolve and with start sol (previous one)
     startTime = time()
-    instance, solution = OFOND.run_heuristic(
+    instanceNP.bundles[2].orders[1] = OFOND.Order(
+        hash(supplier2, hash(plant)), 1, [commodity2, commodity2]
+    )
+    instance2, solution2 = OFOND.run_heuristic(
         instanceNP, dummy!; timeLimit=1, preSolve=false, startSol=solution
     )
-    totalTime = OFOND.get_elpased_time(startTime)
+    totalTime = OFOND.get_elapsed_time(startTime)
     # verify solution has been modified multiple times
-    I1, J1, V1 = findnz(Solution(instanceNP).bins)
-    I2, J2, V2 = findnz(solution.bins)
+    I1, J1, V1 = findnz(Solution(instance2).bins)
+    I2, J2, V2 = findnz(solution2.bins)
     @test length(I1) + 1 == length(I2)
     @test I1 == I2[2:end]
     @test J1 == J2[2:end]
     @test V1 == V2[2:end]
-    @test length(V1[1]) > 2
+    @test length(V2[1]) > 2
     # verify the elpased time corresponds
     @test 1 < totalTime < 1.1
     # varify instance has no properties
-    @test instance.bundles[1].maxPackSize == 0
-    @test instance.bundles[2].orders[1].volume == 0
+    @test instance2.bundles[1].maxPackSize == 0
+    @test instance2.bundles[2].orders[1].volume == 0
     # use lb heuristic and verify the solution is the same 
 end

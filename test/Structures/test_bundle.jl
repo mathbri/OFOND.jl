@@ -60,14 +60,14 @@ end
 customer2 = OFOND.NetworkNode(
     "C2", :customer, "Cust", Geodesy.LLA(20.0, 10.0), "Fra", "Asia", false, 0.1
 )
-bundle4 = OFOND.Bundle(supplier2, customer, idx + 2)
+bundle4 = OFOND.Bundle(supplier2, customer2, idx + 2)
 
 # Test is_bundle_property
 @testset "Bundle in country / continent" begin
-    @test !OFOND.is_bundle_in_country(bundle1, "Fra")
-    @test !OFOND.is_bundle_in_country(bundle1, "Ger")
+    @test !OFOND.is_bundle_in_country(bundle, "Fra")
+    @test !OFOND.is_bundle_in_country(bundle, "Ger")
     @test OFOND.is_bundle_in_country(bundle4, "Fra")
 
-    @test OFOND.is_bundle_in_continent(bundle1, "EU")
+    @test OFOND.is_bundle_in_continent(bundle, "EU")
     @test !OFOND.is_bundle_in_continent(bundle4, "EU")
 end
