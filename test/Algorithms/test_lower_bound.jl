@@ -30,7 +30,7 @@ end
 # Modifying instance a little for testing
 # Adding a cycle in the network that won't be one in the time expansion
 network2 = deepcopy(network)
-supplier3 = OFOND.NetworkNode("003", :supplier, "Supp3", LLA(1, 1), "CN", "AS", false, 0.0)
+supplier3 = OFOND.NetworkNode("003", :supplier, "CN", "AS", false, 0.0)
 OFOND.add_node!(network2, supplier3)
 port_to_xdock = OFOND.NetworkArc(:cross_plat, 1.0, 0, true, 4.0, false, 0.0, 50)
 OFOND.add_arc!(network2, port_l, xdock, port_to_xdock)
@@ -41,7 +41,7 @@ bundle4 = OFOND.Bundle(supplier3, plant, [order3], 1, bunH3, 10, 3)
 # Cretaing new instance
 TTGraph2 = OFOND.TravelTimeGraph(network2, [bundle4])
 TSGraph2 = OFOND.TimeSpaceGraph(network2, 4)
-instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates)
+instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates, partNumbers)
 
 @testset "Lower bound insertion" begin
     sol2 = OFOND.Solution(TTGraph2, TSGraph2, [bundle4])
@@ -140,6 +140,6 @@ end
         [supp2fromDel1, plantFromDel0],
         [supp1FromDel2, xdockFromDel1, plantFromDel0],
     ]
-    @test OFOND.is_feasible(sol, instance)
-    @test OFOND.compute_cost(sol, instance) ≈ 69.234 + 5e-5
+    @test OFOND.is_feasible(instance, sol)
+    @test OFOND.compute_cost(instance, sol) ≈ 71.634
 end

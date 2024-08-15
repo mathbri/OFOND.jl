@@ -32,6 +32,7 @@ function bin_packing_improvement!(
         # If no improvement possible
         is_bin_candidate(arcBins, arcData; skipLinear=skipLinear) || continue
         # Gathering all commodities
+        # TODO : again the get all commodities that is impeding performance
         allCommodities = get_all_commodities(arcBins)
         # Computing new bins
         newBins = compute_new_bins(arcData, allCommodities; sorted=sorted)
@@ -51,6 +52,7 @@ function parrallel_bin_packing_improvement!(
     solution::Solution, instance::Instance; sorted::Bool=false, skipLinear::Bool=true
 )
     # TODO : parrallelize here with native @threads
+    # TODO : check memory sharing between threads if the get all commodity workaround is in place
 end
 
 # TODO : major profiling problems in bundle reintroduction comes from the deepcopy done in save and remove
@@ -73,8 +75,8 @@ function bundle_reintroduction!(
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     oldPath = solution.bundlePaths[bundle.idx]
     # TODO : remove this filter when running time problem is fixed
-    length(oldPath) == 2 && return 0.0
-    # TODO : the filtering could also occur in terms of cost removed : it must be above a certain threshold
+    # length(oldPath) == 2 && return 0.0
+    # The filtering could also occur in terms of cost removed : it must be above a certain threshold
     bundle_max_removal_cost(bundle, oldPath, TTGraph) <= costThreshold && return 0.0
     # Saving previous solution state 
     # oldBins, costRemoved = save_and_remove_bundle!(
@@ -90,8 +92,8 @@ function bundle_reintroduction!(
         # # Reverting bins to the previous state
         # revert_bins!(solution, oldBins)
 
-        update_solution!(solution, instance, bundle, oldPath)
-
+        updateCost = update_solution!(solution, instance, bundle, oldPath)
+        @assert -costRemoved ≈ updateCost "Removal than insertion lead to cost increase"
         return 0.0
     end
     # Inserting it back
@@ -118,8 +120,8 @@ function bundle_reintroduction!(
         # update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
         # revert_bins!(solution, oldBins)
 
-        update_solution!(solution, instance, bundle, oldPath)
-
+        updateCost = update_solution!(solution, instance, bundle, oldPath)
+        @assert -costRemoved ≈ updateCost "Removal than insertion lead to cost increase"
         return 0.0
     end
 end
@@ -132,6 +134,9 @@ end
 # not exactly as we have to make them both equal at the end of the neighborhood function 
 # but just need to create this function that make them equal and we can avoid allocating memory for all the old paths and bins
 # this trick could be used also for the other neighborhoods
+
+# Each function call would need to deepcopy the current solution 
+# Maybe defining your own deep copy by initializing a solution and updating it would be more efficicient ?
 
 # TODO : not usable right now because it tkes too much time to run for too little results
 # Major problems comes from deepcopy in save and remove and deepcopy solution

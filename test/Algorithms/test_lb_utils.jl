@@ -154,7 +154,7 @@ end
 
 @testset "Filtering transport units" begin
     @test OFOND.lb_filtering_transport_units(TSGraph, supp1Step2, xdockStep3, order1) ≈ 0.4
-    @test OFOND.lb_filtering_transport_units(TSGraph, supp1Step3, plantStep1, order2) ≈ 2.0
+    @test OFOND.lb_filtering_transport_units(TSGraph, supp1Step3, plantStep1, order2) == 3
 end
 
 @testset "Filtering arc cost" begin
@@ -169,27 +169,16 @@ end
     @test OFOND.arc_lb_filtering_update_cost(
         TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0
     ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
-    # direct arc
+    # direct arc (bpDict direct = 3 and distance = 2)
     @test OFOND.arc_lb_filtering_update_cost(
         TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
-    ) ≈ 1e-5 + 4.0 + 0 + 0.004 + 5
+    ) ≈ 1e-5 + 3 * 10.0 + 0 + 0.004 + 2 * 5
 end
 
 @testset "Filtering cost matrix update" begin
-    OFOND.update_lb_filtering_cost_matrix!(sol, TTGraph, TSGraph, bundle1)
-    @test TTGraph.costMatrix == TTGraph2.costMatrix
-    # V = vcat(
-    #     fill(1e-5 + 6.8, 3), third supp1-xdock starts before supp1 src so stays 1e-5
-    #     1e-5,
-    #     1e-5 + 110.2, giant(order1) = 1 and unitCost = 10, distance = 2 so 10 for leadTime and 0.2 for carbon
-    #     1e-5,
-    #     1e-5 + 9.2, giant(order1) = 1 and unitCost = 4 and distance = 1 so 5 for leadTime and 0.2 for carbon
-    #     OFOND.INFINITY,
-    #     fill(OFOND.INFINITY, 3),
-    #     fill(1e-5, 4),
-    # )
+    OFOND.update_lb_filtering_cost_matrix!(TTGraph, TSGraph, bundle1)
     V = fill(1e-5, 15)
-    V[[1, 2, 5, 7]] .+= [6.604, 6.604, 20.004, 9.004]
+    V[[1, 2, 5, 7]] .+= [6.604, 6.604, 40.004, 6.604]
     V[8:11] .= 1e9
-    @test all([TTGraph3.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
+    @test all([TTGraph.costMatrix[i, j] for (i, j) in zip(I, J)] .≈ V)
 end

@@ -36,14 +36,14 @@ TSGraph = OFOND.TimeSpaceGraph(network, 4)
     )
 end
 
-commodity4 = OFOND.Commodity(3, hash("A123"), OFOND.CommodityData("A123", 10, 0.2))
-commodity5 = OFOND.Commodity(4, hash("A123"), OFOND.CommodityData("A123", 25, 0.5))
-commodity6 = OFOND.Commodity(5, hash("A123"), OFOND.CommodityData("A123", 20, 0.4))
-commodity7 = OFOND.Commodity(6, hash("A123"), OFOND.CommodityData("A123", 35, 0.7))
-commodity8 = OFOND.Commodity(7, hash("A123"), OFOND.CommodityData("A123", 5, 0.1))
-commodity9 = OFOND.Commodity(8, hash("A123"), OFOND.CommodityData("A123", 15, 0.3))
-commodity10 = OFOND.Commodity(9, hash("A123"), OFOND.CommodityData("A123", 40, 0.8))
-commodity11 = OFOND.Commodity(10, hash("A123"), OFOND.CommodityData("A123", 20, 0.4))
+commodity4 = OFOND.Commodity(3, hash("A123"), 10, 0.2)
+commodity5 = OFOND.Commodity(4, hash("A123"), 25, 0.5)
+commodity6 = OFOND.Commodity(5, hash("A123"), 20, 0.4)
+commodity7 = OFOND.Commodity(6, hash("A123"), 35, 0.7)
+commodity8 = OFOND.Commodity(7, hash("A123"), 5, 0.1)
+commodity9 = OFOND.Commodity(8, hash("A123"), 15, 0.3)
+commodity10 = OFOND.Commodity(9, hash("A123"), 40, 0.8)
+commodity11 = OFOND.Commodity(10, hash("A123"), 20, 0.4)
 
 @testset "Bin recomputation" begin
     # two instances : 
@@ -207,7 +207,7 @@ end
     @test OFOND.are_nodes_candidate(TTGraph, 2, 1)
     # add second port to check second false case
     network2 = deepcopy(network)
-    port_d = OFOND.NetworkNode("005", :pod, "PortL2", LLA(3, 3), "FR", "EU", true, 0.0)
+    port_d = OFOND.NetworkNode("005", :pod, "FR", "EU", true, 0.0)
     OFOND.add_node!(network2, port_d)
     TTGraph2 = OFOND.TravelTimeGraph(network2, bundles)
     portlFromDel2 = TTGraph2.hashToIdx[hash(2, port_l.hash)]

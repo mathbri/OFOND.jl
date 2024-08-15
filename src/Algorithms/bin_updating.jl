@@ -5,8 +5,8 @@
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}
 )
-    volume = sum(size(com) for com in commodities)
-    leadTimeCost = sum(lead_time_cost(com) for com in commodities)
+    volume = sum(com.size for com in commodities)
+    leadTimeCost = sum(com.stockCost for com in commodities)
     # Node cost 
     cost =
         (dstData.volumeCost + arcData.carbonCost) * volume /

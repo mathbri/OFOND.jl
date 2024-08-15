@@ -28,9 +28,7 @@
     node1 = @test_warn "Node unknown in the network" OFOND.check_node(instance, rows[3])
     @test node1 === nothing
     node2 = OFOND.check_node(instance, rows[4])
-    node2Test = OFOND.NetworkNode(
-        "003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0
-    )
+    node2Test = OFOND.NetworkNode("003", :plant, "FR", "EU", false, 0.0)
     @testset "Node 2 test fields equality" for field in fieldnames(OFOND.NetworkNode)
         @test getfield(node2, field) == getfield(node2Test, field)
     end
@@ -67,7 +65,7 @@ xdockFromDel1 = TTGraph.hashToIdx[hash(1, xdock.hash)]
     @test OFOND.find_next_node(TTGraph, plantFromDel0, supplier1) == supp1FromDel2
     @test OFOND.find_next_node(TTGraph, plantFromDel0, xdock) == xdockFromDel1
     @test OFOND.find_next_node(TTGraph, xdockFromDel1, supplier1) == supp1FromDel2
-    warnNode = OFOND.NetworkNode("account", :supplier, "n2", LLA(2, 2), "c", "c", true, 1.1)
+    warnNode = OFOND.NetworkNode("account", :supplier, "c", "c", true, 1.1)
     @test OFOND.find_next_node(TTGraph, plantFromDel0, warnNode) === nothing
 end
 

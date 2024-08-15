@@ -114,9 +114,9 @@ end
 end
 
 # FFD and BFD give three bins with different assignments, MILP gives two
-commodity4 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("A123", 4, 0.7))
-commodity5 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("A123", 3, 0.6))
-commodity6 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("A123", 2, 0.4))
+commodity4 = OFOND.Commodity(0, hash("A123"), 4, 0.7)
+commodity5 = OFOND.Commodity(0, hash("A123"), 3, 0.6)
+commodity6 = OFOND.Commodity(0, hash("A123"), 2, 0.4)
 
 @testset "MILP Packing" begin
     bins = OFOND.Bin[]

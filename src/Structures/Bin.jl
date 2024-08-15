@@ -2,6 +2,8 @@
 
 # TODO : Changing form mutable to immutable could be a way to improve efficiency
 
+# TODO : If you store sizes and costs in separate common vectors, the bin content could be a vector of indexes or a sparse vector storing (idx,quantity) 
+
 mutable struct Bin
     idx::Int                    # index for output purposes
     capacity::Int               # space left in the bin
@@ -14,8 +16,8 @@ mutable struct Bin
     end
     Bin(capacity::Int) = new(rand(Int), capacity, 0, Vector{Commodity}())
     function Bin(fullCapacity::Int, commodity::Commodity)
-        size(commodity) > fullCapacity && return Bin(0, fullCapacity, [commodity])
-        return Bin(fullCapacity - size(commodity), size(commodity), [commodity])
+        commodity.size > fullCapacity && return Bin(0, fullCapacity, [commodity])
+        return Bin(fullCapacity - commodity.size, commodity.size, [commodity])
     end
 end
 
@@ -32,10 +34,10 @@ function Base.show(io::IO, bin::Bin)
 end
 
 function add!(bin::Bin, commodity::Commodity)
-    if bin.capacity >= size(commodity)
+    if bin.capacity >= commodity.size
         push!(bin.content, commodity)
-        bin.capacity -= size(commodity)
-        bin.load += size(commodity)
+        bin.capacity -= commodity.size
+        bin.load += commodity.size
         return true
     end
     return false
@@ -44,7 +46,7 @@ end
 function remove!(bin::Bin, commodity::Commodity)
     fullCapa, contentLength = bin.capacity + bin.load, length(bin.content)
     filter!(com -> com != commodity, bin.content)
-    bin.load = sum(com -> size(com), bin.content; init=0)
+    bin.load = sum(com -> com.size, bin.content; init=0)
     bin.capacity = fullCapa - bin.load
     return contentLength > length(bin.content)
 end
@@ -58,8 +60,33 @@ function remove!(bin::Bin, commodities::Vector{Commodity})
     return hasRemoved
 end
 
+# TODO : to test, is it memory efficient ? what happens when I sort the view ?
+# global ALL_COMMODITIES = Commodity[]
+
+# function get_all_commodities(bins::Vector{Bin})
+#     # verify the global vector is long enough 
+#     spaceNeeded = sum(length(bin.content) for bin in bins; init=0)
+#     if spaceNeeded > length(ALL_COMMODITIES)
+#         append!(
+#             ALL_COMMODITIES, fill(bins[1].content[1], spaceNeeded - length(ALL_COMMODITIES))
+#         )
+#     end
+#     # put all commodities in the global vector
+#     idx = 1
+#     for bin in bins
+#         for com in bin.content
+#             ALL_COMMODITIES[idx] = com
+#         end
+#     end
+#     return view(ALL_COMMODITIES[1:spaceNeeded])
+# end
+
 function get_all_commodities(bins::Vector{Bin})
     return reduce(vcat, map(bin -> bin.content, bins); init=Commodity[])
+end
+
+function stock_cost(bin::Bin)
+    return sum(com.stockCost for com in bin.content; init=0.0)
 end
 
 # Defining zero of a vector of bins / loads for sparse matrices usage

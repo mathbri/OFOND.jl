@@ -19,16 +19,9 @@
 #     Update time space graph :
 #         For all arc in the path, update timed arcs loading with the corresponding bundle order content
 
-# TODO : add heuristic like linear unit cost for a_star and see if the results are better
-# Using this heuristic to prune nodes already encountered in the search space would be a good idea
-# a star implementation relatively easy so can be re-implemented
-
-# TODO : add regul cost ? carbon cost already linear in distance and volume
-# Discuss both with axel ? Maybe just testing it on the world instance
+# Switching from Dijkstra to A* is clearly not a priority for now 
 
 # TODO : if update cost matrix is really expensive, do it once with every option and store all option results in different objects
-
-global GREEDY_RECOMPUTATION = 0
 
 # Compute path and cost for the greedy insertion of a bundle, not handling path admissibility
 function greedy_path(
@@ -60,6 +53,7 @@ function greedy_path(
     return shortestPath, pathCost - removedCost
 end
 
+# TODO : this recompuation happens rarely in the greedy heuristic but maybe more in the local search
 # Compute the path and cost for the greedy insertion of a bundle, handling path admissibility
 function greedy_insertion(
     solution::Solution,
@@ -100,7 +94,6 @@ function greedy_insertion(
             current_cost=current_cost,
         )
         pathCost = path_cost(shortestPath, costMatrix)
-        global GREEDY_RECOMPUTATION += 1
         if !is_path_admissible(TTGraph, shortestPath)
             # Then not taking into account the current solution
             # If this happens, we want to be sure to have an admissible path
@@ -116,7 +109,6 @@ function greedy_insertion(
                 current_cost=false,
             )
             pathCost = path_cost(shortestPath, costMatrix)
-            global GREEDY_RECOMPUTATION += 1
         end
     end
     return shortestPath, pathCost
@@ -141,9 +133,7 @@ function greedy!(solution::Solution, instance::Instance)
             solution, TTGraph, TSGraph, bundle, suppNode, custNode; sorted=true
         )
         # Adding to solution
-        updateCost = update_solution!(
-            solution, instance, [bundle], [shortestPath]; sorted=true
-        )
+        updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # verification
         @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost

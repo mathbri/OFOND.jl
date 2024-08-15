@@ -49,21 +49,21 @@ end
     supp1step4 = TSGraph.hashToIdx[hash(4, supplier1.hash)]
     supp1step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
     contentTest = [
-        "1,002,003,B456,15,2,2020-01-01,002,1,2020-01-04,$(solution.bins[supp2step4, plantStep1][1].idx)",
-        "1,002,003,B456,15,2,2020-01-01,002,1,2020-01-04,$(solution.bins[supp2step4, plantStep1][2].idx)",
-        "1,002,003,B456,15,2,2020-01-01,003,2,2020-01-01,",
-        "2,001,003,B456,15,1,2020-01-01,001,1,2020-01-03,$(solution.bins[supp1step3, xdockStep4][1].idx)",
-        "2,001,003,B456,15,1,2020-01-01,004,2,2020-01-04,$(solution.bins[xdockStep4, plantStep1][1].idx)",
-        "2,001,003,B456,15,1,2020-01-01,003,3,2020-01-01,",
-        "2,001,003,A123,10,1,2020-01-01,001,1,2020-01-03,$(solution.bins[supp1step3, xdockStep4][1].idx)",
-        "2,001,003,A123,10,1,2020-01-01,004,2,2020-01-04,$(solution.bins[xdockStep4, plantStep1][1].idx)",
-        "2,001,003,A123,10,1,2020-01-01,003,3,2020-01-01,",
-        "3,001,003,B456,15,1,2020-01-02,001,1,2020-01-04,$(solution.bins[supp1step4, xdockStep1][1].idx)",
-        "3,001,003,B456,15,1,2020-01-02,004,2,2020-01-01,$(solution.bins[xdockStep1, plantStep2][1].idx)",
-        "3,001,003,B456,15,1,2020-01-02,003,3,2020-01-02,",
-        "3,001,003,A123,10,1,2020-01-02,001,1,2020-01-04,$(solution.bins[supp1step4, xdockStep1][1].idx)",
-        "3,001,003,A123,10,1,2020-01-02,004,2,2020-01-01,$(solution.bins[xdockStep1, plantStep2][1].idx)",
-        "3,001,003,A123,10,1,2020-01-02,003,3,2020-01-02,\n",
+        "1,002,003,B456,15,2,2024-01-01,002,1,2024-01-04,$(solution.bins[supp2step4, plantStep1][1].idx)",
+        "1,002,003,B456,15,2,2024-01-01,002,1,2024-01-04,$(solution.bins[supp2step4, plantStep1][2].idx)",
+        "1,002,003,B456,15,2,2024-01-01,003,2,2024-01-01,",
+        "2,001,003,B456,15,1,2024-01-01,001,1,2024-01-03,$(solution.bins[supp1step3, xdockStep4][1].idx)",
+        "2,001,003,B456,15,1,2024-01-01,004,2,2024-01-04,$(solution.bins[xdockStep4, plantStep1][1].idx)",
+        "2,001,003,B456,15,1,2024-01-01,003,3,2024-01-01,",
+        "2,001,003,A123,10,1,2024-01-01,001,1,2024-01-03,$(solution.bins[supp1step3, xdockStep4][1].idx)",
+        "2,001,003,A123,10,1,2024-01-01,004,2,2024-01-04,$(solution.bins[xdockStep4, plantStep1][1].idx)",
+        "2,001,003,A123,10,1,2024-01-01,003,3,2024-01-01,",
+        "3,001,003,B456,15,1,2024-01-02,001,1,2024-01-04,$(solution.bins[supp1step4, xdockStep1][1].idx)",
+        "3,001,003,B456,15,1,2024-01-02,004,2,2024-01-01,$(solution.bins[xdockStep1, plantStep2][1].idx)",
+        "3,001,003,B456,15,1,2024-01-02,003,3,2024-01-02,",
+        "3,001,003,A123,10,1,2024-01-02,001,1,2024-01-04,$(solution.bins[supp1step4, xdockStep1][1].idx)",
+        "3,001,003,A123,10,1,2024-01-02,004,2,2024-01-01,$(solution.bins[xdockStep1, plantStep2][1].idx)",
+        "3,001,003,A123,10,1,2024-01-02,003,3,2024-01-02,\n",
     ]
     @test content == join(contentTest, "\n")
 
@@ -72,12 +72,12 @@ end
     # test buffer content
     content = String(take!(io))
     contentTest = [
-        "$(solution.bins[supp1step3, xdockStep4][1].idx),001,004,2020-01-03,2020-01-04,outsource,25,2.0,0.0,0.5",
-        "$(solution.bins[supp1step4, xdockStep1][1].idx),001,004,2020-01-04,2020-01-01,outsource,25,2.0,0.0,0.5",
-        "$(solution.bins[supp2step4, plantStep1][1].idx),002,003,2020-01-04,2020-01-01,direct,30,10.0,0.6,0.0",
-        "$(solution.bins[supp2step4, plantStep1][2].idx),002,003,2020-01-04,2020-01-01,direct,5,10.0,0.1,0.0",
-        "$(solution.bins[xdockStep1, plantStep2][1].idx),004,003,2020-01-01,2020-01-02,delivery,25,4.0,0.5,0.0",
-        "$(solution.bins[xdockStep4, plantStep1][1].idx),004,003,2020-01-04,2020-01-01,delivery,25,4.0,0.5,0.0\n",
+        "$(solution.bins[supp1step3, xdockStep4][1].idx),001,004,2024-01-03,2024-01-04,outsource,25,2.0,0.0,0.5",
+        "$(solution.bins[supp1step4, xdockStep1][1].idx),001,004,2024-01-04,2024-01-01,outsource,25,2.0,0.0,0.5",
+        "$(solution.bins[supp2step4, plantStep1][1].idx),002,003,2024-01-04,2024-01-01,direct,30,10.0,0.6,0.0",
+        "$(solution.bins[supp2step4, plantStep1][2].idx),002,003,2024-01-04,2024-01-01,direct,5,10.0,0.1,0.0",
+        "$(solution.bins[xdockStep1, plantStep2][1].idx),004,003,2024-01-01,2024-01-02,delivery,25,4.0,0.5,0.0",
+        "$(solution.bins[xdockStep4, plantStep1][1].idx),004,003,2024-01-04,2024-01-01,delivery,25,4.0,0.5,0.0\n",
     ]
     @test content == join(contentTest, "\n")
 

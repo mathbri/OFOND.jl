@@ -1,10 +1,6 @@
 # Create Bundle instance
-supplier = OFOND.NetworkNode(
-    "S1", :supplier, "Supp", Geodesy.LLA(10.0, 10.0), "Fra", "EU", false, 0.1
-)
-customer = OFOND.NetworkNode(
-    "C1", :plant, "Cust", Geodesy.LLA(20.0, 20.0), "Ger", "EU", true, 0.1
-)
+supplier = OFOND.NetworkNode("S1", :supplier, "Fra", "EU", false, 0.1)
+customer = OFOND.NetworkNode("C1", :plant, "Ger", "EU", true, 0.1)
 idx = 1
 bundle = OFOND.Bundle(supplier, customer, idx)
 
@@ -28,9 +24,7 @@ end
 end
 
 idx = 2
-supplier2 = OFOND.NetworkNode(
-    "S2", :supplier, "Supp", Geodesy.LLA(10.0, 20.0), "Fra", "EU", false, 0.1
-)
+supplier2 = OFOND.NetworkNode("S2", :supplier, "Fra", "EU", false, 0.1)
 bundle2 = OFOND.Bundle(supplier, customer, idx)
 bundle3 = OFOND.Bundle(supplier2, customer, idx + 1)
 
@@ -49,7 +43,7 @@ end
 
 # Test order adding
 @testset "Adding Order to Bundle" begin
-    commodity1 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("A123", 10, 2.5))
+    commodity1 = OFOND.Commodity(0, hash("A123"), 10, 2.5)
     order1 = OFOND.Order(hash("A123"), 1, [commodity1, commodity1])
     push!(bundle.orders, order1)
     @test length(bundle.orders) == 1
@@ -57,9 +51,7 @@ end
     @test all(com -> com === commodity1, bundle.orders[1].content)
 end
 
-customer2 = OFOND.NetworkNode(
-    "C2", :customer, "Cust", Geodesy.LLA(20.0, 10.0), "Fra", "Asia", false, 0.1
-)
+customer2 = OFOND.NetworkNode("C2", :customer, "Fra", "Asia", false, 0.1)
 bundle4 = OFOND.Bundle(supplier2, customer2, idx + 2)
 
 # Test is_bundle_property

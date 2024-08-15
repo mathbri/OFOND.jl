@@ -15,7 +15,9 @@ struct Instance
     bundles::Vector{Bundle}
     # Time Horizon 
     timeHorizon::Int
-    dateHorizon::Vector{Date}
+    # Fields needed for writing the solution
+    dates::Vector{String}
+    partNumbers::Dict{UInt,String}
 end
 
 # Methods
@@ -41,7 +43,8 @@ function add_properties(instance::Instance, bin_packing::Function)
         newTSGraph,
         newBundles,
         instance.timeHorizon,
-        instance.dateHorizon,
+        instance.dates,
+        instance.partNumbers,
     )
 end
 
@@ -53,8 +56,6 @@ function sort_order_content!(instance::Instance)
         end
     end
 end
-
-function analyze_instance() end
 
 # Extract a sub instance (either by country or continent) from the instance given
 function extract_sub_instance(
@@ -94,13 +95,19 @@ function extract_sub_instance(
         sum(length(order.content) for order in bundle.orders) for bundle in newBundles;
         init=0,
     )
-    @info "Extracted instance has $nNode nodes, $nLeg legs, $nBun bundles, $nOrd orders and $nCom commodities on a $timeHorizon steps time horizon"
+    nComU = sum(
+        sum(length(unique(order.content)) for order in bundle.orders) for
+        bundle in newBundles;
+        init=0,
+    )
+    @info "Extracted instance has $nNode nodes, $nLeg legs, $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique) on a $timeHorizon steps time horizon"
     return Instance(
         newNetwork,
         TravelTimeGraph(newNetwork, newBundles),
         TimeSpaceGraph(newNetwork, timeHorizon),
         newBundles,
         timeHorizon,
-        instance.dateHorizon[1:timeHorizon],
+        instance.dates[1:timeHorizon],
+        instance.partNumbers,
     )
 end

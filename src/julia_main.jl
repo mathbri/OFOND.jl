@@ -39,6 +39,14 @@ function julia_main()::Cint
     instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
     instanceSubSub = add_properties(instanceSubSub, tentative_first_fit)
 
+    startTime = time()
+    newSol1 = deepcopy(solutionSub_LBF)
+    println("Time for a standard deepcopy : $(get_elapsed_time(startTime))")
+
+    startTime = time()
+    newSol1 = my_deepcopy(solutionSub_LBF)
+    println("Time for a custom deepcopy : $(get_elapsed_time(startTime))")
+
     # _, solutionSub_SD = shortest_delivery_heuristic(instanceSub)
     # global MAX_LENGTH, GREEDY_RECOMPUTATION = 0, 0
     # _, solutionSub_G = greedy_heuristic(instanceSubSub)

@@ -1,9 +1,9 @@
 # Define supplier, platform, and plant
-supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
-supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
-xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-port_l = OFOND.NetworkNode("005", :pol, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
-plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0)
+supplier1 = OFOND.NetworkNode("001", :supplier, "FR", "EU", false, 0.0)
+supplier2 = OFOND.NetworkNode("002", :supplier, "FR", "EU", false, 0.0)
+xdock = OFOND.NetworkNode("004", :xdock, "FR", "EU", true, 1.0)
+port_l = OFOND.NetworkNode("005", :pol, "FR", "EU", true, 0.0)
+plant = OFOND.NetworkNode("003", :plant, "FR", "EU", false, 0.0)
 
 # Define arcs between the nodes
 supp1_to_plat = OFOND.NetworkArc(:outsource, 1.0, 1, false, 4.0, true, 0.0, 50)
@@ -30,11 +30,11 @@ OFOND.add_arc!(network, xdock, port_l, xdock_to_port)
 OFOND.add_arc!(network, port_l, plant, port_to_plant)
 
 # Define bundles
-commodity1 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("B123", 10, 2.5))
+commodity1 = OFOND.Commodity(0, hash("A123"), 10, 2.5)
 order1 = OFOND.Order(hash("C123"), 1, [commodity1, commodity1])
 bundle1 = OFOND.Bundle(supplier1, plant, [order1], 1, hash(supplier1, hash(plant)), 10, 2)
 
-commodity2 = OFOND.Commodity(1, hash("B456"), OFOND.CommodityData("C456", 15, 3.5))
+commodity2 = OFOND.Commodity(1, hash("B456"), 15, 3.5)
 order2 = OFOND.Order(hash("D456"), 1, [commodity2, commodity2])
 bundle2 = OFOND.Bundle(supplier2, plant, [order2], 2, hash(supplier2, hash(plant)), 15, 1)
 
@@ -53,10 +53,6 @@ bundles = [bundle1, bundle2, bundle3]
         Dict{Symbol,Int}(),
         0,
         0.0,
-    )
-
-    @test OFOND.Commodity(order1, OFOND.CommodityData("B123", 10, 2.5)) == OFOND.Commodity(
-        hash(1, hash("C123")), hash("B123"), OFOND.CommodityData("B123", 10, 2.5)
     )
 end
 

@@ -7,8 +7,6 @@ struct NetworkNode
     type::Symbol         # node type
     hash::UInt
     # Informations
-    name::String         # name of the node
-    coordinates::LLA     # coordinates of the node expressed in (lat*100, lon*100)
     country::String      # country the node is located in
     continent::String    # continent the node is located in
     # Network properties
@@ -19,8 +17,6 @@ struct NetworkNode
     function NetworkNode(
         account::String,
         type::Symbol,
-        name::String,
-        coordinates::LLA,
         country::String,
         continent::String,
         isCommon::Bool,
@@ -30,8 +26,6 @@ struct NetworkNode
             account,
             type,
             hash(account, hash(type)),
-            name,
-            coordinates,
             country,
             continent,
             isCommon,
@@ -73,14 +67,7 @@ end
 # Copy a node information and only change the node type
 function change_node_type(node::NetworkNode, newType::Symbol)
     return NetworkNode(
-        node.account,
-        newType,
-        node.name,
-        node.coordinates,
-        node.country,
-        node.continent,
-        node.isCommon,
-        node.volumeCost,
+        node.account, newType, node.country, node.continent, node.isCommon, node.volumeCost
     )
 end
 
@@ -150,7 +137,7 @@ end
 # TODO : change zero function to return a constant value to optimize garbage collecting ?
 
 function Base.zero(::Type{NetworkNode})
-    return NetworkNode("0", :zero, "zero", LLA(0, 0), "", "", false, 0.0)
+    return NetworkNode("0", :zero, "", "", false, 0.0)
 end
 
 # TODO : change from this to throw error ?

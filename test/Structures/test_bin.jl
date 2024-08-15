@@ -1,16 +1,15 @@
 # Creating instances
-comData = OFOND.CommodityData("1", 5, 1)
-commodity1 = OFOND.Commodity(1, 1, comData)
-commodity2 = OFOND.Commodity(2, 2, comData)
+commodity1 = OFOND.Commodity(1, 1, 5, 1.0)
+commodity2 = OFOND.Commodity(2, 2, 5, 1.0)
 
 @testset "Testing constructors" begin
     @test OFOND.Bin(10) == OFOND.Bin(10, 0, OFOND.Commodity[])
     @test OFOND.Bin(10, 0, [commodity1]) ==
-        OFOND.Bin(10, 0, [OFOND.Commodity(1, 1, comData)])
+        OFOND.Bin(10, 0, [OFOND.Commodity(1, 1, 5, 1.0)])
     @test_throws AssertionError OFOND.Bin(-1, 0, OFOND.Commodity[])
     @test_throws AssertionError OFOND.Bin(10, -1, OFOND.Commodity[])
-    @test OFOND.Bin(10, commodity1) == OFOND.Bin(5, 5, [OFOND.Commodity(1, 1, comData)])
-    @test OFOND.Bin(4, commodity1) == OFOND.Bin(0, 4, [OFOND.Commodity(1, 1, comData)])
+    @test OFOND.Bin(10, commodity1) == OFOND.Bin(5, 5, [OFOND.Commodity(1, 1, 5, 1.0)])
+    @test OFOND.Bin(4, commodity1) == OFOND.Bin(0, 4, [OFOND.Commodity(1, 1, 5, 1.0)])
 end
 
 @testset "Testing add!" begin
@@ -36,7 +35,7 @@ end
     @test bin.content == [commodity2]
 
     bin = OFOND.Bin(10, 10, [commodity1, commodity2])
-    @test OFOND.remove!(bin, OFOND.Commodity(1, 1, comData))
+    @test OFOND.remove!(bin, OFOND.Commodity(1, 1, 5, 1.0))
     @test bin.capacity == 15
     @test bin.load == 5
     @test bin.content == [commodity2]
@@ -54,9 +53,7 @@ end
     @test bin.content == [commodity1, commodity1]
 
     bin = OFOND.Bin(10, 10, [commodity1, commodity2])
-    @test OFOND.remove!(
-        bin, [OFOND.Commodity(1, 1, comData), OFOND.Commodity(2, 2, comData)]
-    )
+    @test OFOND.remove!(bin, [OFOND.Commodity(1, 1, 5, 1.0), OFOND.Commodity(2, 2, 5, 1.0)])
     @test bin.capacity == 20
     @test bin.load == 0
     @test bin.content == OFOND.Commodity[]

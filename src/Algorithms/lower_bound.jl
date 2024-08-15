@@ -115,24 +115,16 @@ function parrallel_lower_bound!(solution::Solution, instance::Instance)
     sort_order_content!(instance)
     # Computing the lower bound delivery for each bundle
     # TODO : parrallelize here with native @threads
+    #       deepcopy travel time graph
+    #       compute lower bound insertion
+    #       write shortest path at bundle idx or collect paths and costs to avoid false sharing
+    # update solution all together
     # cut the instance by bundles and merge them at the end
-    return println("Lower Bound Computed : $lowerBound")
+    println("Lower Bound Computed : $lowerBound")
+    return lowerBound
 end
 
-# TODO : use this heuristic as a filtering operation on the instance ?
-# I run the lower bound heuristic : it splits my instance between directs and non-directs 
-# Because the cost is lower bound, the directs are sure to be one ?
-# Than I can just consider the non-directs for the LNS
-
-function lower_bound_filtering!(instance::Instance, solution::Solution)
-    # solution is supposed to be one from lower bound heuristic
-    # (or run lower bound heuristic first)
-    # two mode : aggressive or not 
-    # aggressive : all bundle taking direct paths are filtered from instance
-    # not aggressive : all bundle taking direct paths and BP lower bound is reached for orders are filtered from instance
-    # use milp packing for order bp precomputation ?
-end
-
+# Compute the path needed for filtering procedure
 function lower_bound_filtering_path(
     TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundle::Bundle, src::Int, dst::Int
 )
@@ -144,6 +136,7 @@ function lower_bound_filtering_path(
     return shortestPath, pathCost - removedCost
 end
 
+# Compute the solution for the filtering procedure
 function lower_bound_filtering!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
@@ -166,3 +159,5 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
     end
     return println()
 end
+
+# TODO : like lower bound, this can be parrallelized

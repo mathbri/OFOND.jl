@@ -83,7 +83,10 @@ end
 
 # Plot some of the paths on a map ?
 # Compute some import statistics ? (the ones in solution indicators for ex)
-function analyze_solution() end
+function analyze_solution()
+    # direct paths ? and cost / m3 / number of commodities resulting ?
+    # mean delivery distance ? 
+end
 
 # Checking the number of paths
 function check_enough_paths(instance::Instance, solution::Solution; verbose::Bool)
@@ -181,8 +184,6 @@ function check_quantities(
     if askedQuantities != routedQuantities
         verbose &&
             @warn "Infeasible solution : quantities mismatch between demand and routing"
-        # println("Asked : $askedQuantities")
-        # println("Routed : $routedQuantities")
         return false
     end
     return true
@@ -232,14 +233,12 @@ function compute_arc_cost(
 )
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
-    arcVolume = sum(arcData.capacity - bin.capacity for bin in bins)
-    arcLeadTimeCost = sum(
-        bin -> sum(com -> lead_time_cost(com), bin.content; init=0.0), bins; init=0.0
-    )
+    arcVolume = sum(bin.load for bin in bins)
+    arcLeadTimeCost = sum(stock_cost(bin) for bin in bins; init=0.0)
     # Node cost 
     cost =
-        (dstData.volumeCost + arcData.carbonCost) * arcVolume /
-        (VOLUME_FACTOR * arcData.capacity)
+        (dstData.volumeCost + arcData.carbonCost) * arcVolume / arcData.capacity /
+        VOLUME_FACTOR
     # Transport cost 
     transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : length(bins)
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
@@ -352,7 +351,8 @@ function extract_filtered_instance(instance::Instance, solution::Solution)
         TimeSpaceGraph(newNetwork, instance.timeHorizon),
         newBundles,
         instance.timeHorizon,
-        instance.dateHorizon,
+        instance.dates,
+        instance.partNumbers,
     )
 end
 

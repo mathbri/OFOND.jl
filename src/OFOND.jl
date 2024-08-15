@@ -6,12 +6,8 @@ using Graphs
 using Graphs.LinAlg
 using MetaGraphsNext
 using CSV
-using JLD2 # useful ?
 using IterTools
 using Random
-using Statistics # useful ?
-using Dates # useful ?
-using Geodesy # useful ?
 using JuMP
 using HiGHS
 using SparseArrays
@@ -37,7 +33,6 @@ include("Structures/Solution.jl")
 # Import and Export of data
 include("Reading/read_instance.jl")
 include("Reading/read_solution.jl")
-include("Writing/write_instance.jl")
 include("Writing/write_solution.jl")
 
 # Algorithms
@@ -84,7 +79,7 @@ export greedy_heuristic
 export local_search_heuristic, greedy_then_ls_heuristic
 export lower_bound_heuristic
 # export lns_heuristic
-export write_instance, write_solution
+export write_solution
 export julia_main
 
 end

@@ -1,8 +1,8 @@
 # Create an instance of Order
 bundle_hash = hash("A123")
 deliveryDate = 1
-commodity1 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("A123", 10, 2.5))
-commodity2 = OFOND.Commodity(1, hash("B456"), OFOND.CommodityData("B456", 5, 3.0))
+commodity1 = OFOND.Commodity(0, hash("A123"), 10, 2.5)
+commodity2 = OFOND.Commodity(1, hash("B456"), 5, 3.0)
 order = OFOND.Order(bundle_hash, deliveryDate, [commodity1, commodity2])
 
 # Test that Order is not mutable but its content is

@@ -117,6 +117,24 @@ end
         [OFOND.Bin(20, 30, [commodity2, commodity1, commodity3])]
     @test sol.bins[xdockStep4, portStep1] ==
         [OFOND.Bin(20, 30, [commodity2, commodity1, commodity3])]
+
+    # testing shortcut for direct arcs (emptied and not recomputed)
+    push!(sol.bins[supp1Step3, plantStep1], OFOND.Bin(20, 30, [commodity2, commodity1]))
+    binsUpdated = OFOND.get_bins_updated(
+        TSGraph, TTGraph, [bundle1], [[supp1FromDel2, plantFromDel0]]
+    )
+    costAdded = OFOND.refill_bins!(sol, TSGraph, binsUpdated)
+    @test costAdded ≈ -10.0
+    # arc emptied
+    @test sol.bins[supp1Step3, plantStep1] == OFOND.Bin[]
+    # push it back again
+    push!(sol.bins[supp1Step3, plantStep1], OFOND.Bin(20, 30, [commodity2, commodity1]))
+    costAdded = OFOND.refill_bins!(
+        sol, TTGraph, TSGraph, bundle1, [supp1FromDel2, plantFromDel0]
+    )
+    @test costAdded ≈ -10.0
+    # arc emptied
+    @test sol.bins[supp1Step3, plantStep1] == OFOND.Bin[]
 end
 
 sol = OFOND.Solution(TTGraph, TSGraph, bundles)
@@ -165,14 +183,32 @@ end
 end
 
 sol = OFOND.Solution(TTGraph, TSGraph, bundles)
+sol2 = OFOND.Solution(TTGraph, TSGraph, bundles)
+sol3 = OFOND.Solution(TTGraph, TSGraph, bundles)
 emptySol = OFOND.Solution(TTGraph, TSGraph, bundles)
 
 @testset "update solution" begin
-    # mix of all the above
+    # testing equality between modes of updating 
+    # all at once   
     costAdded = OFOND.update_solution!(sol, instance, [bundle1, bundle3], [TTPath, TTPath])
     @test sol.bundlePaths == [TTPath, [-1, -1], TTPath]
+    # one at a time 
+    costAdded2 = OFOND.update_solution!(sol2, instance, [bundle1], [TTPath])
+    costAdded3 = OFOND.update_solution!(sol3, instance, bundle1, TTPath)
+    @test costAdded2 ≈ costAdded3
+    @test sol2.bundlePaths == sol3.bundlePaths
+    @test sol2.bins == sol3.bins
+    costAdded2 += OFOND.update_solution!(sol2, instance, [bundle3], [TTPath])
+    costAdded3 += OFOND.update_solution!(sol3, instance, bundle3, TTPath)
+    @test costAdded2 ≈ costAdded3
+    @test costAdded ≈ costAdded3
+    @test sol2.bundlePaths == sol3.bundlePaths
+    @test sol2.bins == sol3.bins
+    @test sol2.bundlePaths == sol.bundlePaths
+    @test sol2.bins == sol.bins
+    # removing and seeing return to initial state
     costRemoved = OFOND.update_solution!(sol, instance, [bundle1, bundle3]; remove=true)
-    @test costAdded + costRemoved ≈ 0.0
+    @test -costAdded ≈ costRemoved
     @test sol.bundlePaths == emptySol.bundlePaths
     @test sol.bundlesOnNode == emptySol.bundlesOnNode
     OFOND.clean_empty_bins!(sol, instance)

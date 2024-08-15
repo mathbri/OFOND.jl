@@ -18,15 +18,13 @@
     ]
     row3, row4 = rows[3:4]
     node = OFOND.read_node!(counts, row3)
-    @test node ==
-        OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "FR", "EU", false, 0.0)
+    @test node == OFOND.NetworkNode("002", :supplier, "FR", "EU", false, 0.0)
     @test counts == Dict{Symbol,Int}(
         :supplier => 1, :xdock => 0, :pol => 0, :pod => 0, :plant => 0, :iln => 0
     )
 
     node = OFOND.read_node!(counts, row4)
-    @test node ==
-        OFOND.NetworkNode("003", :other, "Other1", LLA(0, 0), "FR", "EU", false, 0.0)
+    @test node == OFOND.NetworkNode("003", :other, "FR", "EU", false, 0.0)
     @test counts == Dict{Symbol,Int}(
         :supplier => 1, :xdock => 0, :pol => 0, :pod => 0, :plant => 0, :iln => 0
     )
@@ -42,8 +40,6 @@ end
     @test ne(network.graph) == 2
     node1 = network.graph[hash("001", hash(:supplier))]
     @test node1 == supplier1
-    @test node1.name == supplier1.name
-    @test node1.coordinates == supplier1.coordinates
     @test node1.country == supplier1.country
     @test node1.continent == supplier1.continent
     @test node1.isCommon == supplier1.isCommon
@@ -149,10 +145,6 @@ end
     @test OFOND.com_size(row1) == 1500
     @test OFOND.com_size(row2) == 354
     @test OFOND.com_size(row3) == 1
-    # Commodity data hash
-    @test OFOND.com_data_hash(row1) == hash("B456", hash(1500, hash(3.5)))
-    @test OFOND.com_data_hash(row2) == hash("C456", hash(354, hash(3.5)))
-    @test OFOND.com_data_hash(row3) == hash("B456", hash(1, hash(3.6)))
 end
 
 @testset "Object getters" begin
@@ -189,17 +181,6 @@ end
         hash(1, hash("002", hash("003"))) => OFOND.Order(b1, 1),
         hash(1, hash("008", hash("003"))) => OFOND.Order(b1, 1),
     )
-    # Get com data
-    comDatas = Dict{UInt,OFOND.CommodityData}()
-    cd1 = OFOND.get_com_data!(comDatas, row1)
-    @test cd1 == OFOND.CommodityData("B456", 1500, 3.5)
-    @test comDatas == Dict(hash("B456", hash(1500, hash(3.5))) => cd1)
-    cd2 = OFOND.get_com_data!(comDatas, row2)
-    @test cd2 == OFOND.CommodityData("C456", 354, 3.5)
-    @test comDatas == Dict(
-        hash("B456", hash(1500, hash(3.5))) => cd1,
-        hash("C456", hash(354, hash(3.5))) => cd2,
-    )
 end
 
 bundle11 = OFOND.Bundle(supplier2, plant, [order1], 1, bunH1, 0, 0)
@@ -207,7 +188,7 @@ bundle22 = OFOND.Bundle(supplier1, plant, [order2, order3], 2, bunH2, 0, 0)
 
 @testset "Read commodities" begin
     # read file and add commodities
-    bundles, dates = @test_warn [
+    bundles, dates, partNums = @test_warn [
         "Supplier unknown in the network", "Customer unknown in the network"
     ] OFOND.read_commodities(network, joinpath(@__DIR__, "dummy_commodities.csv");)
     # the bundles should be the one in all other tests
@@ -238,7 +219,8 @@ end
     )
     @test instance.networkGraph.graph == network.graph
     @test instance.bundles == [bundle1, bundle2]
-    @test instance.dateHorizon == [Dates.Date(2024, 1, 1), Dates.Date(2024, 1, 8)]
+    @test instance.dates == ["2024-01-01", "2024-01-08"]
+    @test instance.partNumbers == Dict(hash("A123") => "A123", hash("B456") => "B456")
     @test instance.travelTimeGraph.graph == OFOND.TravelTimeGraph().graph
     @test instance.timeSpaceGraph.graph == OFOND.TimeSpaceGraph().graph
 end

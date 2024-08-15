@@ -52,38 +52,38 @@ function first_fit_decreasing!(
     return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
-# TODO : the mapping operation takes alsmost all of this function time, probably because of garbage collecting
 # TODO : maybe a single, global, pre-allocated vector for all tentative first fit will speed up computation, 
 # instead of creating a new array with each function call, it would just update values inside the vector, growing it only when needed 
 # Maybe do all this in a seperate file, like whats below
-global CAPACITIES = [-1]
-global MAX_LENGTH = 1
+# global CAPACITIES = [-1]
+# global MAX_LENGTH = 1
 
-function get_capacities(bins::Vector{Bin})
-    # if the vector of bins is larger than the current cpapcity vector, growing it
-    if length(bins) > length(CAPACITIES)
-        append!(CAPACITIES, fill(0, length(bins) - length(CAPACITIES)))
-    end
-    # updating values in capcities vector
-    for (idx, bin) in enumerate(bins)
-        CAPACITIES[idx] = bin.capacity
-    end
-    # filling with -1 for not opened bins
-    CAPACITIES[(length(bins) + 1):end] .= -1
-    return CAPACITIES
-end
+# function get_capacities(bins::Vector{Bin})
+#     # if the vector of bins is larger than the current cpapcity vector, growing it
+#     if length(bins) > length(CAPACITIES)
+#         append!(CAPACITIES, fill(0, length(bins) - length(CAPACITIES)))
+#     end
+#     # updating values in capcities vector
+#     for (idx, bin) in enumerate(bins)
+#         CAPACITIES[idx] = bin.capacity
+#     end
+#     # filling with -1 for not opened bins
+#     CAPACITIES[(length(bins) + 1):end] .= -1
+#     return CAPACITIES
+# end
 
-function add_capacity(idx::Int, capacity::Int)
-    if idx > length(CAPACITIES)
-        push!(CAPACITIES, capacity)
-    else
-        CAPACITIES[idx] = capacity
-    end
-end
+# function add_capacity(idx::Int, capacity::Int)
+#     if idx > length(CAPACITIES)
+#         push!(CAPACITIES, capacity)
+#     else
+#         CAPACITIES[idx] = capacity
+#     end
+# end
 
-function length_capacities()
-    return findfirst(x -> x == -1, CAPACITIES) - 1
-end
+# function length_capacities()
+#     # can also be replaced by another global variable that is updated with each "push" to capacities
+#     return findfirst(x -> x == -1, CAPACITIES) - 1
+# end
 
 # First fit decreasing computed on loads to return only the number of bins added by the vector of commodities
 function tentative_first_fit(
@@ -91,18 +91,19 @@ function tentative_first_fit(
 )
     # Sorting commodities in decreasing order of size (if not already done)
     !sorted && sort!(commodities; rev=true)
+    # TODO : the mapping operation takes alsmost all of this function time, probably because of garbage collecting
     capacities = map(bin -> bin.capacity, bins)
     lengthBefore = length(capacities)
     # Adding commodities on top of others
     for commodity in commodities
-        idxC = findfirst(cap -> cap >= size(commodity), capacities)
+        idxC = findfirst(cap -> cap >= commodity.size, capacities)
         if idxC !== nothing
-            capacities[idxC] -= size(commodity)
+            capacities[idxC] -= commodity.size
         else
-            push!(capacities, fullCapacity - size(commodity))
+            push!(capacities, fullCapacity - commodity.size)
         end
     end
-    global MAX_LENGTH = max(MAX_LENGTH, length(capacities))
+    # global MAX_LENGTH = max(MAX_LENGTH, length(capacities))
     return length(capacities) - lengthBefore
 end
 
@@ -115,7 +116,7 @@ end
 
 # Only useful for best fit decreasing computation of best bin
 function best_fit_capacity(bin::Bin, commodity::Commodity)
-    capacity_after = bin.capacity - size(commodity)
+    capacity_after = bin.capacity - commodity.size
     capacity_after < 0 && return INFINITY
     return capacity_after
 end
@@ -170,7 +171,7 @@ function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector
     @constraint(
         model,
         fitInBin[b=1:B],
-        fullCapacity * y[b] >= sum(x[i, b] * size(commodities[i]) for i in 1:n) + loads[b]
+        fullCapacity * y[b] >= sum(x[i, b] * commodities[i].size for i in 1:n) + loads[b]
     )
     @constraint(model, breakSym[b=1:(B - 1)], y[b] >= y[b + 1])
     # Objective

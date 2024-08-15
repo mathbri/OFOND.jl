@@ -1,12 +1,7 @@
-# TODO : maybe do some bin packing improvement to obtain the best current solution for fair comparison ?
-# TODO : check feasibility ?
-
 # Check that the bundle exists in the instance and return it if found
 function check_bundle(instance::Instance, row::CSV.Row)
-    suppNode = NetworkNode(
-        row.supplier_account, :supplier, "", LLA(0, 0), "", "", true, 0.0
-    )
-    custNode = NetworkNode(row.customer_account, :plant, "", LLA(0, 0), "", "", true, 0.0)
+    suppNode = NetworkNode(row.supplier_account, :supplier, "", "", true, 0.0)
+    custNode = NetworkNode(row.customer_account, :plant, "", "", true, 0.0)
     bundleHash = hash(suppNode, hash(custNode))
     bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
     if bundleIdx === nothing

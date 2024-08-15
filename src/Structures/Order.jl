@@ -17,7 +17,7 @@ struct Order
     volume::Int                 # total volume of the order
     bpUnits::Dict{Symbol,Int}  # number of trucks used with bin packing function given
     minPackSize::Int            # size of the smallest commodity in the order
-    leadTimeCost::Float64       # total lead time cost of the order
+    stockCost::Float64       # total lead time cost of the order
 end
 
 function Order(bunH::UInt, delDate::Int)
@@ -42,13 +42,13 @@ end
 
 # Add useful properties to the order
 function add_properties(order::Order, bin_packing::Function)
-    volume = sum(com -> size(com), order.content)
+    volume = sum(com -> com.size, order.content)
     for arcType in BP_ARC_TYPES
         capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
         order.bpUnits[arcType] = bin_packing(Bin[], capacity, order.content)
     end
-    minPackSize = minimum(com -> size(com), order.content)
-    leadTimeCost = sum(com -> lead_time_cost(com), order.content)
+    minPackSize = minimum(com -> com.size, order.content)
+    stockCost = sum(com -> com.stockCost, order.content)
     return Order(
         order.bundleHash,
         order.deliveryDate,
@@ -57,6 +57,6 @@ function add_properties(order::Order, bin_packing::Function)
         volume,
         order.bpUnits,
         minPackSize,
-        leadTimeCost,
+        stockCost,
     )
 end

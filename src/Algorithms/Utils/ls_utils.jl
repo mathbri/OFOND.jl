@@ -205,4 +205,12 @@ function bundle_max_removal_cost(
     return cost
 end
 
+# For a real deepcopy, one would need the order in which to insert the bundles
+function my_deepcopy(solution::Solution, instance::Instance)
+    newSol = Solution(instance)
+    return update_solution!(
+        newSol, instance, instance.bundles, solution.bundlePaths; sorted=true
+    )
+end
+
 # TODO : create a revert solution function to make it clearer in the code

@@ -1,10 +1,10 @@
 function get_shipments_ids(
-    solution::Solution, path::Vector{Int}, node::Int, idx::Int, coommodity::Commodity
+    solution::Solution, path::Vector{Int}, node::Int, idx::Int, commodity::Commodity
 )
     idx == length(path) && return [""]
     next_node = path[idx + 1]
     bins = solution.bins[node, next_node]
-    binIdxs = findall(b -> coommodity in b.content, bins)
+    binIdxs = findall(b -> commodity in b.content, bins)
     return string.([bin.idx for bin in bins[binIdxs]])
 end
 
@@ -18,17 +18,17 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
         data[3] = bundle.customer.account  # customer_account
         path = solution.bundlePaths[bundle.idx]
         for order in bundle.orders
-            data[7] = instance.dateHorizon[order.deliveryDate]  # delivery_date
+            data[7] = instance.dates[order.deliveryDate]  # delivery_date
             orderCom = unique(order.content)
             timedPath = time_space_projector(TTGraph, TSGraph, path, order)
             for com in orderCom
-                data[4] = part_number(com)  # part_number
-                data[5] = size(com)         # packaging
+                data[4] = instance.partNumbers[com.partNumHash]  # part_number
+                data[5] = com.size         # packaging
                 data[6] = length(findall(x -> x === com, order.content))  # quantity_part_in_route
                 for (idx, node) in enumerate(timedPath)
                     data[8] = TSGraph.networkNodes[node].account  # point_account
                     data[9] = idx  # point_index
-                    data[10] = instance.dateHorizon[TSGraph.timeStep[node]]  # point_date
+                    data[10] = instance.dates[TSGraph.timeStep[node]]  # point_date
                     shipments_ids = get_shipments_ids(solution, timedPath, node, idx, com)
                     for id in shipments_ids
                         data[11] = id  # shipment_id
@@ -48,8 +48,8 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
     for arc in edges(TSGraph.graph)
         data[2] = TSGraph.networkNodes[src(arc)].account  # source_point_account
         data[3] = TSGraph.networkNodes[dst(arc)].account  # destination_point_account
-        data[4] = instance.dateHorizon[TSGraph.timeStep[src(arc)]]  # point_start_date
-        data[5] = instance.dateHorizon[TSGraph.timeStep[dst(arc)]]  # point_end_date
+        data[4] = instance.dates[TSGraph.timeStep[src(arc)]]  # point_start_date
+        data[5] = instance.dates[TSGraph.timeStep[dst(arc)]]  # point_end_date
         arcData = TSGraph.networkArcs[src(arc), dst(arc)]
         dstData = TSGraph.networkNodes[dst(arc)]
         for bin in solution.bins[src(arc), dst(arc)]
@@ -84,12 +84,12 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
             data[2] = bin.idx  # shipment_id
             contentCom = unique(bin.content)
             for com in contentCom
-                data[3] = part_number(com)  # part_number
+                data[3] = instance.partNumbers[com.partNumHash]  # part_number
                 bundle = find_bundle(instance, com)
                 data[4] = bundle.supplier.account  # part_supplier_account
                 data[5] = bundle.customer.account  # part_customer_account
                 data[6] = length(findall(x -> x === com, bin.content))  # quantity
-                data[7] = size(com)  # packaging_size
+                data[7] = com.size  # packaging_size
                 data[8] = data[6] * data[7]  # volume  
                 println(io, join(data, ","))
                 data[1] += 1

@@ -1,10 +1,6 @@
 # Defining a network node
-node = OFOND.NetworkNode(
-    "account", :supplier, "name", LLA(1, 1), "country", "continent", false, 1.0
-)
-node2 = OFOND.NetworkNode(
-    "account2", :xdock, "name", LLA(1, 1), "country", "continent", false, 1.0
-)
+node = OFOND.NetworkNode("account", :supplier, "country", "continent", false, 1.0)
+node2 = OFOND.NetworkNode("account2", :xdock, "country", "continent", false, 1.0)
 arc = OFOND.NetworkArc(:direct, 1.0, 1, false, 1.0, true, 1.0, 50)
 network = OFOND.NetworkGraph()
 
@@ -18,8 +14,6 @@ network = OFOND.NetworkGraph()
     # Testing Node
     @test node.account == "account"
     @test node.type == :supplier
-    @test node.name == "name"
-    @test node.coordinates == LLA(1, 1)
     @test node.country == "country"
     @test node.continent == "continent"
     @test node.isCommon == false
@@ -27,8 +21,7 @@ network = OFOND.NetworkGraph()
     @test node.hash == hash("account", hash(:supplier))
 
     # Testing equality
-    @test node ==
-        OFOND.NetworkNode("account", :supplier, "n2", LLA(2, 2), "c", "c", true, 1.1)
+    @test node == OFOND.NetworkNode("account", :supplier, "c", "c", true, 1.1)
     @test node != node2
 
     # Testing Network
@@ -41,8 +34,6 @@ newNode = OFOND.change_node_type(node, :pod)
     # Testing changing node type
     @test newNode.account == "account"
     @test newNode.type == :pod
-    @test newNode.name == "name"
-    @test newNode.coordinates == LLA(1, 1)
     @test newNode.country == "country"
     @test newNode.continent == "continent"
     @test newNode.isCommon == false
@@ -71,9 +62,9 @@ newNode2 = OFOND.change_node_type(node, :iln)
     @test !haskey(network.graph, newNode2.hash, newNode2.hash)
 
     # Testing add_node! method with warnings
-    warnNode = OFOND.NetworkNode("account", :supplier, "n2", LLA(2, 2), "c", "c", true, 1.1)
+    warnNode = OFOND.NetworkNode("account", :supplier, "c", "c", true, 1.1)
     @test_warn "Same node already in the network" OFOND.add_node!(network, warnNode)
-    warnNode = OFOND.NetworkNode("account12", :type, "n2", LLA(2, 2), "c", "c", true, 1.1)
+    warnNode = OFOND.NetworkNode("account12", :type, "c", "c", true, 1.1)
     @test_warn "Node type not in NodeTypes" OFOND.add_node!(network, warnNode)
 end
 
@@ -85,7 +76,7 @@ end
     @test network.graph[node.hash, newNode.hash] === arc
 
     # Testing add_arc! method with warnings
-    node3 = OFOND.NetworkNode("account3", :type3, "n3", LLA(1, 1), "c", "c", false, 1.0)
+    node3 = OFOND.NetworkNode("account3", :type3, "c", "c", false, 1.0)
     arc2 = OFOND.NetworkArc(:type2, 1.0, 1, false, 1.0, true, 1.0, 50)
     @test_warn "Source and destination already have arc data" OFOND.add_arc!(
         network, node, newNode, arc2

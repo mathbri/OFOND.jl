@@ -6,12 +6,8 @@ function Order(bundle::Bundle, deliveryDate::Int)
     return Order(bundle.hash, deliveryDate)
 end
 
-function Commodity(order::Order, data::CommodityData)
-    return Commodity(order.hash, hash(data.partNumber), data)
-end
-
 function add_properties(bundle::Bundle, network::NetworkGraph)
-    maxPackSize = maximum(order -> maximum(com -> size(com), order.content), bundle.orders)
+    maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
     maxDelTime = 1 + network.graph[bundle.supplier.hash, bundle.customer.hash].travelTime
     return Bundle(
         bundle.supplier,

@@ -1,8 +1,3 @@
-# xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-# port_l = OFOND.NetworkNode("005", :port_l, "PortL1", LLA(3, 3), "FR", "EU", true, 0.0)
-# supp_to_plat = OFOND.NetworkArc(:outsource, 1.0, 1, false, 4.0, true, 0.0, 50)
-# supp1_to_plant = OFOND.NetworkArc(:direct, 2.0, 2, false, 10.0, false, 1.0, 50)
-# port_to_plant = OFOND.NetworkArc(:oversea, 1.0, 1, true, 4.0, false, 1.0, 50)
 @testset "Compute new cost" begin
     @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1]) ≈ 10 + 0.002 + 5
     @test OFOND.compute_new_cost(supp1_to_plant, port_l, 2, [commodity1]) ≈ 20 + 0.002 + 5

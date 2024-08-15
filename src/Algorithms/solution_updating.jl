@@ -69,6 +69,7 @@ function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
     return length(bins) - binsBefore
 end
 
+# TODO : if the shortcut possible for direct arcs really useful ? It only avoids the initialization of an empty vector
 # Refill bins on the working arcs, to be used after bundle removal
 function refill_bins!(
     solution::Solution,
@@ -85,6 +86,12 @@ function refill_bins!(
             arcData = TSGraph.networkArcs[tSrc, tDst]
             # No need to refill bins on linear arcs
             arcData.isLinear && continue
+            # Shortcut for direct arcs 
+            if arcData.type == :direct
+                costAdded -= length(solution.bins[tSrc, tDst]) * arcData.unitCost
+                empty!(solution.bins[tSrc, tDst])
+                continue
+            end
             # Adding new bins cost
             costAdded +=
                 refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
@@ -106,6 +113,14 @@ function refill_bins!(
     # Projecting path for every order
     for order in bundle.orders
         timedPath = time_space_projector(TTGraph, TSGraph, path, order)
+        # Shortcut for direct arcs 
+        if length(timedPath) == 2
+            tSrc, tDst = timedPath
+            arcData = TSGraph.networkArcs[tSrc, tDst]
+            costAdded -= length(solution.bins[tSrc, tDst]) * arcData.unitCost
+            empty!(solution.bins[tSrc, tDst])
+            continue
+        end
         # Refilling all bins on this path
         for (tSrc, tDst) in partition(timedPath, 2, 1)
             arcData = TSGraph.networkArcs[tSrc, tDst]

@@ -1,3 +1,11 @@
+supp1Step2 = TSGraph.hashToIdx[hash(2, supplier1.hash)]
+xdockStep3 = TSGraph.hashToIdx[hash(3, xdock.hash)]
+portStep4 = TSGraph.hashToIdx[hash(4, port_l.hash)]
+plantStep1 = TSGraph.hashToIdx[hash(1, plant.hash)]
+TSPath = [supp1Step2, xdockStep3, portStep4, plantStep1]
+
+xdockStep4 = TSGraph.hashToIdx[hash(4, xdock.hash)]
+
 @testset "Bin packing improvement" begin
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     OFOND.add_order!(sol, TSGraph, TSPath, order1)
@@ -31,6 +39,14 @@
         [OFOND.Bin(20, 30, [commodity3, commodity1, commodity2])]
 end
 
+supp1FromDel3 = TTGraph.hashToIdx[hash(3, supplier1.hash)]
+xdockFromDel2 = TTGraph.hashToIdx[hash(2, xdock.hash)]
+portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
+plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
+TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
+
+supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
+
 @testset "Bundle reintroduction" begin
     # take greedy solution 
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
@@ -44,6 +60,12 @@ end
     # bundle1 and 3 are equal for the operator so when filtering bundel on nodes, bundle3 is also deleted but just bundle 1 is added back
     # also because of deletion and reinsertion, the order is now different in the vector
     # @test sol.bundlesOnNode == greedySol.bundlesOnNode
+
+    # at removal bundle1 removed the commodity1 of bundle3 and and insertion the order was changed
+    OFOND.add!(sol.bins[3, 12][1], commodity1)
+    sort!(greedySol.bins[3, 12][1].content; rev=true)
+    OFOND.add!(sol.bins[12, 17][1], commodity1)
+    sort!(greedySol.bins[12, 17][1].content; rev=true)
     @test sol.bins == greedySol.bins
     # check with save_and_remove_bundle function
     otherSol = deepcopy(greedySol)
@@ -66,7 +88,7 @@ end
     oldBins, costRemoved = OFOND.save_and_remove_bundle!(
         otherSol, instance, [bundle2], [sol.bundlePaths[2]]
     )
-    @test costRemoved < -1e-5
+    @test costRemoved ≈ -24.006
     supp2FromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     newPath, pathCost = OFOND.greedy_insertion(
         otherSol, TTGraph, TSGraph, bundle2, supp2FromDel1, plantFromDel0
@@ -108,14 +130,12 @@ end
 # Adding a cycle in the network that won't be one in the time expansion
 network2 = deepcopy(network)
 
-xdock2 = OFOND.NetworkNode("006", :xdock, "XDock1", LLA(3, 1), "FR", "EU", true, 1.0)
-xdock3 = OFOND.NetworkNode("007", :xdock, "XDock3", LLA(4, 1), "CN", "AS", true, 1.0)
-supplier3 = OFOND.NetworkNode("008", :supplier, "Supp3", LLA(1, 1), "CN", "AS", false, 0.0)
+xdock2 = OFOND.NetworkNode("006", :xdock, "FR", "EU", true, 1.0)
+xdock3 = OFOND.NetworkNode("007", :xdock, "CN", "AS", true, 1.0)
+supplier3 = OFOND.NetworkNode("008", :supplier, "CN", "AS", false, 0.0)
 OFOND.add_node!(network2, xdock2)
 OFOND.add_node!(network2, xdock3)
 OFOND.add_node!(network2, supplier3)
-
-# TODO : resume from here
 
 xdock1_to_2 = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 5.0, false, 0.0, 50)
 xdock1_to_3 = OFOND.NetworkArc(:cross_plat, 0.1, 1, true, 4.0, false, 0.0, 50)
@@ -145,7 +165,7 @@ bundle33 = OFOND.Bundle(supplier3, plant, [order33, order44], 3, bunH3, 15, 3)
 bundles[[1, 3]] = [bundle11, bundle33]
 TTGraph2 = OFOND.TravelTimeGraph(network2, bundles)
 TSGraph2 = OFOND.TimeSpaceGraph(network2, 4)
-instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates)
+instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates, partNumbers)
 
 # New TTPath
 supp1FromDel3 = TTGraph2.hashToIdx[hash(3, supplier1.hash)]
@@ -165,6 +185,8 @@ xdock1Step3 = TSGraph2.hashToIdx[hash(3, xdock.hash)]
 xdock2Step4 = TSGraph2.hashToIdx[hash(4, xdock2.hash)]
 plantStep1 = TSGraph2.hashToIdx[hash(1, plant.hash)]
 xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
+
+plantStep2 = TSGraph2.hashToIdx[hash(2, plant.hash)]
 
 @testset "Two node incremental" begin
     sol = OFOND.Solution(TTGraph2, TSGraph2, bundles)
@@ -234,6 +256,14 @@ xdock3Step4 = TSGraph2.hashToIdx[hash(4, xdock3.hash)]
     # how to obtain a better lower bound insertion ?
 end
 
+# Some commodities get lost along the way if bundle 1 and bundle 3 have the same
+commodity3 = OFOND.Commodity(2, hash("C789"), 15, 3.5)
+commodity4 = OFOND.Commodity(2, hash("C789"), 10, 2.5)
+instance2.bundles[3].orders[1].content[1] = commodity3
+instance2.bundles[3].orders[1].content[2] = commodity4
+instance2.bundles[3].orders[2].content[1] = commodity3
+instance2.bundles[3].orders[2].content[2] = commodity4
+
 @testset "Local search (full)" begin
     # mix of the above, from bad solution to good
     sol = OFOND.Solution(TTGraph2, TSGraph2, bundles)
@@ -256,6 +286,20 @@ end
         end
         for bin in greedySol.bins[arc.src, arc.dst]
             sort!(bin.content)
+        end
+    end
+    if sol.bins != greedySol.bins
+        I, J, V = findnz(sol.bins)
+        for (i, j) in zip(I, J)
+            if sol.bins[i, j] != greedySol.bins[i, j]
+                sort!(sol.bins[i, j])
+                sort!(greedySol.bins[i, j])
+            end
+            if sol.bins[i, j] != greedySol.bins[i, j]
+                println("Difference on arc $i-$j")
+                println(sol.bins[i, j])
+                println(greedySol.bins[i, j])
+            end
         end
     end
     @test sol.bins == greedySol.bins

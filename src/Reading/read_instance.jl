@@ -3,14 +3,12 @@
 function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     nodeType = Symbol(row.point_type)
     haskey(counts, nodeType) && (counts[nodeType] += 1)
-    account, name, country, continent = promote(
-        row.point_account, row.point_name, row.point_country, row.point_continent
+    account, country, continent = promote(
+        row.point_account, row.point_country, row.point_continent
     )
     return NetworkNode(
         account,
         nodeType,
-        name,
-        LLA(row.point_latitude, row.point_longitude),
         country,
         continent,
         nodeType in COMMON_NODE_TYPES,
@@ -83,10 +81,6 @@ function com_size(row::CSV.Row)
     return round(Int, max(1, row.size * 100))
 end
 
-function com_data_hash(row::CSV.Row)
-    return hash(row.part_number, hash(com_size(row), hash(row.lead_time_cost)))
-end
-
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
     # Get supplier and customer nodes
     if !haskey(network.graph, hash(row.supplier_account, hash(:supplier)))
@@ -109,23 +103,28 @@ function get_order!(orders::Dict{UInt,Order}, row::CSV.Row, bundle::Bundle)
     return get!(orders, order_hash(row), Order(bundle, row.delivery_time_step + 1))
 end
 
-function get_com_data!(comDatas::Dict{UInt,CommodityData}, row::CSV.Row)
-    return get!(
-        comDatas,
-        com_data_hash(row),
-        CommodityData(row.part_number, com_size(row), row.lead_time_cost),
-    )
+function add_date!(dateHorizon::Vector{String}, row::CSV.Row)
+    dateIdx = row.delivery_time_step + 1
+    if length(dateHorizon) < dateIdx
+        append!(dateHorizon, ["" for _ in 1:(dateIdx - length(dateHorizon))])
+    end
+    if dateHorizon[dateIdx] == ""
+        dateHorizon[dateIdx] = row.delivery_date
+    end
 end
 
-# TODO : change counts to dict for more precision in commodity diversity
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
-    comDatas, orders = Dict{UInt,CommodityData}(), Dict{UInt,Order}()
-    bundles, allDates = Dict{UInt,Bundle}(), Set{Date}()
+    orders, bundles = Dict{UInt,Order}(), Dict{UInt,Bundle}()
+    dates, partNums = Vector{String}(), Dict{UInt,String}()
     comCount, comUnique = 0, 0
     # Reading .csv file
     csv_reader = CSV.File(
         commodities_file;
-        types=Dict("supplier_account" => String, "customer_account" => String),
+        types=Dict(
+            "supplier_account" => String,
+            "customer_account" => String,
+            "delivery_date" => String,
+        ),
     )
     @info "Reading commodity orders from CSV file $(basename(commodities_file)) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
@@ -134,34 +133,36 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         bundle = get_bundle!(bundles, row, networkGraph)
         bundle === nothing && continue
         order = get_order!(orders, row, bundle)
-        comData = get_com_data!(comDatas, row)
         # If the order is new (no commodities) we have to add it to the bundle
         length(order.content) == 0 && push!(bundle.orders, order)
         # Creating (and Duplicating) commodity
-        commodity = Commodity(order, comData)
+        partNumHash = hash(row.part_number)
+        partNums[partNumHash] = row.part_number
+        commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
         append!(order.content, [commodity for _ in 1:(row.quantity)])
         comCount += row.quantity
         comUnique += 1
         # Is it a new time step ?
-        push!(allDates, Date(row.delivery_date))
+        add_date!(dates, row)
     end
     # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
     bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
-    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(allDates)) steps time horizon"
-    return bundleVector, sort(collect(allDates))
+    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon"
+    return bundleVector, dates, partNums
 end
 
 function read_instance(node_file::String, leg_file::String, commodities_file::String)
     networkGraph = NetworkGraph()
     read_and_add_nodes!(networkGraph, node_file)
     read_and_add_legs!(networkGraph, leg_file)
-    bundles, dateHorizon = read_commodities(networkGraph, commodities_file)
+    bundles, dates, partNums = read_commodities(networkGraph, commodities_file)
     return Instance(
         networkGraph,
         TravelTimeGraph(),
         TimeSpaceGraph(),
         bundles,
-        length(dateHorizon),
-        dateHorizon,
+        length(dates),
+        dates,
+        partNums,
     )
 end

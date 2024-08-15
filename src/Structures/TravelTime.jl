@@ -4,6 +4,7 @@
 
 # TODO : question the usage of sparse matrices because thay have slower getting times but uses less memory
 # For that may be create a new branch for testing 
+# From what I could gather, It will need a test to see if full matrices have slower computation time
 
 # TODO : overload all graphs function used to not have to do TTGraph.graph ?
 

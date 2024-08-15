@@ -23,9 +23,9 @@ end
 # Computes volume and lead time costs for an order
 function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
     dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
-    # Node volume cost + Arc carbon cost + Commodity last time cost
+    # Node volume cost + Arc carbon cost + Commodity stock cost
     return (dstData.volumeCost + arcData.carbonCost) * order.volume /
-           (VOLUME_FACTOR * arcData.capacity) + arcData.distance * order.leadTimeCost
+           (VOLUME_FACTOR * arcData.capacity) + arcData.distance * order.stockCost
 end
 
 # Computes transport units for an order

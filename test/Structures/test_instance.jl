@@ -1,9 +1,9 @@
 # Define supplier, platform, and plant
-supplier1 = OFOND.NetworkNode("001", :supplier, "Supp1", LLA(1, 0), "FR", "EU", false, 0.0)
-supplier2 = OFOND.NetworkNode("002", :supplier, "Supp2", LLA(0, 1), "GE", "EU", false, 0.0)
-xdock = OFOND.NetworkNode("004", :xdock, "XDock1", LLA(2, 1), "FR", "EU", true, 1.0)
-port_l = OFOND.NetworkNode("005", :pol, "PortL1", LLA(3, 3), "GE", "EU", true, 0.0)
-plant = OFOND.NetworkNode("003", :plant, "Plant1", LLA(4, 4), "FR", "EU", false, 0.0)
+supplier1 = OFOND.NetworkNode("001", :supplier, "FR", "EU", false, 0.0)
+supplier2 = OFOND.NetworkNode("002", :supplier, "GE", "EU", false, 0.0)
+xdock = OFOND.NetworkNode("004", :xdock, "FR", "EU", true, 1.0)
+port_l = OFOND.NetworkNode("005", :pol, "GE", "EU", true, 0.0)
+plant = OFOND.NetworkNode("003", :plant, "FR", "EU", false, 0.0)
 
 # Define arcs between the nodes
 supp1_to_plat = OFOND.NetworkArc(:outsource, 1.0, 1, false, 4.0, true, 0.0, 50)
@@ -33,14 +33,14 @@ OFOND.add_arc!(network, port_l, plant, port_to_plant)
 bpDict = Dict(
     :direct => 2, :cross_plat => 2, :delivery => 2, :oversea => 2, :port_transport => 2
 )
-commodity1 = OFOND.Commodity(0, hash("A123"), OFOND.CommodityData("B123", 10, 2.5))
+commodity1 = OFOND.Commodity(0, hash("A123"), 10, 2.5)
 bunH1 = hash(supplier1, hash(plant))
 order1 = OFOND.Order(
     bunH1, 1, [commodity1, commodity1], hash(1, bunH1), 20, bpDict, 10, 5.0
 )
 bundle1 = OFOND.Bundle(supplier1, plant, [order1], 1, hash(supplier1, hash(plant)), 10, 3)
 
-commodity2 = OFOND.Commodity(1, hash("B456"), OFOND.CommodityData("C456", 15, 3.5))
+commodity2 = OFOND.Commodity(1, hash("B456"), 15, 3.5)
 bunH2 = hash(supplier2, hash(plant))
 order2 = OFOND.Order(
     bunH2, 1, [commodity2, commodity2], hash(1, bunH2), 30, bpDict, 15, 7.0
@@ -80,23 +80,15 @@ instanceNP = OFOND.Instance(
     OFOND.TimeSpaceGraph(),
     bundlesNP,
     4,
-    [
-        Dates.Date(2020, 1, 1),
-        Dates.Date(2020, 1, 2),
-        Dates.Date(2020, 1, 3),
-        Dates.Date(2020, 1, 4),
-    ],
+    ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
+    Dict(hash("A123") => "A123", hash("B456") => "B456"),
 )
 instance = OFOND.add_properties(instanceNP, (x, y, z) -> 2)
 
 @testset "Add properties" begin
     @test instance.timeHorizon == 4
-    @test instance.dateHorizon == [
-        Dates.Date(2020, 1, 1),
-        Dates.Date(2020, 1, 2),
-        Dates.Date(2020, 1, 3),
-        Dates.Date(2020, 1, 4),
-    ]
+    @test instance.dates == ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]
+    @test instance.partNumbers == Dict(hash("A123") => "A123", hash("B456") => "B456")
 
     @test instance.networkGraph == network
 end
@@ -114,7 +106,7 @@ end
     @test instance.bundles[1].orders[1].volume == bundles[1].orders[1].volume
     @test instance.bundles[1].orders[1].bpUnits == bundles[1].orders[1].bpUnits
     @test instance.bundles[1].orders[1].minPackSize == bundles[1].orders[1].minPackSize
-    @test instance.bundles[1].orders[1].leadTimeCost == bundles[1].orders[1].leadTimeCost
+    @test instance.bundles[1].orders[1].stockCost == bundles[1].orders[1].stockCost
 end
 
 @testset "Time Space graph equality" begin
@@ -157,8 +149,7 @@ end
     subInst = OFOND.extract_sub_instance(instance; country="FR")
     # testing horizon
     @test subInst.timeHorizon == 3
-    @test subInst.dateHorizon ==
-        [Dates.Date(2020, 1, 1), Dates.Date(2020, 1, 2), Dates.Date(2020, 1, 3)]
+    @test subInst.dates == ["2024-01-01", "2024-01-02", "2024-01-03"]
     # testing network
     @test nv(subInst.networkGraph.graph) == 3
     @test ne(subInst.networkGraph.graph) == 4
