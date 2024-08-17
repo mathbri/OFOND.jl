@@ -132,6 +132,12 @@ end
     ) == (
         TTGraph.hashToIdx[hash(1, supplier2.hash)], TTGraph.hashToIdx[hash(0, plant.hash)]
     )
+    # time space arc that can't be projected on the travel time graph
+    supp2step1 = TSGraph.hashToIdx[hash(1, supplier2.hash)]
+    xdockStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
+    @test OFOND.travel_time_projector(
+        TTGraph, TSGraph, supp2step1, xdockStep2, order2, bundle2
+    ) == (-1, -1)
     # time space with order 
     supp1FromDel3 = TTGraph.hashToIdx[hash(3, supplier1.hash)]
     @test OFOND.time_space_projector(TTGraph, TSGraph, supp1FromDel3, order1) ==

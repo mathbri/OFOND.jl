@@ -13,7 +13,7 @@ struct TimeSpaceGraph
     # Properties
     hashToIdx::Dict{UInt,Int}                # dict to easily recover nodes from travel time to time space
     currentCost::SparseMatrixCSC{Float64,Int}   # used by slope scaling
-    commonArcs::Vector{Edge} # common arcs of the graph
+    commonArcs::Vector{Tuple{Int,Int}} # common arcs of the graph
 end
 
 function TimeSpaceGraph(timeHorizon::Int)
@@ -25,7 +25,7 @@ function TimeSpaceGraph(timeHorizon::Int)
         sparse([], [], NetworkArc[]),
         Dict{UInt,Int}(),
         sparse(zeros(Float64, 0, 0)),
-        Edge[],
+        Tuple{Int,Int}[],
     )
 end
 
@@ -83,8 +83,7 @@ function add_network_arc!(
             add_edge!(timeSpaceGraph.graph, src, dst)
             push!(srcs, src)
             push!(dsts, dst)
-            arcData.type in COMMON_ARC_TYPES &&
-                push!(timeSpaceGraph.commonArcs, Edge(src, dst))
+            arcData.type in COMMON_ARC_TYPES && push!(timeSpaceGraph.commonArcs, (src, dst))
         end
     end
     return srcs, dsts

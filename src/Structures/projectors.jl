@@ -41,7 +41,7 @@ function travel_time_projector(
     )
 end
 
-# Project an arc of the travel time graph on the time space graph for a specific delivery date
+# Project an arc of the time space graph on the travel time graph for a specific order
 function travel_time_projector(
     TTGraph::TravelTimeGraph,
     TSGraph::TimeSpaceGraph,
@@ -50,10 +50,15 @@ function travel_time_projector(
     order::Order,
     bundle::Bundle,
 )
-    return (
-        travel_time_projector(TTGraph, TSGraph, TSSrc, order, bundle),
-        travel_time_projector(TTGraph, TSGraph, TSDst, order, bundle),
-    )
+    ttSrc = travel_time_projector(TTGraph, TSGraph, TSSrc, order, bundle)
+    ttDst = travel_time_projector(TTGraph, TSGraph, TSDst, order, bundle)
+    # The projection might end up on an arc that doesn't exist 
+    # ex : tsSrc on the delivery date, tsDst one step ahead gives an arc that goes back in time with the projection
+    if has_edge(TTGraph.graph, ttSrc, ttDst)
+        return (ttSrc, ttDst)
+    else
+        return (-1, -1)
+    end
 end
 
 # Project a node of the travel time graph on the time space graph for a specific delivery date 

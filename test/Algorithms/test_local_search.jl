@@ -257,8 +257,8 @@ plantStep2 = TSGraph2.hashToIdx[hash(2, plant.hash)]
 end
 
 # Some commodities get lost along the way if bundle 1 and bundle 3 have the same
-commodity3 = OFOND.Commodity(2, hash("C789"), 15, 3.5)
-commodity4 = OFOND.Commodity(2, hash("C789"), 10, 2.5)
+commodity3 = OFOND.Commodity(2, hash("C789"), 14, 3.5)
+commodity4 = OFOND.Commodity(2, hash("C789"), 11, 2.5)
 instance2.bundles[3].orders[1].content[1] = commodity3
 instance2.bundles[3].orders[1].content[2] = commodity4
 instance2.bundles[3].orders[2].content[1] = commodity3
