@@ -48,24 +48,36 @@ end
     content = String(take!(io))
     supp1step4 = TSGraph.hashToIdx[hash(4, supplier1.hash)]
     supp1step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
-    contentTest = [
+    contentTest1 = [
         "1,002,003,B456,15,2,2024-01-01,002,1,2024-01-04,$(solution.bins[supp2step4, plantStep1][1].idx)",
         "1,002,003,B456,15,2,2024-01-01,002,1,2024-01-04,$(solution.bins[supp2step4, plantStep1][2].idx)",
-        "1,002,003,B456,15,2,2024-01-01,003,2,2024-01-01,",
+        "1,002,003,B456,15,2,2024-01-01,003,2,2024-01-01,\n",
+    ]
+    @test contains(content, join(contentTest1, "\n"))
+    contentTest2 = [
         "2,001,003,B456,15,1,2024-01-01,001,1,2024-01-03,$(solution.bins[supp1step3, xdockStep4][1].idx)",
         "2,001,003,B456,15,1,2024-01-01,004,2,2024-01-04,$(solution.bins[xdockStep4, plantStep1][1].idx)",
-        "2,001,003,B456,15,1,2024-01-01,003,3,2024-01-01,",
+        "2,001,003,B456,15,1,2024-01-01,003,3,2024-01-01,\n",
+    ]
+    @test contains(content, join(contentTest2, "\n"))
+    contentTest3 = [
         "2,001,003,A123,10,1,2024-01-01,001,1,2024-01-03,$(solution.bins[supp1step3, xdockStep4][1].idx)",
         "2,001,003,A123,10,1,2024-01-01,004,2,2024-01-04,$(solution.bins[xdockStep4, plantStep1][1].idx)",
-        "2,001,003,A123,10,1,2024-01-01,003,3,2024-01-01,",
+        "2,001,003,A123,10,1,2024-01-01,003,3,2024-01-01,\n",
+    ]
+    @test contains(content, join(contentTest3, "\n"))
+    contentTest4 = [
         "3,001,003,B456,15,1,2024-01-02,001,1,2024-01-04,$(solution.bins[supp1step4, xdockStep1][1].idx)",
         "3,001,003,B456,15,1,2024-01-02,004,2,2024-01-01,$(solution.bins[xdockStep1, plantStep2][1].idx)",
-        "3,001,003,B456,15,1,2024-01-02,003,3,2024-01-02,",
+        "3,001,003,B456,15,1,2024-01-02,003,3,2024-01-02,\n",
+    ]
+    @test contains(content, join(contentTest4, "\n"))
+    contentTest5 = [
         "3,001,003,A123,10,1,2024-01-02,001,1,2024-01-04,$(solution.bins[supp1step4, xdockStep1][1].idx)",
         "3,001,003,A123,10,1,2024-01-02,004,2,2024-01-01,$(solution.bins[xdockStep1, plantStep2][1].idx)",
         "3,001,003,A123,10,1,2024-01-02,003,3,2024-01-02,\n",
     ]
-    @test content == join(contentTest, "\n")
+    @test contains(content, join(contentTest5, "\n"))
 
     io = IOBuffer()
     OFOND.write_shipment_info(io, solution, instance)

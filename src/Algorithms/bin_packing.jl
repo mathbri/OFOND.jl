@@ -10,26 +10,56 @@
 
 # TODO : add other bin packing computations to improve this neighborhood
 
-# TODO :check if it is a good idea
+# TODO :check if it is a good idea (probably not for now, need some more work)
 # To remove the push operation, good idea to create a 4d tensor of booleans indicating true if commodity c is in bin b of arc i-j ?
 # Really sparse matrix but could be optimized with BitArray
 # One matrix per arc ?
 # Thats for the content and we have a matrix (or vertor per arc) for capacities and same for loads
-#
-# This option will be easier to implement
-# Store only commodity hashes for the bin content ? (keep the push but makes bin way lighter ?)
-# Store size of commodity for fast removal computation ?
+
+# TODO : find a way to define one function for arrays and subarrays
 
 function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
     # Sorting commodities in decreasing order of size (if not already done)
-    !sorted && sort!(commodities; rev=true)
+    comIdxs = if !sorted
+        sortperm(commodities; rev=true)
+    else
+        eachindex(commodities)
+    end
     lengthBefore = length(bins)
     # Adding commodities on top of others
-    for commodity in commodities
+    for idxC in comIdxs
+        commodity = commodities[idxC]
+        # TODO : maybe it would be faster to computes with CAPACITIES to find the index in which to put the commodity and then put it 
         idxB = findfirst(bin -> add!(bin, commodity), bins)
         # TODO : this push! operation is taking most of the time in different profiling, probably because of garbage collecting and reallocation
+        # pre-allocate empty bins ? maybe not a good idea
+        idxB === nothing && push!(bins, Bin(fullCapacity, commodity))
+    end
+    return length(bins) - lengthBefore
+end
+
+# Specialized version for the subarrays
+function first_fit_decreasing!(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    };
+    sorted::Bool=false,
+)
+    # Sorting commodities in decreasing order of size (if not already done)
+    comIdxs = if !sorted
+        sortperm(commodities; rev=true)
+    else
+        eachindex(commodities)
+    end
+    lengthBefore = length(bins)
+    # Adding commodities on top of others
+    for idxC in comIdxs
+        commodity = commodities[idxC]
+        idxB = findfirst(bin -> add!(bin, commodity), bins)
         idxB === nothing && push!(bins, Bin(fullCapacity, commodity))
     end
     return length(bins) - lengthBefore
@@ -44,6 +74,19 @@ function first_fit_decreasing(
     return newBins
 end
 
+function first_fit_decreasing(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    };
+    sorted::Bool=false,
+)
+    newBins = deepcopy(bins)
+    first_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
+    return newBins
+end
+
 # Wrapper for objects
 function first_fit_decreasing!(
     bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool=false
@@ -52,59 +95,52 @@ function first_fit_decreasing!(
     return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
-# TODO : maybe a single, global, pre-allocated vector for all tentative first fit will speed up computation, 
-# instead of creating a new array with each function call, it would just update values inside the vector, growing it only when needed 
-# Maybe do all this in a seperate file, like whats below
-# global CAPACITIES = [-1]
-# global MAX_LENGTH = 1
+global CAPACITIES = Int[]
 
-# function get_capacities(bins::Vector{Bin})
-#     # if the vector of bins is larger than the current cpapcity vector, growing it
-#     if length(bins) > length(CAPACITIES)
-#         append!(CAPACITIES, fill(0, length(bins) - length(CAPACITIES)))
-#     end
-#     # updating values in capcities vector
-#     for (idx, bin) in enumerate(bins)
-#         CAPACITIES[idx] = bin.capacity
-#     end
-#     # filling with -1 for not opened bins
-#     CAPACITIES[(length(bins) + 1):end] .= -1
-#     return CAPACITIES
-# end
+function get_capacities(bins::Vector{Bin})
+    # if the vector of bins is larger than the current cpapcity vector, growing it
+    if length(bins) > length(CAPACITIES)
+        append!(CAPACITIES, fill(0, length(bins) - length(CAPACITIES)))
+    end
+    # updating values in capcities vector
+    for (idx, bin) in enumerate(bins)
+        CAPACITIES[idx] = bin.capacity
+    end
+    # filling with -1 for not opened bins
+    CAPACITIES[(length(bins) + 1):end] .= -1
+    return length(bins), length(bins)
+end
 
-# function add_capacity(idx::Int, capacity::Int)
-#     if idx > length(CAPACITIES)
-#         push!(CAPACITIES, capacity)
-#     else
-#         CAPACITIES[idx] = capacity
-#     end
-# end
+function add_capacity(idx::Int, capacity::Int)
+    if idx > length(CAPACITIES)
+        push!(CAPACITIES, capacity)
+    else
+        CAPACITIES[idx] = capacity
+    end
+end
 
-# function length_capacities()
-#     # can also be replaced by another global variable that is updated with each "push" to capacities
-#     return findfirst(x -> x == -1, CAPACITIES) - 1
-# end
-
-# First fit decreasing computed on loads to return only the number of bins added by the vector of commodities
 function tentative_first_fit(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
     # Sorting commodities in decreasing order of size (if not already done)
-    !sorted && sort!(commodities; rev=true)
-    # TODO : the mapping operation takes alsmost all of this function time, probably because of garbage collecting
-    capacities = map(bin -> bin.capacity, bins)
-    lengthBefore = length(capacities)
+    comIdxs = if !sorted
+        sortperm(commodities; rev=true)
+    else
+        eachindex(commodities)
+    end
+    nBinsBef, nBinsAft = get_capacities(bins)
     # Adding commodities on top of others
-    for commodity in commodities
-        idxC = findfirst(cap -> cap >= commodity.size, capacities)
-        if idxC !== nothing
-            capacities[idxC] -= commodity.size
+    for idxC in comIdxs
+        commodity = commodities[idxC]
+        idxB = findfirst(cap -> cap >= commodity.size, view(CAPACITIES, 1:nBinsAft))
+        if idxB !== nothing
+            CAPACITIES[idxB] -= commodity.size
         else
-            push!(capacities, fullCapacity - commodity.size)
+            nBinsAft += 1
+            add_capacity(nBinsAft, fullCapacity - commodity.size)
         end
     end
-    # global MAX_LENGTH = max(MAX_LENGTH, length(capacities))
-    return length(capacities) - lengthBefore
+    return nBinsAft - nBinsBef
 end
 
 # Wrapper for objects
@@ -145,9 +181,50 @@ function best_fit_decreasing!(
     return length(bins) - lengthBefore
 end
 
+function best_fit_decreasing!(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    };
+    sorted::Bool=false,
+)
+    # Sorting commodities in decreasing order of size (if not already done)
+    !sorted && sort!(commodities; rev=true)
+    # As findmin doesn't work on empty bin vectors, making one recursive call here 
+    if length(bins) == 0
+        push!(bins, Bin(fullCapacity, commodities[1]))
+        return best_fit_decreasing!(bins, fullCapacity, commodities[2:end]; sorted=true) + 1
+    end
+    lengthBefore = length(bins)
+    # Adding commodities on top of others
+    for commodity in commodities
+        # Selecting best bin
+        bestCapa, bestBin = findmin(bin -> best_fit_capacity(bin, commodity), bins)
+        # If the best bin is full, adding a bin
+        bestCapa == INFINITY && (push!(bins, Bin(fullCapacity, commodity)); continue)
+        # Otherwise, adding it to the best bin
+        add!(bins[bestBin], commodity)
+    end
+    return length(bins) - lengthBefore
+end
+
 # Best fit decreasing but returns a copy of the bins instead of modifying it
 function best_fit_decreasing(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+)
+    newBins = deepcopy(bins)
+    best_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
+    return newBins
+end
+
+function best_fit_decreasing(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    };
+    sorted::Bool=false,
 )
     newBins = deepcopy(bins)
     best_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)

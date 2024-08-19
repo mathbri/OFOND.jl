@@ -60,29 +60,25 @@ function remove!(bin::Bin, commodities::Vector{Commodity})
     return hasRemoved
 end
 
-# TODO : to test, is it memory efficient ? what happens when I sort the view ?
-# global ALL_COMMODITIES = Commodity[]
-
-# function get_all_commodities(bins::Vector{Bin})
-#     # verify the global vector is long enough 
-#     spaceNeeded = sum(length(bin.content) for bin in bins; init=0)
-#     if spaceNeeded > length(ALL_COMMODITIES)
-#         append!(
-#             ALL_COMMODITIES, fill(bins[1].content[1], spaceNeeded - length(ALL_COMMODITIES))
-#         )
-#     end
-#     # put all commodities in the global vector
-#     idx = 1
-#     for bin in bins
-#         for com in bin.content
-#             ALL_COMMODITIES[idx] = com
-#         end
-#     end
-#     return view(ALL_COMMODITIES[1:spaceNeeded])
-# end
+# Vector to be used when calling the get all commodities function
+# Used mainly for garbage collection avoidance 
+global ALL_COMMODITIES = Commodity[]
 
 function get_all_commodities(bins::Vector{Bin})
-    return reduce(vcat, map(bin -> bin.content, bins); init=Commodity[])
+    # verify the global vector is long enough 
+    nCom = sum(length(bin.content) for bin in bins; init=0)
+    if nCom > length(ALL_COMMODITIES)
+        append!(ALL_COMMODITIES, fill(bins[1].content[1], nCom - length(ALL_COMMODITIES)))
+    end
+    # put all commodities in the global vector
+    idx = 1
+    for bin in bins
+        for com in bin.content
+            ALL_COMMODITIES[idx] = com
+            idx += 1
+        end
+    end
+    return view(ALL_COMMODITIES, 1:nCom)
 end
 
 function stock_cost(bin::Bin)

@@ -60,10 +60,21 @@ end
 end
 
 @testset "Testing get_all_commodities" begin
-    bin1 = OFOND.Bin(10, 2, [commodity1, commodity2])
-    bin2 = OFOND.Bin(10, 2, [commodity1])
+    @test OFOND.ALL_COMMODITIES == OFOND.Commodity[]
+    bin1 = OFOND.Bin(10, 2, [commodity1, commodity2, commodity1])
+    bin2 = OFOND.Bin(10, 2, [commodity1, commodity1])
     bins = [bin1, bin2]
-    @test OFOND.get_all_commodities(bins) == [commodity1, commodity2, commodity1]
+    allComs = OFOND.get_all_commodities(bins)
+    @test OFOND.ALL_COMMODITIES ==
+        [commodity1, commodity2, commodity1, commodity1, commodity1]
+    @test allComs == [commodity1, commodity2, commodity1, commodity1, commodity1]
+    # @test typeof(allComs) == SubArray
+    bin1 = OFOND.Bin(10, 2, [commodity1, commodity1])
+    bin2 = OFOND.Bin(10, 2, [commodity2])
+    bins = [bin1, bin2]
+    @test OFOND.get_all_commodities(bins) == [commodity1, commodity1, commodity2]
+    @test OFOND.ALL_COMMODITIES ==
+        [commodity1, commodity1, commodity2, commodity1, commodity1]
 end
 
 @testset "Testing zero" begin

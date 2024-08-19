@@ -73,8 +73,19 @@ end
 end
 
 @testset "Tentative FFD" begin
-    # Same tests as base FFD but also check that the bins are not modified
+    @test OFOND.CAPACITIES == Int[]
+
+    bins = [OFOND.Bin(7, 10, [commodity1]), OFOND.Bin(2), OFOND.Bin(15)]
+    @test OFOND.get_capacities(bins) == (3, 3)
+    @test OFOND.CAPACITIES == [7, 2, 15]
+
+    OFOND.add_capacity(4, 5)
+    @test OFOND.CAPACITIES == [7, 2, 15, 5]
+
     bins = [OFOND.Bin(7, 10, [commodity1])]
+    @test OFOND.get_capacities(bins) == (1, 1)
+    @test OFOND.CAPACITIES == [7, -1, -1, -1]
+    # Same tests as base FFD but also check that the bins are not modified
     newBins = OFOND.tentative_first_fit(bins, 20, [commodity1, commodity2, commodity3])
     @test newBins == 2
     @test bins == [OFOND.Bin(7, 10, [commodity1])]
