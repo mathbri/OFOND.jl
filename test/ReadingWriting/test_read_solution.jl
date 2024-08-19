@@ -104,8 +104,8 @@ end
     supp2FromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     @test sol.bundlePaths ==
         [[supp2FromDel1, plantFromDel0], [supp1FromDel2, xdockFromDel1, plantFromDel0]]
-    @test sol.bundlesOnNode[xdockFromDel1] == [bundle2]
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle1, bundle2]
+    @test sol.bundlesOnNode[xdockFromDel1] == [2]
+    @test sol.bundlesOnNode[plantFromDel0] == [1, 2]
     supp2step4 = TSGraph.hashToIdx[hash(4, supplier2.hash)]
     plantStep1 = TSGraph.hashToIdx[hash(1, plant.hash)]
     supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]

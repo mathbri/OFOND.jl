@@ -8,20 +8,27 @@ plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
     bundle11 = deepcopy(bundle1)
     bundle11.orders[1].bpUnits[:direct] = 0
     path, cost = OFOND.greedy_path(
-        sol, TTGraph, TSGraph, bundle11, supp1FromDel2, plantFromDel0
+        sol, TTGraph, TSGraph, bundle11, supp1FromDel2, plantFromDel0, CAPACITIES
     )
     @test path == [supp1FromDel2, plantFromDel0]
     @test cost ≈ 10.004 + 1e-5
     # change opening factor to change path 
     path, cost = OFOND.greedy_path(
-        sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0
+        sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0, CAPACITIES
     )
     @test path == [supp1FromDel2, xdockFromDel1, plantFromDel0]
     @test cost ≈ 19.608 + 2e-5
     # change current cost to change path 
     # TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
     path, cost = OFOND.greedy_path(
-        sol, TTGraph, TSGraph, bundle1, supp1FromDel2, plantFromDel0; current_cost=true
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        supp1FromDel2,
+        plantFromDel0,
+        CAPACITIES;
+        current_cost=true,
     )
     @test path == [supp1FromDel2, plantFromDel0]
     @test cost ≈ 10.004 + 3e-5 + 1e-5
@@ -50,7 +57,7 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates, pa
     # get 3 paths 
     # one directly admissible (classic one)
     path1, cost1 = OFOND.greedy_insertion(
-        sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx
+        sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx, CAPACITIES
     )
     supp3FromDel2 = TTGraph2.hashToIdx[hash(2, supplier3.hash)]
     xdockFromDel1 = TTGraph2.hashToIdx[hash(1, xdock.hash)]
@@ -73,7 +80,7 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates, pa
     end
     # path2 should not be admissible
     path2, cost2 = OFOND.greedy_path(
-        sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx; current_cost=true
+        sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx, CAPACITIES; current_cost=true
     )
     supp3FromDel3 = TTGraph2.hashToIdx[hash(3, supplier3.hash)]
     xdockFromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
@@ -84,7 +91,7 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, [bundle4], 4, dates, pa
     @test !OFOND.is_path_admissible(TTGraph2, path2)
     # path3 should and be equal to path1
     path3, cost3 = OFOND.greedy_insertion(
-        sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx; current_cost=true
+        sol2, TTGraph2, TSGraph2, bundle4, supp3Idx, plantIdx, CAPACITIES; current_cost=true
     )
     @test path3 == path1
     @test cost3 ≈ 56.00501 + 6.00503
@@ -110,9 +117,7 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
         [supp1FromDel2, xdockFromDel1, plantFromDel0],
     ]
     filteredBundleOnNode = filter(p -> length(p.second) > 0, sol.bundlesOnNode)
-    @test filteredBundleOnNode == Dict(
-        xdockFromDel1 => [bundle1, bundle3], plantFromDel0 => [bundle2, bundle1, bundle3]
-    )
+    @test filteredBundleOnNode == Dict(xdockFromDel1 => [1, 3], plantFromDel0 => [2, 1, 3])
     @test sol.bins[supp1Step3, xdockStep4] ==
         [OFOND.Bin(5, 45, [commodity1, commodity1, commodity2, commodity1])]
     xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]

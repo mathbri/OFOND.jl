@@ -19,7 +19,7 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
         [supp1FromDel2, plantFromDel0],
     ]
     # only the plant has bundle on nodes
-    @test sol.bundlesOnNode[plantFromDel0] == bundles
+    @test sol.bundlesOnNode[plantFromDel0] == [1, 2, 3]
     otherBundlesOnNode = filter(p -> p.first != plantFromDel0, sol.bundlesOnNode)
     @test all(p -> length(p.second) == 0, otherBundlesOnNode)
     # bins should be filled accordingly

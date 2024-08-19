@@ -41,11 +41,11 @@ function Base.hash(order::Order)
 end
 
 # Add useful properties to the order
-function add_properties(order::Order, bin_packing::Function)
+function add_properties(order::Order, bin_packing::Function, CAPACITIES::Vector{Int})
     volume = sum(com -> com.size, order.content)
     for arcType in BP_ARC_TYPES
         capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
-        order.bpUnits[arcType] = bin_packing(Bin[], capacity, order.content)
+        order.bpUnits[arcType] = bin_packing(Bin[], capacity, order.content, CAPACITIES)
     end
     minPackSize = minimum(com -> com.size, order.content)
     stockCost = sum(com -> com.stockCost, order.content)

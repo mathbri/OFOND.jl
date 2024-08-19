@@ -83,7 +83,8 @@ instanceNP = OFOND.Instance(
     ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
     Dict(hash("A123") => "A123", hash("B456") => "B456"),
 )
-instance = OFOND.add_properties(instanceNP, (x, y, z) -> 2)
+CAPACITIES = Int[]
+instance = OFOND.add_properties(instanceNP, (x, y, z, t) -> 2, CAPACITIES)
 
 @testset "Add properties" begin
     @test instance.timeHorizon == 4

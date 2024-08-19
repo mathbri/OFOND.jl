@@ -108,9 +108,7 @@ supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
         [supp1FromDel2, xdockFromDel1, plantFromDel0],
     ]
     filteredBundleOnNode = filter(p -> length(p.second) > 0, sol.bundlesOnNode)
-    @test filteredBundleOnNode == Dict(
-        xdockFromDel1 => [bundle1, bundle3], plantFromDel0 => [bundle1, bundle2, bundle3]
-    )
+    @test filteredBundleOnNode == Dict(xdockFromDel1 => [1, 3], plantFromDel0 => [1, 2, 3])
     @test sol.bins[supp1Step3, xdockStep4] ==
         [OFOND.Bin(5, 45, [commodity1, commodity1, commodity2, commodity1])]
     xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]

@@ -16,7 +16,8 @@ function run_heuristic(
     startTime = time()
     # Complete Instance object with all properties needed
     if preSolve
-        instance = add_properties(instance, tentative_first_fit)
+        CAPACITIES = Int[]
+        instance = add_properties(instance, tentative_first_fit, CAPACITIES)
         @info "Pre-solve done" :pre_solve_time = get_elapsed_time(startTime)
     end
     # Initialize solution object

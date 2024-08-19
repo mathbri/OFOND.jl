@@ -60,6 +60,7 @@ function remove!(bin::Bin, commodities::Vector{Commodity})
     return hasRemoved
 end
 
+# TODO : same remark as capacities (but less important in profiling)
 # Vector to be used when calling the get all commodities function
 # Used mainly for garbage collection avoidance 
 global ALL_COMMODITIES = Commodity[]

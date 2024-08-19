@@ -174,8 +174,8 @@ end
     @test oldPart4 == [supp1FromDel3, xdockFromDel2, portFromDel1]
     @test sol4.bundlePaths ==
         [[-1, -1], [-1, -1], [supp1FromDel3, portFromDel1, plantFromDel0]]
-    @test sol4.bundlesOnNode[xdockFromDel2] == OFOND.Bundle[]
-    @test sol4.bundlesOnNode[portFromDel1] == [bundle3]
+    @test sol4.bundlesOnNode[xdockFromDel2] == Int[]
+    @test sol4.bundlesOnNode[portFromDel1] == [3]
     @test sol4.bins[xdockStep3, portStep4] ==
         [OFOND.Bin(50), OFOND.Bin(15, 5, [commodity3])]
     @test sol4.bins[portStep4, plantStep1] ==

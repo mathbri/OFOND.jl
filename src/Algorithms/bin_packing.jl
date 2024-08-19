@@ -95,9 +95,9 @@ function first_fit_decreasing!(
     return first_fit_decreasing!(bins, arcData.capacity, order.content; sorted=sorted)
 end
 
-global CAPACITIES = Int[]
+# TODO : pre allocate a vector is a good idea but for it to be efficient in julia it must be passed as an argument in functions and not in the global scope
 
-function get_capacities(bins::Vector{Bin})
+function get_capacities(bins::Vector{Bin}, CAPACITIES::Vector{Int})
     # if the vector of bins is larger than the current cpapcity vector, growing it
     if length(bins) > length(CAPACITIES)
         append!(CAPACITIES, fill(0, length(bins) - length(CAPACITIES)))
@@ -111,7 +111,7 @@ function get_capacities(bins::Vector{Bin})
     return length(bins), length(bins)
 end
 
-function add_capacity(idx::Int, capacity::Int)
+function add_capacity(CAPACITIES::Vector{Int}, idx::Int, capacity::Int)
     if idx > length(CAPACITIES)
         push!(CAPACITIES, capacity)
     else
@@ -119,8 +119,23 @@ function add_capacity(idx::Int, capacity::Int)
     end
 end
 
+function findfirstbin(CAPACITIES::Vector{Int}, comSize::Int, maxIdx::Int)
+    for (i, capa) in enumerate(CAPACITIES)
+        i > maxIdx && return -1
+        capa >= comSize && return i
+    end
+    return -1
+end
+
+# TODO : transform CAPACITIES into a tree to speed up the search ? AVLTree with keys (capa, binIndex)
+# TODO : define my own findfirst to always return an Int ?
+# findfirst on view may be more inefficient than findfirst on the original array and length
 function tentative_first_fit(
-    bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::Vector{Commodity},
+    CAPACITIES::Vector{Int};
+    sorted::Bool=false,
 )
     # Sorting commodities in decreasing order of size (if not already done)
     comIdxs = if !sorted
@@ -128,16 +143,17 @@ function tentative_first_fit(
     else
         eachindex(commodities)
     end
-    nBinsBef, nBinsAft = get_capacities(bins)
+    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
     # Adding commodities on top of others
     for idxC in comIdxs
         commodity = commodities[idxC]
-        idxB = findfirst(cap -> cap >= commodity.size, view(CAPACITIES, 1:nBinsAft))
-        if idxB !== nothing
+        idxB = findfirstbin(CAPACITIES, commodity.size, nBinsAft)
+        # idxB = findfirst(cap -> cap >= commodity.size, CAPACITIES[1:nBinsAft])
+        if idxB != -1
             CAPACITIES[idxB] -= commodity.size
         else
             nBinsAft += 1
-            add_capacity(nBinsAft, fullCapacity - commodity.size)
+            add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
         end
     end
     return nBinsAft - nBinsBef
@@ -145,9 +161,15 @@ end
 
 # Wrapper for objects
 function tentative_first_fit(
-    bins::Vector{Bin}, arcData::NetworkArc, order::Order; sorted::Bool=false
+    bins::Vector{Bin},
+    arcData::NetworkArc,
+    order::Order,
+    CAPACITIES::Vector{Int};
+    sorted::Bool=false,
 )
-    return tentative_first_fit(bins, arcData.capacity, order.content; sorted=sorted)
+    return tentative_first_fit(
+        bins, arcData.capacity, order.content, CAPACITIES; sorted=sorted
+    )
 end
 
 # Only useful for best fit decreasing computation of best bin
@@ -236,7 +258,8 @@ function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector
     n = length(commodities)
     n == 0 && return nothing
     lengthBefore = length(bins)
-    B = lengthBefore + tentative_first_fit(bins, fullCapacity, commodities)
+    CAPACITIES = Int[bin.capacity for bin in bins]
+    B = lengthBefore + tentative_first_fit(bins, fullCapacity, commodities, CAPACITIES)
     loads = vcat(map(bin -> bin.load, bins), fill(0, B - length(bins)))
     # Model
     model = Model(HiGHS.Optimizer)

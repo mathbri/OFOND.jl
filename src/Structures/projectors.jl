@@ -1,5 +1,7 @@
 # Projectors fnctions between travel time and time space
 
+# TODO : all projections can be precomputed, but is it memory efficient ?
+
 # Computing the steps to delivery to know which travel time node should be used for the order
 function get_node_step_to_delivery(TSGraph::TimeSpaceGraph, TSNode::Int, delDate::Int)
     stepToDel = delDate - TSGraph.timeStep[TSNode]

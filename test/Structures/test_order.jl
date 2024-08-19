@@ -24,8 +24,8 @@ end
 @test hash(order) == hash(1, hash("A123"))
 
 # Test add properties
-binPack = (x, y, z) -> y
-order2 = OFOND.add_properties(order, binPack)
+binPack = (x, y, z, t) -> y
+order2 = OFOND.add_properties(order, binPack, Int[])
 @test order2 == OFOND.Order(
     hash("A123"),
     1,

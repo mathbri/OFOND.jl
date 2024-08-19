@@ -30,7 +30,8 @@ function greedy_path(
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
     src::Int,
-    dst::Int;
+    dst::Int,
+    CAPACITIES::Vector{Int};
     sorted::Bool=false,
     use_bins::Bool=true,
     opening_factor::Float64=1.0,
@@ -40,7 +41,8 @@ function greedy_path(
         solution,
         TTGraph,
         TSGraph,
-        bundle;
+        bundle,
+        CAPACITIES;
         sorted=sorted,
         use_bins=use_bins,
         opening_factor=opening_factor,
@@ -61,7 +63,8 @@ function greedy_insertion(
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
     src::Int,
-    dst::Int;
+    dst::Int,
+    CAPACITIES::Vector{Int};
     sorted::Bool=false,
     current_cost::Bool=false,
 )
@@ -71,7 +74,8 @@ function greedy_insertion(
         TSGraph,
         bundle,
         src,
-        dst;
+        dst,
+        CAPACITIES;
         sorted=sorted,
         use_bins=true,
         current_cost=current_cost,
@@ -87,7 +91,8 @@ function greedy_insertion(
             TSGraph,
             bundle,
             src,
-            dst;
+            dst,
+            CAPACITIES;
             sorted=sorted,
             use_bins=true,
             opening_factor=0.5,
@@ -103,7 +108,8 @@ function greedy_insertion(
                 TSGraph,
                 bundle,
                 src,
-                dst;
+                dst,
+                CAPACITIES;
                 sorted=sorted,
                 use_bins=false,
                 current_cost=false,
@@ -122,6 +128,7 @@ function greedy!(solution::Solution, instance::Instance)
     # Computing the greedy delivery possible for each bundle
     totalCost = 0.0
     print("Greedy introduction progress : ")
+    CAPACITIES = Int[]
     percentIdx = ceil(Int, length(sortedBundleIdxs) / 100)
     for (i, bundleIdx) in enumerate(sortedBundleIdxs)
         bundle = instance.bundles[bundleIdx]
@@ -130,7 +137,7 @@ function greedy!(solution::Solution, instance::Instance)
         custNode = TTGraph.bundleDst[bundleIdx]
         # Computing shortest path
         shortestPath, pathCost = greedy_insertion(
-            solution, TTGraph, TSGraph, bundle, suppNode, custNode; sorted=true
+            solution, TTGraph, TSGraph, bundle, suppNode, custNode, CAPACITIES; sorted=true
         )
         # Adding to solution
         updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)

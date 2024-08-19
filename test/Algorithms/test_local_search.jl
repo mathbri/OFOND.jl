@@ -54,7 +54,7 @@ supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
     OFOND.lower_bound!(sol, instance)
     greedySol = deepcopy(sol)
     # remove bundle 1 with cost removed = 0 so nothing happens
-    costImprov = OFOND.bundle_reintroduction!(sol, instance, bundle1)
+    costImprov = OFOND.bundle_reintroduction!(sol, instance, bundle1, CAPACITIES)
     @test sol.bundlePaths == greedySol.bundlePaths
     @test costImprov ≈ 0.0
     # bundle1 and 3 are equal for the operator so when filtering bundel on nodes, bundle3 is also deleted but just bundle 1 is added back
@@ -77,7 +77,7 @@ supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
     # correcting bundle2 bpDict
     instance.bundles[2].orders[1].bpUnits[:direct] = 1
     # remove bundle 2, has the same path so added = removed
-    costImprov = OFOND.bundle_reintroduction!(sol, instance, bundle2)
+    costImprov = OFOND.bundle_reintroduction!(sol, instance, bundle2, CAPACITIES)
     @test sol.bundlePaths == greedySol.bundlePaths
     @test costImprov ≈ 0.0
     # same thing as test above
@@ -91,7 +91,7 @@ supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
     @test costRemoved ≈ -24.006
     supp2FromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
     newPath, pathCost = OFOND.greedy_insertion(
-        otherSol, TTGraph, TSGraph, bundle2, supp2FromDel1, plantFromDel0
+        otherSol, TTGraph, TSGraph, bundle2, supp2FromDel1, plantFromDel0, CAPACITIES
     )
     @test newPath == sol.bundlePaths[2]
     @test abs(pathCost + costRemoved) < 1e-3
@@ -113,7 +113,7 @@ supp1Step3 = TSGraph.hashToIdx[hash(3, supplier1.hash)]
     # reinsert, has the same previous path
     instance.bundles[3].orders[1].bpUnits[:delivery] = 1
     instance.bundles[3].orders[2].bpUnits[:delivery] = 1
-    costImprov = OFOND.bundle_reintroduction!(sol, instance, bundle3)
+    costImprov = OFOND.bundle_reintroduction!(sol, instance, bundle3, CAPACITIES)
     # and the filling is different on those shared with bundle 1 
     @test sol.bundlePaths == greedySol.bundlePaths
     @test isapprox(costImprov, -24.0; atol=1e-3)
@@ -208,10 +208,10 @@ plantStep2 = TSGraph2.hashToIdx[hash(2, plant.hash)]
     ]
 
     # testing bundle on nodes
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle11, bundle33, bundle2]
-    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle11, bundle33]
-    @test sol.bundlesOnNode[xdock2fromDel1] == [bundle11]
-    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle33, bundle11]
+    @test sol.bundlesOnNode[plantFromDel0] == [1, 3, 2]
+    @test sol.bundlesOnNode[xdock1FromDel2] == [1, 3]
+    @test sol.bundlesOnNode[xdock2fromDel1] == [1]
+    @test sol.bundlesOnNode[xdock3fromDel1] == [3, 1]
     # testing bins
     # just bundle 1
     @test sol.bins[xdock1Step3, xdock2Step4] ==
@@ -234,10 +234,10 @@ plantStep2 = TSGraph2.hashToIdx[hash(2, plant.hash)]
     @test costImprov ≈ -7.504
     @test sol.bundlePaths == [TTPath113, [supp2fromDel1, plantFromDel0], TTPath313]
     # testing bundle on nodes
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle11, bundle33, bundle2]
-    @test sol.bundlesOnNode[xdock1FromDel2] == [bundle11, bundle33]
-    @test sol.bundlesOnNode[xdock2fromDel1] == OFOND.Bundle[]
-    @test sol.bundlesOnNode[xdock3fromDel1] == [bundle33, bundle11]
+    @test sol.bundlesOnNode[plantFromDel0] == [1, 3, 2]
+    @test sol.bundlesOnNode[xdock1FromDel2] == [1, 3]
+    @test sol.bundlesOnNode[xdock2fromDel1] == Int[]
+    @test sol.bundlesOnNode[xdock3fromDel1] == [3, 1]
     # testing bins
     @test sol.bins[xdock1Step3, xdock2Step4] == OFOND.Bin[]
     @test sol.bins[xdock1Step3, xdock3Step4] ==
@@ -276,8 +276,8 @@ instance2.bundles[3].orders[2].content[2] = commodity4
     OFOND.local_search!(sol, instance2; twoNode=true)
     @test sol.bundlePaths == greedySol.bundlePaths
     for (node, bundlesOnNode) in sol.bundlesOnNode
-        sort!(bundlesOnNode; by=b -> b.idx)
-        sort!(greedySol.bundlesOnNode[node]; by=b -> b.idx)
+        sort!(bundlesOnNode)
+        sort!(greedySol.bundlesOnNode[node])
     end
     @test sol.bundlesOnNode == greedySol.bundlesOnNode
     for arc in edges(TSGraph2.graph)

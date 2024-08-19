@@ -43,37 +43,58 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     # transport units 
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test OFOND.transport_units(
-        sol, TSGraph, supp1Step2, xdockStep3, order1; sorted=true, use_bins=false
+        sol,
+        TSGraph,
+        supp1Step2,
+        xdockStep3,
+        order1,
+        CAPACITIES;
+        sorted=true,
+        use_bins=false,
     ) ≈ 0.4
     @test OFOND.transport_units(
-        sol, TSGraph, supp1Step2, xdockStep3, order2; sorted=true, use_bins=false
+        sol,
+        TSGraph,
+        supp1Step2,
+        xdockStep3,
+        order2,
+        CAPACITIES;
+        sorted=true,
+        use_bins=false,
     ) ≈ 0.6
     @test OFOND.transport_units(
-        sol, TSGraph, xdockStep3, portStep4, order1; sorted=true, use_bins=false
+        sol, TSGraph, xdockStep3, portStep4, order1, CAPACITIES; sorted=true, use_bins=false
     ) == 2
     @test OFOND.transport_units(
-        sol, TSGraph, supp1Step3, plantStep1, order1; sorted=true, use_bins=false
+        sol,
+        TSGraph,
+        supp1Step3,
+        plantStep1,
+        order1,
+        CAPACITIES;
+        sorted=true,
+        use_bins=false,
     ) == 3
     # adding things on the TSGraph to check it is taken into account
     OFOND.first_fit_decreasing!(
         sol.bins[supp1Step2, xdockStep3], 40, [commodity1, commodity1]
     )
     @test OFOND.transport_units(
-        sol, TSGraph, supp1Step2, xdockStep3, order1; sorted=true, use_bins=true
+        sol, TSGraph, supp1Step2, xdockStep3, order1, CAPACITIES; sorted=true, use_bins=true
     ) ≈ 0.4
 
     OFOND.first_fit_decreasing!(
         sol.bins[xdockStep3, portStep4], 40, [commodity1, commodity1]
     )
     @test OFOND.transport_units(
-        sol, TSGraph, xdockStep3, portStep4, order1; sorted=true, use_bins=true
+        sol, TSGraph, xdockStep3, portStep4, order1, CAPACITIES; sorted=true, use_bins=true
     ) == 0
     @test OFOND.transport_units(
-        sol, TSGraph, xdockStep3, portStep4, order2; sorted=true, use_bins=true
+        sol, TSGraph, xdockStep3, portStep4, order2, CAPACITIES; sorted=true, use_bins=true
     ) == 1
     # nothing on this arc so tentative_first_fit don't activate
     @test OFOND.transport_units(
-        sol, TSGraph, portStep4, plantStep1, order1; sorted=true, use_bins=true
+        sol, TSGraph, portStep4, plantStep1, order1, CAPACITIES; sorted=true, use_bins=true
     ) == 2
 
     # transport cost
@@ -90,7 +111,14 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     # forbidden arc
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, portFromDel1, plantFromDel0; use_bins=false
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        portFromDel1,
+        plantFromDel0,
+        CAPACITIES;
+        use_bins=false,
     ) ≈ 1e9
     @test OFOND.arc_update_cost(
         sol,
@@ -98,31 +126,67 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         TSGraph,
         bundle1,
         portFromDel1,
-        plantFromDel0;
+        plantFromDel0,
+        CAPACITIES;
         sorted=true,
         opening_factor=10.0,
         current_cost=true,
     ) ≈ 1e9
     # linear arc
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; use_bins=false
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        supp1FromDel3,
+        xdockFromDel2,
+        CAPACITIES;
+        use_bins=false,
     ) ≈ 1e-5 + 1.6 + 0 + 0.004 + 5
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, supp1FromDel3, xdockFromDel2; opening_factor=10.0
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        supp1FromDel3,
+        xdockFromDel2,
+        CAPACITIES;
+        opening_factor=10.0,
     ) ≈ 1e-5 + 16 + 0 + 0.004 + 5
     # consolidated arc with nothing on it (tentaive first fit shouldn't activate)
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        xdockFromDel1,
+        plantFromDel0,
+        CAPACITIES;
+        use_bins=false,
     ) ≈ 1e-5 + 8 + 0 + 0.004 + 5
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        xdockFromDel1,
+        plantFromDel0,
+        CAPACITIES;
+        opening_factor=10.0,
     ) ≈ 1e-5 + 80 + 0 + 0.004 + 5
     # consolidated arc with things on it
     OFOND.first_fit_decreasing!(
         sol.bins[xdockStep4, plantStep1], 40, [commodity1, commodity1]
     )
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; use_bins=false
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        xdockFromDel1,
+        plantFromDel0,
+        CAPACITIES;
+        use_bins=false,
     ) ≈ 1e-5 + 8 + 0 + 0.004 + 5
     TSGraph.currentCost[xdockStep4, plantStep1] = 1.0
     @test OFOND.arc_update_cost(
@@ -131,12 +195,20 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         TSGraph,
         bundle1,
         xdockFromDel1,
-        plantFromDel0;
+        plantFromDel0,
+        CAPACITIES;
         use_bins=false,
         current_cost=true,
     ) ≈ 1e-5 + 2 + 0 + 0.004 + 5
     @test OFOND.arc_update_cost(
-        sol, TTGraph, TSGraph, bundle1, xdockFromDel1, plantFromDel0; opening_factor=10.0
+        sol,
+        TTGraph,
+        TSGraph,
+        bundle1,
+        xdockFromDel1,
+        plantFromDel0,
+        CAPACITIES;
+        opening_factor=10.0,
     ) ≈ 1e-5 + 0 + 0 + 0.004 + 5
 end
 
@@ -177,12 +249,12 @@ J = vcat(
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     # empty solution so use bins don't affect but opening factor does
     TTGraph2 = deepcopy(TTGraph)
-    OFOND.update_cost_matrix!(sol, TTGraph2, TSGraph, bundle1; use_bins=true)
+    OFOND.update_cost_matrix!(sol, TTGraph2, TSGraph, bundle1, CAPACITIES; use_bins=true)
     TTGraph3 = deepcopy(TTGraph)
     OFOND.update_cost_matrix!(
-        sol, TTGraph3, TSGraph, bundle1; use_bins=true, opening_factor=10.0
+        sol, TTGraph3, TSGraph, bundle1, CAPACITIES; use_bins=true, opening_factor=10.0
     )
-    OFOND.update_cost_matrix!(sol, TTGraph, TSGraph, bundle1)
+    OFOND.update_cost_matrix!(sol, TTGraph, TSGraph, bundle1, CAPACITIES)
     @test TTGraph.costMatrix == TTGraph2.costMatrix
     # V = vcat(
     #     fill(1e-5 + 16 + 5.2, 3), third supp1-xdock starts before supp1 src so stays 1e-5
@@ -204,7 +276,7 @@ J = vcat(
         sol.bins[xdockStep4, plantStep1], 40, [commodity1, commodity1]
     )
     # use bins affect cost
-    OFOND.update_cost_matrix!(sol, TTGraph2, TSGraph, bundle1; use_bins=true)
+    OFOND.update_cost_matrix!(sol, TTGraph2, TSGraph, bundle1, CAPACITIES; use_bins=true)
     # V = vcat(
     #     fill(1e-5 + 6.8, 3), third supp1-xdock starts before supp1 src so stays 1e-5
     #     1e-5,

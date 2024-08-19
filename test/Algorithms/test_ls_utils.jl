@@ -69,7 +69,7 @@ commodity11 = OFOND.Commodity(10, hash("A123"), 20, 0.4)
         OFOND.Bin(0, 50, [commodity7, commodity9]),
         OFOND.Bin(10, 40, [commodity10]),
     ]
-    @test OFOND.tentative_first_fit(OFOND.Bin[], 50, coms; sorted=true) == 5
+    @test OFOND.tentative_first_fit(OFOND.Bin[], 50, coms, CAPACITIES; sorted=true) == 5
 end
 
 # Creating workingArcs matrix
@@ -150,7 +150,7 @@ end
     # lb will count 0 with use_bins as greedy will count 1 new truck 
     # lb path will be direct while greedy path will be via cross-dock
     greedyPath, lowerBoundPath = OFOND.both_insertion(
-        sol, instance, bundle1, supp1FromDel2, plantFromDel0
+        sol, instance, bundle1, supp1FromDel2, plantFromDel0, CAPACITIES
     )
     @test greedyPath == [supp1FromDel2, xdockFromDel1, plantFromDel0]
     @test lowerBoundPath == [supp1FromDel2, plantFromDel0]
@@ -230,12 +230,12 @@ end
     # lower bound and greedy give the same solution but for greedy we need to adapt properties
     OFOND.lower_bound!(sol, instance)
     # Bundle selection
-    @test OFOND.get_bundles_to_update(sol, plantFromDel0) == [bundle1, bundle2, bundle3]
-    @test OFOND.get_bundles_to_update(sol, xdockFromDel1) == [bundle1, bundle3]
+    @test OFOND.get_bundles_to_update(instance, sol, plantFromDel0) == [1, 2, 3]
+    @test OFOND.get_bundles_to_update(instance, sol, xdockFromDel1) == [1, 3]
     # bundle 1 and bundle 3 have the same hash so they are equal for intersect function
-    @test OFOND.get_bundles_to_update(sol, xdockFromDel1, plantFromDel0) == [bundle1]
-    @test OFOND.get_bundles_to_update(sol, plantFromDel0, xdockFromDel1) == OFOND.Bundle[]
-    @test OFOND.get_bundles_to_update(sol, xdockFromDel2, plantFromDel0) == OFOND.Bundle[]
+    @test OFOND.get_bundles_to_update(instance, sol, xdockFromDel1, plantFromDel0) == [1, 3]
+    @test OFOND.get_bundles_to_update(instance, sol, plantFromDel0, xdockFromDel1) == Int[]
+    @test OFOND.get_bundles_to_update(instance, sol, xdockFromDel2, plantFromDel0) == Int[]
     # Path selection
     @test OFOND.get_paths_to_update(sol, [bundle1], xdockFromDel1, plantFromDel0) ==
         [[xdockFromDel1, plantFromDel0]]

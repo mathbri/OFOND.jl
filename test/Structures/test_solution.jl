@@ -72,17 +72,16 @@ allIdxs = [
 @testset "Constructors" begin
     sol = OFOND.Solution(
         [[1], [2, 3]],
-        Dict(1 => [bundle1], 2 => [bundle2, bundle3]),
+        Dict(1 => [1], 2 => [2, 3]),
         sparse([1, 2, 3], [2, 3, 1], [OFOND.Bin[], OFOND.Bin[], OFOND.Bin[]]),
     )
     @test sol.bundlePaths == [[1], [2, 3]]
-    @test sol.bundlesOnNode == Dict(1 => [bundle1], 2 => [bundle2, bundle3])
+    @test sol.bundlesOnNode == Dict(1 => [1], 2 => [2, 3])
     @test sol.bins == sparse([1, 2, 3], [2, 3, 1], [OFOND.Bin[], OFOND.Bin[], OFOND.Bin[]])
 
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test sol.bundlePaths == [[-1, -1], [-1, -1], [-1, -1]]
-    @test sol.bundlesOnNode ==
-        Dict{Int,Vector{OFOND.Bundle}}(zip(common, [OFOND.Bundle[] for _ in common]))
+    @test sol.bundlesOnNode == Dict{Int,Vector{Int}}(zip(common, [Int[] for _ in common]))
     I = vcat(
         allIdxs[1:4],
         allIdxs[1:4],
@@ -141,25 +140,25 @@ end
     @test value === nothing
     @test sol.bundlePaths == [[-1, -1], [-1, -1], [-1, -1]]
     @test_throws KeyError sol.bundlesOnNode[supp1FromDel3]
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle1]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle1]
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle1]
+    @test sol.bundlesOnNode[xdockFromDel2] == [1]
+    @test sol.bundlesOnNode[portFromDel1] == [1]
+    @test sol.bundlesOnNode[plantFromDel0] == [1]
 
     OFOND.update_bundle_on_nodes!(
         sol, bundle2, [xdockFromDel2, portFromDel1]; partial=false
     )
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle1, bundle2]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle1, bundle2]
+    @test sol.bundlesOnNode[xdockFromDel2] == [1, 2]
+    @test sol.bundlesOnNode[portFromDel1] == [1, 2]
 
     OFOND.update_bundle_on_nodes!(sol, bundle1, TTPath; partial=false, remove=true)
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle2]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle2]
-    @test sol.bundlesOnNode[plantFromDel0] == OFOND.Bundle[]
+    @test sol.bundlesOnNode[xdockFromDel2] == [2]
+    @test sol.bundlesOnNode[portFromDel1] == [2]
+    @test sol.bundlesOnNode[plantFromDel0] == Int[]
 
     OFOND.update_bundle_on_nodes!(sol, bundle1, [20, xdockFromDel2, 21]; partial=true)
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle2, bundle1]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle2]
-    @test sol.bundlesOnNode[plantFromDel0] == OFOND.Bundle[]
+    @test sol.bundlesOnNode[xdockFromDel2] == [2, 1]
+    @test sol.bundlesOnNode[portFromDel1] == [2]
+    @test sol.bundlesOnNode[plantFromDel0] == Int[]
 end
 
 @testset "Add / remove paths" begin
@@ -168,31 +167,31 @@ end
     @test sol.bundlePaths[1] == TTPath
     @test sol.bundlePaths[2:3] == [[-1, -1], [-1, -1]]
     @test_throws KeyError sol.bundlesOnNode[supp1FromDel3]
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle1]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle1]
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle1]
+    @test sol.bundlesOnNode[xdockFromDel2] == [1]
+    @test sol.bundlesOnNode[portFromDel1] == [1]
+    @test sol.bundlesOnNode[plantFromDel0] == [1]
 
     OFOND.add_path!(
         sol, bundle1, [xdockFromDel2, xdockFromDel2, portFromDel1]; partial=true
     )
     @test sol.bundlePaths[1] ==
         [supp1FromDel3, xdockFromDel2, xdockFromDel2, portFromDel1, plantFromDel0]
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle1, bundle1]
+    @test sol.bundlesOnNode[xdockFromDel2] == [1, 1]
 
     OFOND.add_path!(sol, bundle2, [xdockFromDel2, portFromDel1])
     oldPart = OFOND.remove_path!(sol, bundle1; src=xdockFromDel2, dst=portFromDel1)
     @test oldPart == [xdockFromDel2, xdockFromDel2, portFromDel1]
     @test sol.bundlePaths[1] == TTPath
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle2]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle1, bundle2]
-    @test sol.bundlesOnNode[plantFromDel0] == [bundle1]
+    @test sol.bundlesOnNode[xdockFromDel2] == [2]
+    @test sol.bundlesOnNode[portFromDel1] == [1, 2]
+    @test sol.bundlesOnNode[plantFromDel0] == [1]
 
     oldPart = OFOND.remove_path!(sol, bundle1)
     @test oldPart == TTPath
     @test sol.bundlePaths[1] == [-1, -1]
-    @test sol.bundlesOnNode[xdockFromDel2] == [bundle2]
-    @test sol.bundlesOnNode[portFromDel1] == [bundle2]
-    @test sol.bundlesOnNode[plantFromDel0] == OFOND.Bundle[]
+    @test sol.bundlesOnNode[xdockFromDel2] == [2]
+    @test sol.bundlesOnNode[portFromDel1] == [2]
+    @test sol.bundlesOnNode[plantFromDel0] == Int[]
 end
 
 dates = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]
@@ -202,7 +201,7 @@ instance = OFOND.Instance(network, TTGraph, TSGraph, bundles, 4, dates, partNumb
 @testset "Check path count" begin
     sol = OFOND.Solution(
         [[1], [2, 3]],
-        Dict(1 => [bundle1], 2 => [bundle2, bundle3]),
+        Dict(1 => [1], 2 => [2, 3]),
         sparse([1, 2, 3], [2, 3, 1], [OFOND.Bin[], OFOND.Bin[], OFOND.Bin[]]),
     )
     @test !OFOND.check_enough_paths(instance, sol; verbose=false)

@@ -85,6 +85,8 @@ partNumbers = Dict(hash("A123") => "A123", hash("B456") => "B456", hash("C789") 
 
 instance = OFOND.Instance(network, TTGraph, TSGraph, bundles, 4, dates, partNumbers)
 
+CAPACITIES = [10, 15, 20, 25]
+
 # Bin-Packing 
 
 @testset "Bin-Packing" begin

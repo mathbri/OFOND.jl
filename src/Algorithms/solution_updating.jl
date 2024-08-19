@@ -49,22 +49,14 @@ function get_bins_updated(
     return sparse(I, J, V)
 end
 
-# global ALL_COMMODITIES = Commodity[]
-# get all commodities update the global variable and returns the number of commodities to take in the view
-
-# TODO : this function appears to be the real bottlneck in the local search
 function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
     # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
     ceil(sum(bin.load for bin in bins) / fullCapacity) == length(bins) && return 0
-    # TODO : This get all commodities use a lot of garbage collection
-    # Use a pre-allocated vector to store the commodities to be refilled and give a view to the first fit function ?
+    # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
     allCommodities = get_all_commodities(bins)
     binsBefore = length(bins)
     empty!(bins)
     # Filling it back again
-    # TODO : the sorting operation this follows use also a lot of grabage collection
-    # TODO : also the fact that the bin vector is emptied than filled again
-    # For the last point, one way would be to accept empty bins ?
     first_fit_decreasing!(bins, fullCapacity, allCommodities; sorted=false)
     return length(bins) - binsBefore
 end

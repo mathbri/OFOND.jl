@@ -23,13 +23,15 @@ end
 # Methods
 
 # Computing all objects properties
-function add_properties(instance::Instance, bin_packing::Function)
+function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::Vector{Int})
     @info "Adding properties to instance"
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
     for bundle in newBundles
-        newOrders = [add_properties(order, bin_packing) for order in bundle.orders]
+        newOrders = [
+            add_properties(order, bin_packing, CAPACITIES) for order in bundle.orders
+        ]
         empty!(bundle.orders)
         append!(bundle.orders, newOrders)
     end

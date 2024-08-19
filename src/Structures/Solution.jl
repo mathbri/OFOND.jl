@@ -2,11 +2,13 @@
 
 # Updating bins and loads in bin packing file
 
+# TODO : change bundlesOnNode to Int because of garbage collecting
+
 struct Solution
     # Paths used for delivery
     bundlePaths::Vector{Vector{Int}}
     # Bundles on each node of the travel-time common graph + plants
-    bundlesOnNode::Dict{Int,Vector{Bundle}}
+    bundlesOnNode::Dict{Int,Vector{Int}}
     # Transport units completion through time 
     bins::SparseMatrixCSC{Vector{Bin},Int}
 end
@@ -22,7 +24,7 @@ function Solution(
     bins = [Bin[] for _ in I]
     return Solution(
         fill([-1, -1], length(bundles)),
-        Dict{Int,Vector{Bundle}}(zip(keys, [Bundle[] for _ in keys])),
+        Dict{Int,Vector{Int}}(zip(keys, [Int[] for _ in keys])),
         sparse(I, J, bins),
     )
 end
@@ -55,11 +57,11 @@ function update_bundle_on_nodes!(
         path = path[2:(end - 1)]
     end
     for node in path
-        bundleVector = get(solution.bundlesOnNode, node, Bundle[])
+        bundleVector = get(solution.bundlesOnNode, node, Int[])
         if remove
-            filter!(bun -> bun != bundle, bundleVector)
+            filter!(bunIdx -> bunIdx != bundle.idx, bundleVector)
         else
-            push!(bundleVector, bundle)
+            push!(bundleVector, bundle.idx)
         end
     end
 end

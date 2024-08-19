@@ -66,7 +66,8 @@ end
 function bundle_reintroduction!(
     solution::Solution,
     instance::Instance,
-    bundle::Bundle;
+    bundle::Bundle,
+    CAPACITIES::Vector{Int};
     sorted::Bool=false,
     current_cost::Bool=false,
     costThreshold::Float64=EPS,
@@ -74,27 +75,19 @@ function bundle_reintroduction!(
     # compute greedy insertion and lower bound insertion and take the best one ?
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     oldPath = solution.bundlePaths[bundle.idx]
-    # TODO : remove this filter when running time problem is fixed
-    # length(oldPath) == 2 && return 0.0
     # The filtering could also occur in terms of cost removed : it must be above a certain threshold
-    bundle_max_removal_cost(bundle, oldPath, TTGraph) <= costThreshold && return 0.0
-    # Saving previous solution state 
-    # oldBins, costRemoved = save_and_remove_bundle!(
-    #     solution, instance, bundles, oldPaths; current_cost=current_cost
-    # )
+    bundle_estimated_removal_cost(bundle, oldPath, instance, solution) <= costThreshold &&
+        return 0.0
+    # Removing bundle 
     costRemoved = update_solution!(solution, instance, bundle, oldPath; remove=true)
 
     # TODO : this check can be done before actually modifying the current solution to be more efficient
     # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
     pathsLinearCost = bundle_path_linear_cost(bundle, oldPath, TTGraph)
     if costRemoved + pathsLinearCost >= -EPS
-        # update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
-        # # Reverting bins to the previous state
-        # revert_bins!(solution, oldBins)
-
-        updateCost = update_solution!(solution, instance, bundle, oldPath)
-        @assert -costRemoved ≈ updateCost "Removal than insertion lead to cost increase"
-        return 0.0
+        updateCost = update_solution!(solution, instance, bundle, oldPath; sorted=sorted)
+        @assert updateCost + costRemoved < 1e-3 "Removal than insertion lead to cost increase ofr $bundle with cost removed $costRemoved and update cost $updateCost"
+        return updateCost + costRemoved
     end
     # Inserting it back
     suppNode = TTGraph.bundleSrc[bundle.idx]
@@ -105,24 +98,22 @@ function bundle_reintroduction!(
         TSGraph,
         bundle,
         suppNode,
-        custNode;
+        custNode,
+        CAPACITIES;
         sorted=sorted,
         current_cost=current_cost,
     )
     # Updating path if it improves the cost (accounting for EPS cost on arcs)
     if pathCost + costRemoved < -1e-3
         # Adding to solution
-        updateCost = update_solution!(solution, instance, bundle, newPath; sorted=true)
+        updateCost = update_solution!(solution, instance, bundle, newPath; sorted=sorted)
         # verification
         @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $newPath \n bundleIdx : $bundleIdx"
         return pathCost + costRemoved
     else
-        # update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
-        # revert_bins!(solution, oldBins)
-
-        updateCost = update_solution!(solution, instance, bundle, oldPath)
-        @assert -costRemoved ≈ updateCost "Removal than insertion lead to cost increase"
-        return 0.0
+        updateCost = update_solution!(solution, instance, bundle, oldPath; sorted=sorted)
+        @assert updateCost + costRemoved < 1e-3 "Removal than insertion lead to cost increase ofr $bundle with cost removed $costRemoved and update cost $updateCost"
+        return updateCost + costRemoved
     end
 end
 
@@ -151,7 +142,8 @@ function two_node_incremental!(
     current_cost::Bool=false,
 )
     TTGraph = instance.travelTimeGraph
-    twoNodeBundles = get_bundles_to_update(solution, src, dst)
+    twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
+    twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
     # If there is no bundles concerned, returning
     length(twoNodeBundles) == 0 && return 0.0
     oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
@@ -176,7 +168,14 @@ function two_node_incremental!(
     for bundleIdx in sortedBundleIdxs
         bundle = twoNodeBundles[bundleIdx]
         greedyPath, lowerBoundPath = both_insertion(
-            solution, instance, bundle, src, dst; sorted=sorted, current_cost=current_cost
+            solution,
+            instance,
+            bundle,
+            src,
+            dst,
+            Int[];
+            sorted=sorted,
+            current_cost=current_cost,
         )
         # Adding to solutions
         greedyAddedCost += update_solution!(
@@ -220,11 +219,12 @@ function local_search!(
     bunCounter = 0
     print("Bundle reintroduction progress : ")
     percentIdx = ceil(Int, length(bundleIdxs) / 100)
-    threshold = 1e-4 * startCost
+    threshold = 5e-5 * startCost
+    CAPACITIES = Int[]
     for (i, bundleIdx) in enumerate(bundleIdxs)
         bundle = instance.bundles[bundleIdx]
         improvement = bundle_reintroduction!(
-            solution, instance, bundle; sorted=true, costThreshold=threshold
+            solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
         )
         i % 10 == 0 && print("|")
         i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")

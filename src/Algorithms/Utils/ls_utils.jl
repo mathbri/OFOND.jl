@@ -20,6 +20,20 @@ function compute_new_bins(
     return newBins
 end
 
+function compute_new_bins(
+    arcData::NetworkArc,
+    allCommodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    };
+    sorted::Bool,
+)
+    newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
+    bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
+    length(newBins) > length(bfdBins) && (newBins = bfdBins)
+    return newBins
+end
+
+# TODO : has this function a real utility now ?
 # Store previous bins before removing commodities from them
 function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int};)
     I, J, _ = findnz(workingArcs)
@@ -36,6 +50,7 @@ function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Boo
     return sparse(I, J, oldBins)
 end
 
+# TODO : this too
 # Revert the bin loading the the vector of bins given
 function revert_bins!(solution::Solution, previousBins::SparseMatrixCSC{Vector{Bin},Int})
     # Efficient iteration over sparse matrices
@@ -80,7 +95,8 @@ function both_insertion(
     instance::Instance,
     bundle::Bundle,
     src::Int,
-    dst::Int;
+    dst::Int,
+    CAPACITIES::Vector{Int};
     sorted::Bool=false,
     current_cost::Bool=false,
 )
@@ -91,7 +107,8 @@ function both_insertion(
         TSGraph,
         bundle,
         src,
-        dst;
+        dst,
+        CAPACITIES;
         sorted=sorted,
         current_cost=current_cost,
     )
@@ -155,12 +172,15 @@ end
 # Return a vector of bundles to update 
 # If node 1 and node 2 are given : bundles that flow from 1 to 2
 # If only node 1 : bundle that have node 1 for destination
-function get_bundles_to_update(solution::Solution, node1::Int, node2::Int=-1)
+function get_bundles_to_update(
+    instance::Instance, solution::Solution, node1::Int, node2::Int=-1
+)
     node2 == -1 && return solution.bundlesOnNode[node1]
-    twoNodeBundles = intersect(solution.bundlesOnNode[node1], solution.bundlesOnNode[node2])
+    twoNodeBundleIdxs = intersect(
+        solution.bundlesOnNode[node1], solution.bundlesOnNode[node2]
+    )
     return filter(
-        b -> is_node1_before_node2(solution.bundlePaths[b.idx], node1, node2),
-        twoNodeBundles,
+        b -> is_node1_before_node2(solution.bundlePaths[b], node1, node2), twoNodeBundleIdxs
     )
 end
 
@@ -201,6 +221,36 @@ function bundle_max_removal_cost(
         cost += volume_stock_cost(TTGraph, i, j, order)
         arcData = TTGraph.networkArcs[i, j]
         cost += get_transport_units(order, arcData) * arcData.unitCost
+    end
+    return cost
+end
+
+# computes an (over)estimated number of bins removed 
+function estimated_transport_units(order::Order, bins::Vector{Bin})
+    n, vol = 0, 0
+    for binIdx in sortperm(bins; by=bin -> bin.load)
+        vol += bins[binIdx].load
+        vol >= order.volume && return n
+        n += 1
+    end
+end
+
+# computes an estimated removal cost of a bundle
+function bundle_estimated_removal_cost(
+    bundle::Bundle, path::Vector{Int}, instance::Instance, solution::Solution
+)
+    cost = 0.0
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    for (i, j) in partition(path, 2, 1), order in bundle.orders
+        cost += volume_stock_cost(TTGraph, i, j, order)
+        arcData = TTGraph.networkArcs[i, j]
+        ti, tj = time_space_projector(TTGraph, TSGraph, i, j, order)
+        transport_units = if arcData.isLinear
+            get_transport_units(order, arcData)
+        else
+            estimated_transport_units(order, solution.bins[ti, tj])
+        end
+        cost += transport_units * arcData.unitCost
     end
     return cost
 end

@@ -73,24 +73,26 @@ end
 end
 
 @testset "Tentative FFD" begin
-    @test OFOND.CAPACITIES == Int[]
+    CAPACITIES = Int[]
 
     bins = [OFOND.Bin(7, 10, [commodity1]), OFOND.Bin(2), OFOND.Bin(15)]
-    @test OFOND.get_capacities(bins) == (3, 3)
-    @test OFOND.CAPACITIES == [7, 2, 15]
+    @test OFOND.get_capacities(bins, CAPACITIES) == (3, 3)
+    @test CAPACITIES == [7, 2, 15]
 
-    OFOND.add_capacity(4, 5)
-    @test OFOND.CAPACITIES == [7, 2, 15, 5]
+    OFOND.add_capacity(CAPACITIES, 4, 5)
+    @test CAPACITIES == [7, 2, 15, 5]
 
     bins = [OFOND.Bin(7, 10, [commodity1])]
-    @test OFOND.get_capacities(bins) == (1, 1)
-    @test OFOND.CAPACITIES == [7, -1, -1, -1]
+    @test OFOND.get_capacities(bins, CAPACITIES) == (1, 1)
+    @test CAPACITIES == [7, -1, -1, -1]
     # Same tests as base FFD but also check that the bins are not modified
-    newBins = OFOND.tentative_first_fit(bins, 20, [commodity1, commodity2, commodity3])
+    newBins = OFOND.tentative_first_fit(
+        bins, 20, [commodity1, commodity2, commodity3], CAPACITIES
+    )
     @test newBins == 2
     @test bins == [OFOND.Bin(7, 10, [commodity1])]
 
-    newBins1 = OFOND.tentative_first_fit(bins, supp1_to_plant, order2)
+    newBins1 = OFOND.tentative_first_fit(bins, supp1_to_plant, order2, CAPACITIES)
     @test newBins1 == 1
     @test bins == [OFOND.Bin(7, 10, [commodity1])]
 end

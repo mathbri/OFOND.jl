@@ -64,7 +64,7 @@ end
         OFOND.Bundle(supplier1, plant, [order3], 1, hash(supplier1, hash(plant)), 15, 3)
 end
 
-order = OFOND.add_properties(order3, (x, y, z) -> 2)
+order = OFOND.add_properties(order3, (x, y, z, t) -> 2, Int[])
 
 @testset "get_lb_transport_units" begin
     @test OFOND.get_lb_transport_units(order, supp1_to_plant) == 1

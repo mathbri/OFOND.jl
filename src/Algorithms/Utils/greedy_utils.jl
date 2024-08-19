@@ -34,7 +34,8 @@ function transport_units(
     TSGraph::TimeSpaceGraph,
     timedSrc::Int,
     timedDst::Int,
-    order::Order;
+    order::Order,
+    CAPACITIES::Vector{Int};
     sorted::Bool,
     use_bins::Bool,
 )
@@ -46,7 +47,9 @@ function transport_units(
         bins = solution.bins[timedSrc, timedDst]
         # If the arc is not empty, computing a tentative first fit 
         if length(bins) > 0
-            orderTrucks = tentative_first_fit(bins, arcData, order; sorted=sorted)
+            orderTrucks = tentative_first_fit(
+                bins, arcData, order, CAPACITIES; sorted=sorted
+            )
         end
     end
     return orderTrucks
@@ -67,7 +70,8 @@ function arc_update_cost(
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
     src::Int,
-    dst::Int;
+    dst::Int,
+    CAPACITIES::Vector{Int};
     sorted::Bool=false,
     use_bins::Bool=true,
     opening_factor::Float64=1.0,
@@ -85,7 +89,14 @@ function arc_update_cost(
         # Arc transport cost 
         arcBundleCost +=
             transport_units(
-                sol, TSGraph, tSrc, tDst, order; sorted=sorted, use_bins=use_bins
+                sol,
+                TSGraph,
+                tSrc,
+                tDst,
+                order,
+                CAPACITIES;
+                sorted=sorted,
+                use_bins=use_bins,
             ) *
             transport_cost(TSGraph, tSrc, tDst; current_cost=current_cost) *
             opening_factor
@@ -127,7 +138,8 @@ function update_cost_matrix!(
     solution::Solution,
     TTGraph::TravelTimeGraph,
     TSGraph::TimeSpaceGraph,
-    bundle::Bundle;
+    bundle::Bundle,
+    CAPACITIES::Vector{Int};
     sorted::Bool=false,
     use_bins::Bool=true,
     opening_factor::Float64=1.0,
@@ -145,7 +157,8 @@ function update_cost_matrix!(
                 TSGraph,
                 bundle,
                 src,
-                dst;
+                dst,
+                CAPACITIES;
                 sorted=sorted,
                 use_bins=use_bins,
                 opening_factor=opening_factor,
