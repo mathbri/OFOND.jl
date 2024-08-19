@@ -30,8 +30,9 @@ function run_heuristic(
     # Run the corresponding heuristic
     heuristic(solution, instance)
     println("Cost after initial heuristic: $(compute_cost(instance, solution))")
-    while get_elapsed_time(startTime) < timeLimit
-        heuristic(solution, instance)
+    improvement = 1.0
+    while get_elapsed_time(startTime) < timeLimit && improvement > 1e-3
+        improvement = heuristic(solution, instance)
     end
 
     solveTime = get_elapsed_time(startTime)

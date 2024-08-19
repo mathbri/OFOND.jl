@@ -153,7 +153,7 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
             TTGraph, TSGraph, bundle, suppNode, custNode;
         )
         # Adding to solution
-        update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
+        update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         i % 10 == 0 && print("|")
         i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(instance.bundles)))% ")
     end

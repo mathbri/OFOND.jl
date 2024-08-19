@@ -48,7 +48,7 @@ function julia_main()::Cint
     )
 
     instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
-    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit)
+    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
 
     # startTime = time()
     # newSol1 = deepcopy(solutionSub_LBF)
@@ -66,7 +66,7 @@ function julia_main()::Cint
 
     # _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
     ProfileView.@profview _, solutionSubSub_GLS = greedy_then_ls_heuristic(
-        instanceSubSub; timeLimit=60
+        instanceSubSub; timeLimit=30
     )
 
     # finalSolution = fuse_solutions(

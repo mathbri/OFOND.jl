@@ -232,7 +232,7 @@ end
 # Compute arc cost with respect to the bins on it
 function compute_arc_cost(
     TSGraph::TimeSpaceGraph, bins::Vector{Bin}, src::Int, dst::Int; current_cost::Bool
-)
+)::Float64
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
     arcVolume = sum(bin.load for bin in bins)
@@ -242,7 +242,8 @@ function compute_arc_cost(
         (dstData.volumeCost + arcData.carbonCost) * arcVolume / arcData.capacity /
         VOLUME_FACTOR
     # Transport cost 
-    transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : length(bins)
+    transportUnits =
+        arcData.isLinear ? (arcVolume / arcData.capacity) : Float64(length(bins))
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
     cost += transportUnits * transportCost
     # Commodity cost

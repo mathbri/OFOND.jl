@@ -32,7 +32,7 @@ function bin_packing_improvement!(
         # If no improvement possible
         is_bin_candidate(arcBins, arcData; skipLinear=skipLinear) || continue
         # Gathering all commodities
-        # TODO : again the get all commodities that is impeding performance
+        # TODO : again the get all commodities that is impeding performance, check usage of this neighborhood to know if you need to pass ALL_COMMODITIES as argument
         allCommodities = get_all_commodities(arcBins)
         # Computing new bins
         newBins = compute_new_bins(arcData, allCommodities; sorted=sorted)
@@ -87,6 +87,7 @@ function bundle_reintroduction!(
     if costRemoved + pathsLinearCost >= -EPS
         updateCost = update_solution!(solution, instance, bundle, oldPath; sorted=sorted)
         @assert updateCost + costRemoved < 1e-3 "Removal than insertion lead to cost increase ofr $bundle with cost removed $costRemoved and update cost $updateCost"
+        # TODO : if cost increase, refill bins as a whole ?
         return updateCost + costRemoved
     end
     # Inserting it back

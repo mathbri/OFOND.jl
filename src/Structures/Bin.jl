@@ -82,7 +82,7 @@ function get_all_commodities(bins::Vector{Bin})
     return view(ALL_COMMODITIES, 1:nCom)
 end
 
-function stock_cost(bin::Bin)
+function stock_cost(bin::Bin)::Float64
     return sum(com.stockCost for com in bin.content; init=0.0)
 end
 

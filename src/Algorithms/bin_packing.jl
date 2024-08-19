@@ -18,6 +18,7 @@
 
 # TODO : find a way to define one function for arrays and subarrays
 
+# TODO : as expected, this functions remains the bottleneck, is there a way to avoid garbage collecting and push! operation ?
 function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
