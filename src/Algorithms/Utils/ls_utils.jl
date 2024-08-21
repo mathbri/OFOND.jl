@@ -149,8 +149,12 @@ end
 # Checking if two nodes are candidates for two node incremental
 function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
     src == dst && return false
-    is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
+    # Cannot go back in time
     TTGraph.stepToDel[src] < TTGraph.stepToDel[dst] && return false
+    # Come from analysis of actual improvement 
+    TTGraph.networkNodes[dst].type != :xdock && TTGraph.stepToDel[dst] > 0 && return false
+    # just one arc between ports
+    is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
     return true
 end
 
@@ -233,6 +237,7 @@ function estimated_transport_units(order::Order, bins::Vector{Bin})
         vol >= order.volume && return n
         n += 1
     end
+    return n
 end
 
 # computes an estimated removal cost of a bundle
@@ -245,12 +250,21 @@ function bundle_estimated_removal_cost(
         cost += volume_stock_cost(TTGraph, i, j, order)
         arcData = TTGraph.networkArcs[i, j]
         ti, tj = time_space_projector(TTGraph, TSGraph, i, j, order)
-        transport_units = if arcData.isLinear
+        transportUnits = if arcData.isLinear
             get_transport_units(order, arcData)
         else
             estimated_transport_units(order, solution.bins[ti, tj])
         end
-        cost += transport_units * arcData.unitCost
+        if isnothing(transportUnits)
+            println("$bundle, $order and arc data $arcData")
+            println("TT nodes $i-$j, TS nodes $ti-$tj")
+            println("get transport units : $(get_transport_units(order, arcData))")
+            println("Bins : $(solution.bins[ti, tj])")
+            println(
+                "Estimated transport units : $(estimated_transport_units(order, solution.bins[ti, tj]))",
+            )
+        end
+        cost += transportUnits * arcData.unitCost
     end
     return cost
 end

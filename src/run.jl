@@ -81,4 +81,43 @@ function greedy_then_ls_heuristic(instance::Instance; timeLimit::Int)
     return run_heuristic(instance, greedy_than_ls!; timeLimit=timeLimit)
 end
 
-# TODO : lower bound and greedy are competitive with each other so need to create a function that take the best starting solution and than apply local search on it
+function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
+    @info "Running heuristic greedy_or_lb_tan_ls!"
+    # Initialize start time
+    startTime = time()
+    # Complete Instance object with all properties needed
+
+    CAPACITIES = Int[]
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    @info "Pre-solve done" :pre_solve_time = get_elapsed_time(startTime)
+
+    # Initialize solution object
+    solution1 = Solution(instance)
+    solution2 = Solution(instance)
+
+    # Run the corresponding heuristic
+    greedyCost = greedy!(solution1, instance)
+    println("Cost after greedy heuristic: $(compute_cost(instance, solution1))")
+    lower_bound!(solution2, instance)
+    lbCost = compute_cost(instance, solution2)
+    println("Cost after lower bound heuristic: $(lbCost)")
+
+    # Choosing the best initial solution on which to apply local search 
+    solution = solution1
+    if lbCost < greedyCost
+        solution = solution2
+        @info "Choosing lower bound solution as initial solution"
+    else
+        @info "Choosing greedy solution as initial solution"
+    end
+    improvement = 1.0
+    while get_elapsed_time(startTime) < timeLimit && improvement > 1e-3
+        improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+    end
+
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instance, solution)
+    # detect_infeasibility(instance, solution)
+    @info "Final results" :solve_time = solveTime :feasible = feasible :total_cost =
+        return instance, solution
+end

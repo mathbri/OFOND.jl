@@ -362,6 +362,7 @@ end
 function fuse_solutions(
     subSolution::Solution, fullSolution::Solution, instance::Instance, subInstance::Instance
 )
+    @info "Fusing solutions"
     fusedPaths = [Int[] for _ in 1:length(instance.bundles)]
     # For each bundle of the instance, look for the sub instance index correxponding
     for bundle in instance.bundles

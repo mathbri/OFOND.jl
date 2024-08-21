@@ -294,6 +294,41 @@ function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector
     return length(bins) - lengthBefore
 end
 
+function milp_packing(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    },
+)
+    n = length(commodities)
+    n == 0 && return nothing
+    lengthBefore = length(bins)
+    B =
+        lengthBefore +
+        length(first_fit_decreasing(bins, fullCapacity, commodities; sorted=true))
+    loads = vcat(map(bin -> bin.load, bins), fill(0, B - length(bins)))
+    # Model
+    model = Model(HiGHS.Optimizer)
+    # Variables
+    @variable(model, x[1:n, 1:B], Bin)
+    @variable(model, y[1:B], Bin)
+    # Constraints
+    @constraint(model, inBin[i=1:n], sum(x[i, :]) == 1)
+    @constraint(
+        model,
+        fitInBin[b=1:B],
+        fullCapacity * y[b] >= sum(x[i, b] * commodities[i].size for i in 1:n) + loads[b]
+    )
+    @constraint(model, breakSym[b=1:(B - 1)], y[b] >= y[b + 1])
+    # Objective
+    @objective(model, Min, sum(y))
+    set_silent(model)
+    # Solve
+    optimize!(model)
+    return round(Int, objective_value(model))
+end
+
 function milp_packing(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
     newBins = deepcopy(bins)
     milp_packing!(newBins, fullCapacity, commodities)
