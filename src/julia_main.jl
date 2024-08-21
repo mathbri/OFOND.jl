@@ -27,17 +27,17 @@ function julia_main()::Cint
     instance = add_properties(instance, tentative_first_fit, CAPACITIES)
 
     # read solution
-    sol_file = "RouteDataProcessed.csv"
-    length(ARGS) >= 5 && isfile(ARGS[5]) && (sol_file = ARGS[5])
-    solution = read_solution(instance, "$directory\\$sol_file")
+    # sol_file = "RouteDataProcessed.csv"
+    # length(ARGS) >= 5 && isfile(ARGS[5]) && (sol_file = ARGS[5])
+    # solution = read_solution(instance, "$directory\\$sol_file")
 
     # cut it into smaller instances 
     # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
-    instanceSub = extract_sub_instance(instance; continent="Western Europe", timeHorizon=9)
-    # instanceSub = instance
+    # instanceSub = extract_sub_instance(instance; continent="Western Europe", timeHorizon=9)
+    instanceSub = instance
     # adding properties to the instance
     # instanceSub = add_properties(instanceSub, tentative_first_fit)
-    solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
+    # solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
     # solutionSub_C = solution
 
     # test algorithms  
@@ -65,19 +65,18 @@ function julia_main()::Cint
     # println("Path recompuations needed : $GREEDY_RECOMPUTATION")
 
     # _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
-    ProfileView.@profview _, solutionSubSub_GLS = greedy_then_ls_heuristic(
-        instanceSubSub; timeLimit=30
+    _, solutionSubSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSubSub; timeLimit=300)
+
+    finalSolution = fuse_solutions(
+        solutionSubSub_GLS, solutionSub_LBF, instanceSub, instanceSubSub
     )
 
-    # finalSolution = fuse_solutions(
-    #     solutionSubSub_GLS, solutionSub_LBF, instanceSub, instanceSubSub
-    # )
-
     # export only for the full instance
-    # dirname = joinpath(@__DIR__, "export")
-    # length(ARGS) >= 6 && isdir(dirname) && (dirname = ARGS[6])
-    # write_solution(finalSolution, instanceSub; suffix="proposed", directory=dirname)
-    # write_soluton(solutionSub_C, instanceSub; suffix="current", directory=dirname)
+    directory = joinpath(dirname(@__DIR__), "scripts", "export")
+    length(ARGS) >= 6 && isdir(directory) && (directory = ARGS[6])
+    println("Exporting data to $directory")
+    write_solution(finalSolution, instanceSub; suffix="proposed", directory=dirname)
+    write_soluton(solutionSub_C, instanceSub; suffix="current", directory=dirname)
 
     return 0 # if things finished successfully
 end
