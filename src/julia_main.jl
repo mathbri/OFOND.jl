@@ -1,7 +1,7 @@
 # File used to launch all kinds of scripts using OFOND package 
 
 # using OFOND
-using ProfileView
+# using ProfileView
 
 function julia_main()::Cint
     # Read files based on ARGS?
@@ -70,6 +70,11 @@ function julia_main()::Cint
     finalSolution = fuse_solutions(
         solutionSubSub_GLS, solutionSub_LBF, instanceSub, instanceSubSub
     )
+
+    # Cleaning final solution linears arcs
+    @info "Cleaning final solution before extraction"
+    bin_packing_improvement!(finalSolution, instanceSub; sorted=true, skipLinear=false)
+    clean_empty_bins!(finalSolution, instanceSub)
 
     # export only for the full instance
     directory = joinpath(dirname(@__DIR__), "scripts", "export")

@@ -15,7 +15,7 @@ using SparseArrays
 # Project files
 
 include("Constants.jl")
-include("utils.jl")
+include("Utils.jl")
 
 # Structures 
 include("Structures/Network.jl")
