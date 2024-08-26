@@ -72,6 +72,7 @@ function dummy!(solution, instance)
     elseif length(solution.bins[1, 1]) <= 10
         push!(solution.bins[1, 1], OFOND.Bin(10, 10, [commodity1]))
     end
+    return 1e3
 end
 
 @testset "Run heuristic" begin

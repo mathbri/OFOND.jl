@@ -73,6 +73,11 @@ end
 
 # TODO : would sorting bundles by estimated removal cost a good idea ?
 
+# TODO : if I store the order in which the bundles were inserted on the arcs, there is no need to gather all commodities in refilling : another "global" matrix to use for all computations ? or update solutions with remove returns the previous order insertion matrix of the solution
+# The problem being that cost increase in removal than insertion goes up to 200 000 for world instance
+# But if the bin packing improvement neighborhood change the bin filling, this order no longer makes sense
+# So need to remove it if the bin pack found better solution
+
 # Removing and inserting back the bundle in the solution.
 # If the operation did not lead to a cost improvement, reverting back to the former state of the solution.
 function bundle_reintroduction!(
@@ -100,8 +105,6 @@ function bundle_reintroduction!(
     # if costRemoved + pathsLinearCost >= -EPS
     #     updateCost = update_solution!(solution, instance, bundle, oldPath; sorted=sorted)
     #     if updateCost + costRemoved > 1e4
-    #         # TODO : if I store the order in which the bundles were inserted on the arcs, there is no need to gather all commodities in refilling : another "global" matrix to use for all computations ? or update solutions with remove returns the previous order insertion matrix of the solution
-    #         # The problem being that cost increase in removal than insertion goes up to 200 000 for world instance
     #         refillCostChange = refill_bins!(solution, TTGraph, TSGraph, bundle, oldPath)
     #         if updateCost + costRemoved + refillCostChange > 1e4
     #             println()
@@ -159,9 +162,6 @@ end
 # Each function call would need to deepcopy the current solution 
 # Maybe defining your own deep copy by initializing a solution and updating it would be more efficicient ?
 
-# TODO : not usable right now because it tkes too much time to run for too little results
-# Major problems comes from deepcopy in save and remove and deepcopy solution
-
 # Remove and insert back all bundles flowing from src to dst 
 function two_node_incremental!(
     solution::Solution,
@@ -191,6 +191,8 @@ function two_node_incremental!(
         solution, instance, twoNodeBundles, oldPaths; remove=true
     )
 
+    # TODO : by changing the number of common nodes, I can change the cost and not the number of bins 
+    # To test whether this impedes a lot the perf
     # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
     pathsLinearCost = sum(
         bundle_path_linear_cost(bundle, path, TTGraph) for
@@ -249,6 +251,13 @@ function two_node_incremental!(
         return addedCost + costRemoved
     end
 end
+
+# TODO : by putting all bundles between two nodes on the same path, we have another way to reintroduce them
+# Doign it before the incremental ?
+
+# TODO : things that could be done also is to reintroduce bundles, than two node same path than reintroduce bundles
+# than two node oncremental than bin pack improv
+# This needs testing to see if the added computation time is worth it
 
 function local_search!(
     solution::Solution, instance::Instance; twoNode::Bool=false, timeLimit::Int=300

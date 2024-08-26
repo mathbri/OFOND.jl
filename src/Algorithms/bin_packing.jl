@@ -254,6 +254,8 @@ function best_fit_decreasing(
     return newBins
 end
 
+# TODO : check whether the MOI BinPacking constraint is more efficient for solving 
+
 # Milp model for adding commodities on top
 function milp_packing!(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity})
     n = length(commodities)

@@ -160,9 +160,11 @@ end
 
 # Selecting two nodes for two node incremental
 function select_two_nodes(TTGraph::TravelTimeGraph)
-    node1, node2 = rand(TTGraph.commonNodes, 2)
+    plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
+    two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
+    node1, node2 = rand(two_node_nodes, 2)
     while !are_nodes_candidate(TTGraph, node1, node2)
-        node1, node2 = rand(TTGraph.commonNodes, 2)
+        node1, node2 = rand(two_node_nodes, 2)
     end
     return node1, node2
 end

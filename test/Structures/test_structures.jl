@@ -47,3 +47,7 @@ end
 @testset "Solution" begin
     include("test_solution.jl")
 end
+# Relaxed Solution
+@testset "Relaxed Solution" begin
+    include("test_relaxed_solution.jl")
+end

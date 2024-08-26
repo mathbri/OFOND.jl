@@ -213,16 +213,23 @@ end
     portlFromDel2 = TTGraph2.hashToIdx[hash(2, port_l.hash)]
     portdFromDel1 = TTGraph2.hashToIdx[hash(1, port_d.hash)]
     @test !OFOND.are_nodes_candidate(TTGraph2, portlFromDel2, portdFromDel1)
+    xdockFromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
+    xdockFromDel1 = TTGraph2.hashToIdx[hash(1, xdock.hash)]
+    supp1FromDel1 = TTGraph2.hashToIdx[hash(1, supplier1.hash)]
+    @test OFOND.are_nodes_candidate(TTGraph2, xdockFromDel2, xdockFromDel1)
+    @test !OFOND.are_nodes_candidate(TTGraph2, xdockFromDel2, supp1FromDel1)
     # testing select two nodes only gives condidate nodes
-    randCount, selectCount = 0, 0
-    for _ in 1:100
-        node1, node2 = OFOND.select_two_nodes(TTGraph2)
-        OFOND.are_nodes_candidate(TTGraph2, node1, node2) && (selectCount += 1)
-        node1, node2 = rand(TTGraph.commonNodes, 2)
-        OFOND.are_nodes_candidate(TTGraph2, node1, node2) && (randCount += 1)
-    end
-    @test randCount < 100
-    @test selectCount == 100
+    # randCount, selectCount = 0, 0
+    # for _ in 1:100
+    #     node1, node2 = OFOND.select_two_nodes(TTGraph2)
+    #     OFOND.are_nodes_candidate(TTGraph2, node1, node2) && (selectCount += 1)
+    #     node1, node2 = rand(TTGraph.commonNodes, 2)
+    #     OFOND.are_nodes_candidate(TTGraph2, node1, node2) && (randCount += 1)
+    # end
+    nodesSelected = [OFOND.select_two_nodes(TTGraph2) for _ in 1:100]
+    @test all(n -> OFOND.are_nodes_candidate(TTGraph2, n[1], n[2]), nodesSelected)
+    # @test randCount < 100
+    # @test selectCount == 100
 end
 
 @testset "Bundle and Path selection" begin
