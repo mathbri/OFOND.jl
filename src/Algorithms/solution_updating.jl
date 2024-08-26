@@ -211,3 +211,28 @@ function clean_empty_bins!(solution::Solution, instance::Instance)
         filter!(bin -> bin.load > 0, solution.bins[src(arc), dst(arc)])
     end
 end
+
+# TODO : to use in two node incremental
+# Removing all empty bins from the arcs on the paths and compute removal with it
+function clean_empty_bins_with_cost!(
+    solution::Solution,
+    instance::Instance,
+    bundles::Vector{Bundle},
+    paths::Vector{Vector{Int}},
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    costRemoved = 0.0
+    for (bundle, path) in zip(bundles, paths)
+        for order in bundle.orders
+            timedPath = time_space_projector(TTGraph, TSGraph, path, order)
+            for (tSrc, tDst) in partition(timedPath, 2, 1)
+                nBinsBef = length(solution.bins[tSrc, tDst])
+                filter!(bin -> bin.load > 0, solution.bins[tSrc, tDst])
+                nBinsAft = length(solution.bins[tSrc, tDst])
+                costRemoved +=
+                    (nBinsAft - nBinsBef) * TSGraph.networkArcs[tSrc, tDst].unitCost
+            end
+        end
+    end
+    return costRemoved
+end
