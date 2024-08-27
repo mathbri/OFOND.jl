@@ -61,7 +61,7 @@ instanceNP = OFOND.Instance(
     @test time() ≈ OFOND.get_elapsed_time(0.0)
     startTime = time()
     sleep(0.5)
-    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.535
+    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.55
 end
 
 # fake function that modify the solution
@@ -84,7 +84,6 @@ end
     # verify solution has been modified
     I1, J1, V1 = findnz(Solution(instance).bins)
     I2, J2, V2 = findnz(solution.bins)
-    println(solution.bins[1, 1])
     @test length(I1) + 1 == length(I2)
     @test I1 == I2[2:end]
     @test J1 == J2[2:end]

@@ -7,81 +7,145 @@
 # by adding a binary variable per path and a Special Ordered Set of Type 1 constraint on those, 
 # possibly ordered by (real) path cost
 
-# TODO : warm start the milp solving with the current solution to gain performance
+# TODO : if elementarity problem in paths returned, add constraint as callback
 function solve_lns_milp(
     instance::Instance,
     solution::Solution,
-    neighborhood::Symbol,
-    bundles::Vector{Bundle};
+    startSol::RelaxedSolution,
+    neighborhood::Symbol;
     src::Int=-1,
     dst::Int=-1,
-    newPaths::Vector{Vector{Int}}=Vector{Vector{Int}}(undef, 0),
+    warmStart::Bool=true,
+    verbose::Bool=false,
 )
     # Buidling model
     model = Model(HiGHS.Optimizer)
-    add_variables!(model, neighborhood, instance, bundles)
-    if neighborhood == :single_plant
-        add_single_plant_constraints!(model, instance, bundles)
-    elseif neighborhood == :two_shared_node
-        add_two_node_constraints!(model, instance, bundles, src, dst)
-    elseif neighborhood == :attract_reduce
-        oldPaths = [solution.bundlePaths[bundle.idx] for bundle in bundles]
-        add_attract_reduce_constraints!(model, instance, bundles, oldPaths, newPaths)
+    add_variables!(model, neighborhood, instance, startSol)
+    if verbose
+        nVarBin = count(is_binary, all_variables(model))
+        nVarInt = count(is_integer, all_variables(model))
+        @info "$neighborhood MILP : Added $(num_variables(model)) variables" :binary =
+            nVarBin :integer = nVarInt
     end
-    add_objective!(model, neighborhood, bundles)
+    add_constraints!(model, neighborhood, instance, solution, startSol, src, dst)
+    if verbose
+        nConPath = length(startSol.bundleIdxs) * nv(instance.travelTimeGraph.graph)
+        nConOldNew = 0
+        if neighborhood == :attract || neighborhood == :reduce
+            nConOldNew =
+                length(model[:oldPaths]) +
+                length(model[:newPaths]) +
+                length(model[:forceArcs])
+        end
+        nConTot = num_constraints(model; count_variable_in_set_constraints=false)
+        nConPack = nConTot - nConPath - nConOldNew
+        @info "$neighborhood MILP : Added $nConTot constraints" :paths = nConPath :oldnew =
+            nConOldNew :packing = nConPack
+    end
+    add_objective!(model, instance, startSol)
+    # If warm start option, doing it 
+    # TODO : find a way to activate warm start for two node neighborhood
+    warmStart &&
+        (neighborhood != :two_shared_node) &&
+        warm_start_milp!(model, neighborhood, instance, startSol)
+    # warmStart && warm_start_milp_test(model, instance, startSol)
     # Solving model
     set_optimizer_attribute(model, "mip_rel_gap", 0.05)
-    set_optimizer_attribute(model, "time_limit", 120.0)
-    set_optimizer_attribute(model, "output_flag", false)
+    set_time_limit_sec(model, 120.0)
+    !verbose && set_silent(model)
     optimize!(model)
+    # TODO : change assertion to error handling to not crash the app at running time ?
     @assert is_solved_and_feasible(model)
     # Getting the solution paths and returning it
-    return get_paths(model, bundles, incidence_matrix(instance.travelTimeGraph.graph))
+    return get_paths(model, instance, startSol)
 end
 
-function single_plant_perturbation!()
-    # select a random plant 
-    plant = select_random_plant(instance)
-    # get bundles that share the plant
-    return plantBundles = TTGraph.bundlesOnNode[plant]
-    # apply perturbation
+function perturbate!(
+    solution::Solution,
+    instance::Instance,
+    neighborhood::Symbol,
+    startCost::Float64,
+    costThreshold::Float64;
+    verbose::Bool=false,
+    inTest::Bool=false,
+)
+    verbose && println("\nStarting perturbation with neighborhood $neighborhood")
+    # Select bundles and node(s) to use depending on the neighborhood chosen
+    src, dst, pertBundleIdxs = get_neighborhood_node_and_bundles(
+        neighborhood, instance, solution
+    )
+    if inTest
+        while (src, dst) != (17, 15)
+            src, dst, pertBundleIdxs = get_neighborhood_node_and_bundles(
+                neighborhood, instance, solution
+            )
+        end
+    end
+    verbose && println("Nodes : $src-$dst, Bundles : $pertBundleIdxs")
 
-end
+    # Filter like local serach to actually compute if there is a chance of good improvement
+    pertBundles = instance.bundles[pertBundleIdxs]
+    oldPaths = get_lns_paths_to_update(neighborhood, solution, pertBundles, src, dst)
+    fullOldPaths = solution.bundlePaths[pertBundleIdxs]
+    verbose && println("Old paths : $oldPaths")
 
-function two_shared_node_perturbation!() end
+    # The filtering could also occur in terms of cost removed : it must be above a certain threshold
+    estimRemCost = sum(
+        bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
+        (bundle, oldPath) in zip(pertBundles, oldPaths)
+    )
+    verbose && println("Estimated removal cost : $estimRemCost")
+    verbose && println("Cost threshold : $costThreshold")
+    if estimRemCost <= costThreshold
+        verbose && println("Not enough improvement possible, aborting")
+        return 0.011 * startCost, Int[], [Int[]]
+    end
 
-# TODO : question generating the new paths 
-# Maybe make the old one infinitely expensive and compute the new one in a lower bound way to be fast
-# Other option is greedy without use_bins
-# allow direct for new path ? 
-function shared_arc_attract_reduce_perturbation!()
-    # TODO : is random the best option ?
-end
+    # Removing bundle and creating starting solution
+    startSol = RelaxedSolution(solution, instance, pertBundles)
+    # Putting start sol paths to old paths for two node neighborhood
+    if neighborhood == :two_shared_node
+        for (i, path) in enumerate(oldPaths)
+            startSol.bundlePaths[i] = path
+        end
+    end
+    verbose && println("Starting cost : $startCost")
+    costRemoved = update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
+    verbose && println("Cost removed : $costRemoved")
 
-# Common part of all perturbations
-function apply_perturbation!()
-    # save previous solution state and cost removed
-    # construct and solve the correponding milp
-    # local search ? If we do it here then saving previous solution make sense, Otherwise do it outside of the function
-    # update the solution : revert or update depending on cost
+    # Apply lns milp to get new paths
+    pertPaths = solve_lns_milp(
+        instance, solution, startSol, neighborhood; src=src, dst=dst, verbose=verbose
+    )
+    verbose && println("New paths : $pertPaths")
 
-    # select a random plant 
-    plant = select_random_plant(instance)
-    # get bundles that share the plant
-    plantBundles = get_bundles_to_update(solution, plant)
-    # apply perturbation 
+    # Update solution (randomized order ?) 
+    updateCost = update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
+    verbose && println("Update cost : $updateCost")
 
-    # select two nodes of shared network randomly
-    src, dst = select_two_nodes(instance.travelTimeGraph)
-    # get bundles that share the two nodes
-    twoNodeBundles = get_bundles_to_update(instance.bundles, src, dst)
-    # apply perturbation 
-    # local search ?
-
-    # select an arc of shared network randomly
-    # generate new paths
-    # apply perturbation
-    return nothing
+    # Reverting if cost augmented by more than 1% 
+    if updateCost + costRemoved > 0.01 * startCost
+        verbose && println("Update refused")
+        # solution is already updated so needs to remove bundle on nodes again
+        # TODO : they were the last ones so maybe no refilling and just empty bins cleaning ? but need to count the cost removed
+        # TODO : same as bundle reintroduction, 100 000 to gain from removing those cost increase at refilling
+        update_solution!(solution, instance, pertBundles, pertPaths; remove=true)
+        updateCost = update_solution!(
+            solution, instance, pertBundles, oldPaths; sorted=true
+        )
+        if updateCost + costRemoved > 1e4
+            binsUpdated = get_bins_updated(TSGraph, TTGraph, pertBundles, oldPaths)
+            refillCostChange = refill_bins!(solution, TSGraph, binsUpdated)
+            if updateCost + costRemoved + refillCostChange > 1e4
+                println()
+                @warn "$neighborhood MILP : Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
+            end
+            return updateCost + costRemoved + refillCostChange
+        end
+        return updateCost + costRemoved, Int[], [Int[]]
+    else
+        return updateCost + costRemoved, pertBundleIdxs, fullOldPaths
+    end
 end
 
 # How to analyse neighborhood difference with initial solution ? see notes in Books
@@ -94,19 +158,60 @@ end
 # TODO : Analyze this mechanism the same way as the other heuristics 
 
 # Combine the large perturbations and the small neighborhoods
-function LNS!(solution::Solution, instance::Instance)
-    # Add previous and best solution
-    oldSolution, bestSolution = deepcopy(solution), deepcopy(solution)
+function LNS!(solution::Solution, instance::Instance; timeLimit::Int=1200)
+    startCost = compute_cost(instance, solution)
+    threshold = 1e-4 * startCost
+    println("\n")
+    @info "Starting LNS step" :start_cost = startCost :threshold = threshold
+    totalImprovement = 0.0
+    startTime = time()
     # Slope scaling cost update  
-    slope_scaling_cost_update!(instance.timeSpaceGraph, bestSolution)
+    slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
     # Apply perturbations in random order
     for neighborhood in shuffle(PERTURBATIONS)
         # Apply perturbation and get correponding solution
+        improvement, pertBundleIdxs, oldPaths = perturbate!(
+            solution, instance, neighborhood, startCost, threshold; verbose=true
+        )
+        @info "$neighborhood perturbation applied (without local search)" :improvement =
+            improvement
+        if improvement > 0.01 * startCost
+            @info "Cost increased by more than 1% after perturbation, aborting perturbation" :increase =
+                improvement / startCost * 100
+            # No need to revert, it was already done in perturbate
+        end
         # Try a local search and if solution better, store with best sol
-        # Go to the next perturbation
+        revertBunIdxs = deepcopy(pertBundleIdxs)
+        improvement += local_search!(solution, instance; twoNode=true, timeLimit=90)
+        @info "$neighborhood perturbation applied (with local search)" :improvement =
+            improvement
+        # If no improvement, revert and go to the next perturbation
+        if improvement > -1e-1
+            @info "Cost increased after perturbation + local search, aborting perturbation" :increase =
+                improvement / startCost * 100
+            pertBundles = instance.bundles[revertBunIdxs]
+            newPaths = solution.bundlePaths[revertBunIdxs]
+            update_solution!(solution, instance, pertBundles, newPaths; remove=true)
+            updateCost = update_solution!(
+                solution, instance, pertBundles, oldPaths; sorted=true
+            )
+            # TODO : add warning if too much increase
+        else
+            # Keeping solution as is and go to the next perturbation
+            startCost += improvement
+            totalImprovement += improvement
+            @info "Improvement found after perturbation + local search" :improvement = round(
+                improvement
+            )
+        end
+        time() - startTime > timeLimit && break
     end
     # Final local search
-    return nothing
+    totalImprovement += local_search!(solution, instance; twoNode=true, timeLimit=240)
+    @info "Full LNS step done" :time = round((time() - startTime) * 1000) / 1000 :improvement = round(
+        totalImprovement
+    )
+    return totalImprovement
 end
 
 # TODO : create analysis function for the LNS and to decide which architecture should be used 

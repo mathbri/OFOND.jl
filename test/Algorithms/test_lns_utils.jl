@@ -228,8 +228,9 @@ end
     ]
     OFOND.add_old_new_path_constraints!(model, [bundle1, bundle2], oldPaths, newPaths)
     @test num_constraints(model; count_variable_in_set_constraints=false) == 4
-    @test length(model[:oldPaths]) == 2
+    @test length(model[:oldPaths]) == 1
     @test length(model[:newPaths]) == 2
+    @test length(model[:forceArcs]) == 1
     # println(model[:oldPaths])
     # println(model[:newPaths])
     x, z = model[:x], model[:z]
@@ -238,10 +239,6 @@ end
     oldPath11 = constraint_object(model[:oldPaths][(1, (3, 15))])
     @test oldPath11.func == AffExpr(0, x[1, (3, 15)] => -1, z[1] => -1)
     @test oldPath11.set == MOI.EqualTo(-1.0)
-    # oldPaths[(2, (6, 15))] : -x[2,(6, 15)] - z[2] == -1
-    oldPath12 = constraint_object(model[:oldPaths][(2, (6, 15))])
-    @test oldPath12.func == AffExpr(0, x[2, (6, 15)] => -1, z[2] => -1)
-    @test oldPath12.set == MOI.EqualTo(-1.0)
     # New paths constraints :
     # newPaths[(1, (3, 8))] : -x[1,(3, 8)] + z[1] == 0
     newPath11 = constraint_object(model[:newPaths][(1, (3, 8))])
@@ -251,6 +248,11 @@ end
     newPath12 = constraint_object(model[:newPaths][(1, (8, 15))])
     @test newPath12.func == AffExpr(0, x[1, (8, 15)] => -1, z[1] => 1)
     @test newPath12.set == MOI.EqualTo(0.0)
+    # Force arc constraints :
+    # forceArcs[(2, (6, 15))] : x[2,(6, 15)] == 1
+    oldPath12 = constraint_object(model[:forceArcs][(2, (6, 15))])
+    @test oldPath12.func == AffExpr(0, x[2, (6, 15)] => 1)
+    @test oldPath12.set == MOI.EqualTo(1.0)
 end
 
 xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]
@@ -304,7 +306,7 @@ portFromDel0 = TTGraph.hashToIdx[hash(0, port_l.hash)]
             @test constraint_object(con).set == MOI.LessThan(0.0)
         end
     end
-    println(model[:packing])
+    # println(model[:packing])
     # packing[(9, 14)] : 25 x[3,(8, 11)] - 50 tau[(9, 14)] <= 0
     packing914 = constraint_object(model[:packing][(9, 14)])
     @test packing914.func == AffExpr(0, x[3, (8, 11)] => 25, tau[(9, 14)] => -50)
@@ -312,6 +314,7 @@ portFromDel0 = TTGraph.hashToIdx[hash(0, port_l.hash)]
     packing1015 = constraint_object(model[:packing][(10, 15)])
     @test packing1015.func ==
         AffExpr(0, x[1, (10, 13)] => 20, x[3, (10, 13)] => 25, tau[(10, 15)] => -50)
+    #   AffExpr(0, x[3, (10, 13)] => 25, tau[(10, 15)] => -50)
     # packing[(11, 16)] : 20 x[1,(9, 12)] + 25 x[3,(9, 12)] + 25 x[3,(10, 13)] - 50 tau[(11, 16)] <= 0
     packing1116 = constraint_object(model[:packing][(11, 16)])
     @test packing1116.func == AffExpr(
@@ -400,6 +403,7 @@ end
     @test length(model[:path][3]) == 15
     @test length(model[:oldPaths]) == 2
     @test length(model[:newPaths]) == 4
+    @test length(model[:forceArcs]) == 0
 end
 
 @testset "Cost filters" begin
@@ -442,7 +446,7 @@ portStep4 = TSGraph.hashToIdx[hash(4, port_l.hash)]
         Edge(xdockFromDel3, portFromDel2),
         collect(edges(TTGraph.graph))[end],
     ]
-    testV = [1.0e-5, 6.604, 1.0e-5, 6.604, 30.004, 5.0, 5.004, 5.0, 5.0, 5.00401]
+    testV = [1.0e-5, 6.604, 1.0e-5, 6.604, 30.004, 5.0, 5.004, 5.0, 5.0, 5.004]
     @testset "test V values $i" for i in eachindex(V)
         @test V[i] ≈ testV[i]
     end
@@ -469,26 +473,10 @@ portStep4 = TSGraph.hashToIdx[hash(4, port_l.hash)]
         collect(edges(TTGraph.graph))[end],
         collect(edges(TTGraph.graph))[end],
     ]
-    testV = [
-        1.0e-5,
-        6.604,
-        1.0e-5,
-        6.604,
-        30.004,
-        1.0e-5,
-        9.406,
-        24.006,
-        5.0,
-        7.0,
-        5.004,
-        7.006,
-        5.0,
-        7.0,
-        5.0,
-        7.0,
-        5.004,
-        7.00601,
-    ]
+    testV = vcat(
+        [1.0e-5, 6.604, 1.0e-5, 6.604, 30.004, 1.0e-5, 9.406, 24.006, 5.0, 7.0, 5.004],
+        [7.006, 5.0, 7.0, 5.0, 7.0, 5.004, 7.006],
+    )
     @testset "test value $i" for i in eachindex(V)
         @test V[i] ≈ testV[i]
     end
@@ -529,7 +517,7 @@ portStep4 = TSGraph.hashToIdx[hash(4, port_l.hash)]
     add_to_expression!(objExprTest, x[1, (xdockFromDel1, plantFromDel0)], 5.004)
     add_to_expression!(objExprTest, x[1, (xdockFromDel2, portFromDel1)], 5.0)
     add_to_expression!(objExprTest, x[1, (xdockFromDel3, portFromDel2)], 5.0)
-    add_to_expression!(objExprTest, x[1, (portFromDel1, plantFromDel0)], 5.004009999999999)
+    add_to_expression!(objExprTest, x[1, (portFromDel1, plantFromDel0)], 5.004)
     @test objective_function(model) == objExprTest
 end
 
@@ -553,14 +541,14 @@ end
     @test !has_start_value(model[:x][1, (supp1FromDel2, xdockFromDel1)])
     @test !has_start_value(model[:tau][(portStep4, plantStep1)])
     # Check warm without paths doesn't change anything for paths but not for tau
-    OFOND.warm_start_milp!(model, instance, relaxedSol)
+    OFOND.warm_start_milp!(model, :single_plant, instance, relaxedSol)
     @test !has_start_value(model[:x][1, (supp1FromDel2, plantFromDel0)])
     @test !has_start_value(model[:x][1, (supp1FromDel2, xdockFromDel1)])
     @test start_value(model[:tau][(portStep4, plantStep1)]) == 0.0
     # Check some start value are here for the path given
     sol.bundlePaths[1] = [supp1FromDel2, plantFromDel0]
     relaxedSol = OFOND.RelaxedSolution(sol, instance, [bundle1])
-    OFOND.warm_start_milp!(model, instance, relaxedSol)
+    OFOND.warm_start_milp!(model, :single_plant, instance, relaxedSol)
     @test !has_start_value(model[:x][1, (supp1FromDel3, supp1FromDel2)])
     @test start_value(model[:x][1, (supp1FromDel2, plantFromDel0)]) == 1.0
     @test !has_start_value(model[:x][1, (supp1FromDel2, xdockFromDel1)])
@@ -568,6 +556,13 @@ end
     @testset "tau start value" for (src, dst) in TSGraph.commonArcs
         @test start_value(model[:tau][(src, dst)]) == 0.0
     end
+    # Check some start value are here for the path given
+    # sol.bundlePaths[1] = [xdockFromDel1, plantFromDel0]
+    # relaxedSol = OFOND.RelaxedSolution(sol, instance, [bundle1])
+    # OFOND.warm_start_milp!(model, :two_node, instance, relaxedSol)
+    # @test !has_start_value(model[:x][1, (supp1FromDel3, supp1FromDel2)])
+    # @test start_value(model[:x][1, (xdockFromDel1, plantFromDel0)]) == 1.0
+    # @test !has_start_value(model[:x][1, (supp1FromDel2, xdockFromDel1)])
 end
 
 @testset "Extracting paths" begin
@@ -585,6 +580,8 @@ end
     @test OFOND.get_path_from_arcs(bundle1, TTGraph, pathArcs) == [3, 4, 8, 15]
     pathArcs = [Edge(8, 15), Edge(6, 3), Edge(3, 12), Edge(12, 8)]
     @test OFOND.get_path_from_arcs(bundle2, TTGraph, pathArcs) == [6, 3, 12, 8, 15]
+    pathArcs = [Edge(8, 11), Edge(5, 3), Edge(3, 12), Edge(12, 8)]
+    @test OFOND.get_path_from_arcs(bundle2, TTGraph, pathArcs) == [5, 3, 12, 8, 11]
     # get_paths for a dummy model 
     model = Model(HiGHS.Optimizer)
     relaxedSol = OFOND.RelaxedSolution(sol, instance, bundles)
@@ -655,7 +652,9 @@ OFOND.update_solution!(sol, instance, bundles, paths)
     @test src == -1
     @test dst == -1
     @test bunIdxs == [1, 2, 3]
-    src, dst, bunIdxs = OFOND.get_neighborhood_node_and_bundles(:two_node, instance, sol)
+    src, dst, bunIdxs = OFOND.get_neighborhood_node_and_bundles(
+        :two_shared_node, instance, sol
+    )
     @test src == xdockFromDel1
     @test dst == plantFromDel0
     @test bunIdxs == [1]
@@ -676,7 +675,7 @@ end
     @test OFOND.get_lns_paths_to_update(:single_plant, sol, [bundle1], -1, -1) ==
         [[supp1FromDel2, xdockFromDel1, plantFromDel0]]
     @test OFOND.get_lns_paths_to_update(
-        :two_node, sol, [bundle1], xdockFromDel1, plantFromDel0
+        :two_shared_node, sol, [bundle1], xdockFromDel1, plantFromDel0
     ) == [[xdockFromDel1, plantFromDel0]]
     @test OFOND.get_lns_paths_to_update(
         :attract, sol, [bundle1], xdockFromDel1, plantFromDel0

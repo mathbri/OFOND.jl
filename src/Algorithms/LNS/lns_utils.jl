@@ -6,6 +6,8 @@
 #         Compute the updated unit cost : unit cost = unit_capacity * volume_cost
 # Use this new costs in all the other heuristics
 
+# TODO : break into two files, lns_milp and lns_utils
+
 function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::Solution)
     for arc in edges(timeSpaceGraph.graph)
         arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
@@ -66,7 +68,7 @@ function get_e_matrix(
             J = repeat([src, dst]; inner=length(bundleIdxs))
         end
     end
-    return sparse(I, J, V)
+    return sparse(I, J, V, maximum(bundleIdxs), nv(TTGraph.graph))
 end
 
 # TODO : check with the warning in get paths that the elementerity of paths is ok
@@ -155,16 +157,22 @@ function add_old_new_path_constraints!(
 )
     x, z = model[:x], model[:z]
     oldPathIndex, newPathIndex = Tuple{Int,Tuple{Int,Int}}[], Tuple{Int,Tuple{Int,Int}}[]
+    forceArcIndex = Tuple{Int,Tuple{Int,Int}}[]
     for (bundle, oldPath, newPath) in zip(bundles, oldPaths, newPaths)
-        append!(oldPathIndex, [(bundle.idx, arc) for arc in partition(oldPath, 2, 1)])
-        # If old path = new path, constraints makes model infeasible
-        # Adding only one of them imposes that the common path is taken
-        if oldPath != newPath
-            append!(newPathIndex, [(bundle.idx, arc) for arc in partition(newPath, 2, 1)])
-        end
+        # For every arc common in both paths, constraints will make it infeasible 
+        oldArcs = collect(partition(oldPath, 2, 1))
+        newArcs = collect(partition(newPath, 2, 1))
+        commonArcs = intersect(oldArcs, newArcs)
+        filter!(arc -> !(arc in commonArcs), oldArcs)
+        filter!(arc -> !(arc in commonArcs), newArcs)
+        # Adding arcs in each set
+        append!(oldPathIndex, [(bundle.idx, arc) for arc in oldArcs])
+        append!(newPathIndex, [(bundle.idx, arc) for arc in newArcs])
+        append!(forceArcIndex, [(bundle.idx, arc) for arc in commonArcs])
     end
     @constraint(model, oldPaths[(b, a) in oldPathIndex], 1 - z[b] == x[b, a])
     @constraint(model, newPaths[(b, a) in newPathIndex], z[b] == x[b, a])
+    @constraint(model, forceArcs[(b, a) in forceArcIndex], x[b, a] == 1)
 end
 
 # Initialize the packing expression as sparse matrix with space used and tau variables
@@ -229,10 +237,7 @@ function add_constraints!(
     add_path_constraints!(model, TTGraph, startSol.bundleIdxs, e)
     bundles = instance.bundles[startSol.bundleIdxs]
     if neighborhood == :attract || neighborhood == :reduce
-        println("Neighborhood : $(neighborhood)")
-        println("Start paths : $(startSol.bundlePaths)")
         newPaths = generate_new_paths(neighborhood, instance, solution, bundles, src, dst)
-        println("Proposed paths : $(newPaths)")
         add_old_new_path_constraints!(model, bundles, startSol.bundlePaths, newPaths)
     end
     # Relaxed packing constraint on the time space graph
@@ -289,11 +294,7 @@ function milp_travel_time_arc_cost(
             push!(V, arcCost)
         end
     end
-    # Adding Eps value at the bottom right corner to get a matrix with the correct size
-    push!(I, maximum(idx(bundles)))
-    push!(J, ne(TTGraph.graph))
-    push!(V, EPS)
-    return sparse(I, J, V)
+    return sparse(I, J, V, maximum(idx(bundles)), ne(TTGraph.graph))
 end
 
 # Sums the current cost of shared timed arcs and pre-computed surect and outsource arcs
@@ -322,13 +323,18 @@ end
 
 # Warm start the milp with the current solution
 # By default variables, not given are put to 0 which can render the warm start useless
-function warm_start_milp!(model::Model, instance::Instance, startSol::RelaxedSolution)
+function warm_start_milp!(
+    model::Model, neighborhood::Symbol, instance::Instance, startSol::RelaxedSolution
+)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     for (bundleIdx, bundlePath) in zip(startSol.bundleIdxs, startSol.bundlePaths)
         length(bundlePath) == 0 && continue
-        completedPath = vcat(
-            get_shortcut_part(TTGraph, bundleIdx, bundlePath[1]), bundlePath
-        )
+        # For tw_node neighborhood, no need to asjust with shortcut arcs
+        completedPath = if neighborhood == :two_shared_node
+            bundlePath
+        else
+            vcat(get_shortcut_part(TTGraph, bundleIdx, bundlePath[1]), bundlePath)
+        end
         for (src, dst) in partition(completedPath, 2, 1)
             set_start_value(model[:x][bundleIdx, (src, dst)], 1)
         end
@@ -388,9 +394,22 @@ function get_path_from_arcs(
     bundle::Bundle, TTGraph::TravelTimeGraph, pathArcs::Vector{Edge{Int}}
 )
     # constructing actual path
+    # TODO : with two_shared_node neighborhood, no arc starting at bundleSrc !
     idxFirst = findfirst(a -> src(a) == TTGraph.bundleSrc[bundle.idx], pathArcs)
+    lastNode = TTGraph.bundleDst[bundle.idx]
+    # Quick fix for two_shared_node
+    if isnothing(idxFirst)
+        sources = [src(a) for a in pathArcs]
+        dests = [dst(a) for a in pathArcs]
+        # The first arc is the one with its source not in destinations (no arc goes to it)
+        loneSrc = setdiff(sources, dests)[1]
+        idxFirst = findfirst(a -> src(a) == loneSrc, pathArcs)
+        # The opposite for the last node
+        loneDst = setdiff(dests, sources)[1]
+        lastNode = loneDst
+    end
     path = [src(pathArcs[idxFirst]), dst(pathArcs[idxFirst])]
-    while path[end] != TTGraph.bundleDst[bundle.idx]
+    while path[end] != lastNode
         nextEdge = findfirst(a -> src(a) == path[end], pathArcs)
         push!(path, dst(pathArcs[nextEdge]))
     end
@@ -487,7 +506,7 @@ function get_lns_paths_to_update(
     node1::Int,
     node2::Int,
 )
-    if neighborhood == :two_node && node1 != -1 && node2 != -1
+    if neighborhood == :two_shared_node && node1 != -1 && node2 != -1
         return get_paths_to_update(solution, bundles, node1, node2)
     else
         return solution.bundlePaths[idx(bundles)]

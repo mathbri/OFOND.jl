@@ -51,6 +51,7 @@ end
 
 function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
     # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
+    length(bins) == 0 && return 0
     ceil(sum(bin.load for bin in bins) / fullCapacity) == length(bins) && return 0
     # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
     allCommodities = get_all_commodities(bins)

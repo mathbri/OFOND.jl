@@ -11,6 +11,8 @@ using Random
 using JuMP
 using HiGHS
 using SparseArrays
+# using Flux
+# using InferOpt
 
 # Project files
 
@@ -29,6 +31,7 @@ include("Structures/projectors.jl")
 include("Structures/struct_utils.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
+include("Structures/RelaxedSolution.jl")
 
 # Import and Export of data
 include("Reading/read_instance.jl")
@@ -50,17 +53,8 @@ include("Algorithms/lower_bound.jl")
 # Local search heuristic
 include("Algorithms/Utils/ls_utils.jl")
 include("Algorithms/local_search.jl")
-
-# TODO : before handing over the package, create a branch on which :
-# - all lns files are deleted
-# - docs are done for exported functions
-# - unimplemented functions are removed (parrallel stuff on things like that)
-
 # Large Neighborhood Search
 include("Algorithms/LNS/lns_utils.jl")
-# include("Algorithms/LNS/two_node.jl")
-# include("Algorithms/LNS/attract_reduce.jl")
-# include("Algorithms/LNS/single_plant.jl")
 include("Algorithms/LNS/lns.jl")
 
 include("run.jl")
@@ -77,7 +71,8 @@ export add_properties, tentative_first_fit, extract_sub_instance, extract_sub_so
 export shortest_delivery_heuristic, average_delivery_heuristic
 export greedy_heuristic
 export local_search_heuristic, greedy_then_ls_heuristic
-export lower_bound_heuristic
+export lower_bound_heuristic, greedy_or_lb_then_ls_heuristic
+export perturbate!, LNS!
 # export lns_heuristic
 export write_solution
 export julia_main
