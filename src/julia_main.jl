@@ -110,7 +110,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
             exportDir = ARGS[6]
         else
             @warn "Sixth argument (export directory) is not a directory, switching to default" :directory_given = ARGS[6] :default =
-                directory
+                exportDir
         end
     end
     # length(ARGS) >= 6 && isdir(directory) && (directory = ARGS[6])
