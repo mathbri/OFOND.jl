@@ -121,3 +121,42 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
     @info "Final results" :solve_time = solveTime :feasible = feasible :total_cost =
         return instance, solution
 end
+
+function local_search_heuristic!(solution::Solution, instance::Instance; timeLimit::Int)
+    @info "Running Local Search heuristic"
+    # Initialize start time
+    startTime = time()
+
+    improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+    while get_elapsed_time(startTime) < timeLimit && improvement > 1
+        improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+    end
+
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instance, solution)
+    solCost = compute_cost(instance, solution)
+    # detect_infeasibility(instance, solution)
+    println()
+    @info "Final results" :solve_time = solveTime :feasible = feasible :total_cost = solCost
+    return println()
+end
+
+function lns_heuristic!(solution::Solution, instance::Instance; timeLimit::Int)
+    @info "Running Large Neighborhood Search heuristic"
+    # Initialize start time
+    startTime = time()
+
+    # TODO : add a mechanism to periodically reset costs ?
+    improvement = LNS!(solution, instance; timeLimit=timeLimit, resetCost=true)
+    while get_elapsed_time(startTime) < timeLimit && improvement > 1
+        improvement = LNS!(solution, instance; timeLimit=timeLimit)
+    end
+
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instance, solution)
+    solCost = compute_cost(instance, solution)
+    # detect_infeasibility(instance, solution)
+    println()
+    @info "Final results" :solve_time = solveTime :feasible = feasible :total_cost = solCost
+    return println()
+end

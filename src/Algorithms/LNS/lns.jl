@@ -29,7 +29,7 @@ function solve_lns_milp(
     end
     add_constraints!(model, neighborhood, instance, solution, startSol, src, dst)
     if verbose
-        nConPath = length(startSol.bundleIdxs) * nv(instance.travelTimeGraph.graph)
+        nConPath = length(model[:path])
         nConOldNew = 0
         if neighborhood == :attract || neighborhood == :reduce
             nConOldNew =
@@ -38,16 +38,17 @@ function solve_lns_milp(
                 length(model[:forceArcs])
         end
         nConTot = num_constraints(model; count_variable_in_set_constraints=false)
-        nConPack = nConTot - nConPath - nConOldNew
+        nConPack = length(model[:packing])
         @info "$neighborhood MILP : Added $nConTot constraints" :paths = nConPath :oldnew =
             nConOldNew :packing = nConPack
     end
     add_objective!(model, instance, startSol)
     # If warm start option, doing it 
     # TODO : find a way to activate warm start for two node neighborhood
-    warmStart &&
-        (neighborhood != :two_shared_node) &&
-        warm_start_milp!(model, neighborhood, instance, startSol)
+    if warmStart && neighborhood != :two_shared_node
+        edgeIndex = create_edge_index(instance.travelTimeGraph)
+        warm_start_milp!(model, neighborhood, instance, startSol, edgeIndex)
+    end
     # warmStart && warm_start_milp_test(model, instance, startSol)
     # Solving model
     set_optimizer_attribute(model, "mip_rel_gap", 0.05)
@@ -55,7 +56,7 @@ function solve_lns_milp(
     !verbose && set_silent(model)
     optimize!(model)
     # TODO : change assertion to error handling to not crash the app at running time ?
-    @assert is_solved_and_feasible(model)
+    @assert has_values(model)
     # Getting the solution paths and returning it
     return get_paths(model, instance, startSol)
 end
@@ -68,8 +69,12 @@ function perturbate!(
     costThreshold::Float64;
     verbose::Bool=false,
     inTest::Bool=false,
-)
+)::Tuple{Float64,Vector{Int},Vector{Vector{Int}}}
     verbose && println("\nStarting perturbation with neighborhood $neighborhood")
+
+    # Too many nodes and bundles selected lead to not enough improvement possible
+    # need to loop all nodes and bundles possible for a type of neighborhood ?
+
     # Select bundles and node(s) to use depending on the neighborhood chosen
     src, dst, pertBundleIdxs = get_neighborhood_node_and_bundles(
         neighborhood, instance, solution
@@ -80,6 +85,20 @@ function perturbate!(
                 neighborhood, instance, solution
             )
         end
+    else
+        if neighborhood == :single_plant
+            src, dst, pertBundleIdxs = select_random_plant(
+                instance, solution, costThreshold
+            )
+        elseif neighborhood == :two_shared_node
+            src, dst, pertBundleIdxs = select_random_two_node(
+                instance, solution, costThreshold
+            )
+        else
+            src, dst, pertBundleIdxs = select_random_common_arc(
+                neighborhood, instance, solution, costThreshold
+            )
+        end
     end
     verbose && println("Nodes : $src-$dst, Bundles : $pertBundleIdxs")
 
@@ -87,7 +106,7 @@ function perturbate!(
     pertBundles = instance.bundles[pertBundleIdxs]
     oldPaths = get_lns_paths_to_update(neighborhood, solution, pertBundles, src, dst)
     fullOldPaths = solution.bundlePaths[pertBundleIdxs]
-    verbose && println("Old paths : $oldPaths")
+    # verbose && println("Old paths : $oldPaths")
 
     # The filtering could also occur in terms of cost removed : it must be above a certain threshold
     estimRemCost = sum(
@@ -114,10 +133,18 @@ function perturbate!(
     verbose && println("Cost removed : $costRemoved")
 
     # Apply lns milp to get new paths
+    # TODO : this line has runtime dispatch
     pertPaths = solve_lns_milp(
-        instance, solution, startSol, neighborhood; src=src, dst=dst, verbose=verbose
+        instance,
+        solution,
+        startSol,
+        neighborhood;
+        src=src,
+        dst=dst,
+        verbose=verbose,
+        warmStart=false,
     )
-    verbose && println("New paths : $pertPaths")
+    # verbose && println("New paths : $pertPaths")
 
     # Update solution (randomized order ?) 
     updateCost = update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
@@ -144,6 +171,8 @@ function perturbate!(
         end
         return updateCost + costRemoved, Int[], [Int[]]
     else
+        println("Update accpeted")
+        println("Improvement : $(updateCost + costRemoved)")
         return updateCost + costRemoved, pertBundleIdxs, fullOldPaths
     end
 end
@@ -158,14 +187,21 @@ end
 # TODO : Analyze this mechanism the same way as the other heuristics 
 
 # Combine the large perturbations and the small neighborhoods
-function LNS!(solution::Solution, instance::Instance; timeLimit::Int=1200)
+function LNS!(
+    solution::Solution, instance::Instance; timeLimit::Int=1200, resetCost::Bool=false
+)
     startCost = compute_cost(instance, solution)
-    threshold = 1e-4 * startCost
+    threshold = 5e-3 * startCost
     println("\n")
     @info "Starting LNS step" :start_cost = startCost :threshold = threshold
     totalImprovement = 0.0
     startTime = time()
     # Slope scaling cost update  
+    if resetCost
+        slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
+    else
+        slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
+    end
     slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
     # Apply perturbations in random order
     for neighborhood in shuffle(PERTURBATIONS)
