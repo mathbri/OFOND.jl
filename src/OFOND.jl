@@ -11,8 +11,8 @@ using Random
 using JuMP
 using HiGHS
 using SparseArrays
-# using Flux
-# using InferOpt
+using Flux
+using InferOpt
 
 # Project files
 
@@ -72,7 +72,7 @@ export shortest_delivery_heuristic, average_delivery_heuristic
 export greedy_heuristic
 export local_search_heuristic, greedy_then_ls_heuristic
 export lower_bound_heuristic, greedy_or_lb_then_ls_heuristic
-export perturbate!, LNS!
+export perturbate!, LNS!, slope_scaling_cost_update!, local_search!
 # export lns_heuristic
 export write_solution
 export julia_main
