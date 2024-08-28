@@ -3,7 +3,7 @@
 using Pkg
 
 # Adding the package from the git repository
-Pkg.add(; url="https://github.com/mathbri/OFOND.jl")
+Pkg.add(; url="https://github.com/mathbri/OFOND.jl", rev="VO-dataiku")
 # The repository needs to be public to do this
 
 using OFOND
