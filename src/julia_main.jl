@@ -103,19 +103,19 @@ function julia_main()::Cint
     clean_empty_bins!(finalSolution, instanceSub)
 
     # export only for the full instance
-    directory = joinpath(dirname(@__DIR__), "scripts", "export")
+    exportDir = joinpath(dirname(@__DIR__), "scripts", "export")
     if length(ARGS) >= 6
         if isdir(ARGS[6])
-            directory = ARGS[6]
+            exportDir = ARGS[6]
         else
             @warn "Sixth argument (export directory) is not a directory, switching to default" :directory_given = ARGS[6] :default =
                 directory
         end
     end
     # length(ARGS) >= 6 && isdir(directory) && (directory = ARGS[6])
-    println("Exporting data to $directory")
-    write_solution(finalSolution, instanceSub; suffix="proposed", directory=dirname)
-    write_soluton(solutionSub_C, instanceSub; suffix="current", directory=dirname)
+    println("Exporting data to $exportDir")
+    write_solution(finalSolution, instanceSub; suffix="proposed", directory=exportDir)
+    write_soluton(solutionSub_C, instanceSub; suffix="current", directory=exportDir)
 
     return 0 # if things finished successfully
 end
