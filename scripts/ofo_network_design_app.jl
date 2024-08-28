@@ -2,8 +2,12 @@
 
 using Pkg
 
+println("Removing current OFOND version")
+Pkg.rm("OFOND")
+
 # Adding the package from the git repository
-Pkg.add(; url="https://github.com/mathbri/OFOND.jl", rev="VO-dataiku")
+println("Installing V0-dataiku version of OFOND")
+Pkg.add(; url="https://github.com/mathbri/OFOND.jl", rev="V0-dataiku")
 # The repository needs to be public to do this
 
 using OFOND
