@@ -103,19 +103,19 @@ function write_solution(
 )
     @info "Writing solution to CSV files (suffix: $suffix, directory: $directory)"
     # network design file 
-    open("$directory\\network_design_$suffix.csv", "w") do io
+    open(joinpath(directory, "network_design_$suffix.csv"), "w") do io
         join(io, NETWORK_DESIGN_COLUMNS, ",", "\n")
         write_network_design(io, solution, instance)
     end
     @info "Network design file done"
     # shipment info file
-    open("$directory\\shipment_info_$suffix.csv", "w") do io
+    open(joinpath(directory, "shipment_info_$suffix.csv"), "w") do io
         join(io, SHIPMENT_INFO_COLUMNS, ",", "\n")
         write_shipment_info(io, solution, instance)
     end
     @info "Shipment info file done"
     # shipment content file
-    open("$directory\\shipment_content_$suffix.csv", "w") do io
+    open(joinpath(directory, "shipment_content_$suffix.csv"), "w") do io
         join(io, SHIPMENT_CONTENT_COLUMNS, ",", "\n")
         write_shipment_content(io, solution, instance)
     end
