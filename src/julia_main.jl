@@ -116,7 +116,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     # length(ARGS) >= 6 && isdir(directory) && (directory = ARGS[6])
     println("Exporting data to $exportDir")
     write_solution(finalSolution, instanceSub; suffix="proposed", directory=exportDir)
-    write_soluton(solutionSub_C, instanceSub; suffix="current", directory=exportDir)
+    write_solution(solutionSub_C, instanceSub; suffix="current", directory=exportDir)
 
     return 0 # if things finished successfully
 end
