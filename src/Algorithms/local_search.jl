@@ -78,6 +78,35 @@ end
 # But if the bin packing improvement neighborhood change the bin filling, this order no longer makes sense
 # So need to remove it if the bin pack found better solution
 
+function revert_solution!(
+    solution::Solution,
+    instance::Instance,
+    bundles::Vector{Bundle},
+    oldPaths::Vector{Vector{Int}},
+    oldBins::SparseMatrixCSC{Vector{Bin},Int},
+    newPaths::Vector{Vector{Int}}=[Int[]],
+)
+    if length(newPaths[1]) > 0
+        update_solution!(solution, instance, bundles, newPaths; remove=true)
+    end
+    update_solution!(solution, instance, bundles, oldPaths; skipRefill=true)
+    return revert_bins!(solution, oldBins)
+    # More efficient solution but some cost increase
+    # update_solution!(solution, instance, twoNodeBundles, newPaths; remove=true)
+    # updateCost = update_solution!(
+    #     solution, instance, twoNodeBundles, oldPaths; sorted=sorted
+    # )
+    # if updateCost + costRemoved > 1e3
+    #     binsUpdated = get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
+    #     refillCostChange = refill_bins!(solution, TSGraph, binsUpdated)
+    #     if updateCost + costRemoved + refillCostChange > 1e3
+    #         println()
+    #         @warn "Two Node Incremental : Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
+    #     end
+    #     return updateCost + costRemoved + refillCostChange
+    # end
+end
+
 # Removing and inserting back the bundle in the solution.
 # If the operation did not lead to a cost improvement, reverting back to the former state of the solution.
 function bundle_reintroduction!(
@@ -89,31 +118,17 @@ function bundle_reintroduction!(
     current_cost::Bool=false,
     costThreshold::Float64=EPS,
 )::Float64
-    # compute greedy insertion and lower bound insertion and take the best one ?
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     oldPath = solution.bundlePaths[bundle.idx]
     # The filtering could also occur in terms of cost removed : it must be above a certain threshold
     bundle_estimated_removal_cost(bundle, oldPath, instance, solution) <= costThreshold &&
         return 0.0
-    # Removing bundle 
-    costRemoved = update_solution!(solution, instance, bundle, oldPath; remove=true)
 
-    # TODO : this check can be done before actually modifying the current solution to be more efficient
-    # TODO : if I change from outsource to direct, I probably can remove only linear cost, add bin costs and still be winning ? To test
-    # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
-    # pathsLinearCost = bundle_path_linear_cost(bundle, oldPath, TTGraph)
-    # if costRemoved + pathsLinearCost >= -EPS
-    #     updateCost = update_solution!(solution, instance, bundle, oldPath; sorted=sorted)
-    #     if updateCost + costRemoved > 1e4
-    #         refillCostChange = refill_bins!(solution, TTGraph, TSGraph, bundle, oldPath)
-    #         if updateCost + costRemoved + refillCostChange > 1e4
-    #             println()
-    #             @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) for $bundle (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
-    #         end
-    #         return updateCost + costRemoved + refillCostChange
-    #     end
-    #     return updateCost + costRemoved
-    # end
+    # Saving previous bins and removing bundle
+    oldBins = save_previous_bins(
+        solution, get_bins_updated(TSGraph, TTGraph, [bundle], [oldPath])
+    )
+    costRemoved = update_solution!(solution, instance, bundle, oldPath; remove=true)
 
     # Inserting it back
     suppNode = TTGraph.bundleSrc[bundle.idx]
@@ -129,38 +144,17 @@ function bundle_reintroduction!(
         sorted=sorted,
         current_cost=current_cost,
     )
+
     # Updating path if it improves the cost (accounting for EPS cost on arcs)
     if pathCost + costRemoved < -1e-3
         # Adding to solution
-        updateCost = update_solution!(solution, instance, bundle, newPath; sorted=sorted)
-        # verification
-        # @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $newPath \n bundleIdx : $bundleIdx"
+        update_solution!(solution, instance, bundle, newPath; sorted=sorted)
         return pathCost + costRemoved
     else
-        updateCost = update_solution!(solution, instance, bundle, oldPath; sorted=sorted)
-        if updateCost + costRemoved > 1e4
-            refillCostChange = refill_bins!(solution, TTGraph, TSGraph, bundle, oldPath)
-            if updateCost + costRemoved + refillCostChange > 1e4
-                println()
-                @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) for $bundle (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
-            end
-            return updateCost + costRemoved + refillCostChange
-        end
-        return updateCost + costRemoved
+        revert_solution!(solution, instance, [bundle], [oldPath], oldBins)
+        return 0.0
     end
 end
-
-# TODO : do Oscar's trick for memory efficient computation
-# Define solution2 (or lbSol) outside of the function, modify them both in the function 
-# and permute the return to choose the best, the other being the one not needed 
-# ie return (sol, sol2) or (sol2, sol)
-# is it really applicable here as we have to start from the same solution ?
-# not exactly as we have to make them both equal at the end of the neighborhood function 
-# but just need to create this function that make them equal and we can avoid allocating memory for all the old paths and bins
-# this trick could be used also for the other neighborhoods
-
-# Each function call would need to deepcopy the current solution 
-# Maybe defining your own deep copy by initializing a solution and updating it would be more efficicient ?
 
 # Remove and insert back all bundles flowing from src to dst 
 function two_node_incremental!(
@@ -186,26 +180,25 @@ function two_node_incremental!(
         (bundle, path) in zip(twoNodeBundles, oldPaths)
     ) <= costThreshold && return 0.0
 
-    # Removing bundle 
+    # Saving previous bins and removing bundle 
+    oldBins = save_previous_bins(
+        solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
+    )
     costRemoved = update_solution!(
         solution, instance, twoNodeBundles, oldPaths; remove=true
     )
 
-    # TODO : by changing the number of common nodes, I can change the cost and not the number of bins 
-    # To test whether this impedes a lot the perf
-    # If the cost removed only amouts to the linear part of the cost, no chance of improving, at best the same cost
+    # If the cost removed only amouts to the linear part of the cost, improvements are too small compared to the computational cost
     pathsLinearCost = sum(
         bundle_path_linear_cost(bundle, path, TTGraph) for
         (bundle, path) in zip(twoNodeBundles, oldPaths)
     )
     if costRemoved + pathsLinearCost >= -EPS
-        updateCost = update_solution!(
-            solution, instance, twoNodeBundles, oldPaths; sorted=sorted
-        )
-        updateCost + costRemoved > 1e4 &&
-            @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved)) for $twoNodeBundles between $src and $dst (removed $(round(costRemoved)) and added cost $(round(updateCost)))"
-        return updateCost + costRemoved
+        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
+        return 0.0
     end
+
+    # TODO : try adding all on the same path 
     # Inserting it back
     addedCost = 0.0
     # sortedBundleIdxs = sortperm(twoNodeBundles; by=bun -> bun.maxPackSize, rev=true)
@@ -228,32 +221,15 @@ function two_node_incremental!(
         addedCost += update_solution!(solution, instance, bundle, newPath; sorted=sorted)
         newPaths[bundleIdx] = newPath
     end
+
     # Solution already updated so if it didn't improve, reverting to old state
     if addedCost + costRemoved > -1e-3
-        # solution is already updated so needs to remove bundle on nodes again
-        # TODO : they were the last ones so maybe no refilling and just empty bins cleaning ? but need to count the cost removed
-        # TODO : same as bundle reintroduction, 100 000 to gain from removing those cost increase at refilling
-        update_solution!(solution, instance, twoNodeBundles, newPaths; remove=true)
-        updateCost = update_solution!(
-            solution, instance, twoNodeBundles, oldPaths; sorted=sorted
-        )
-        if updateCost + costRemoved > 1e4
-            binsUpdated = get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
-            refillCostChange = refill_bins!(solution, TSGraph, binsUpdated)
-            if updateCost + costRemoved + refillCostChange > 1e4
-                println()
-                @warn "Two Node Incremental : Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
-            end
-            return updateCost + costRemoved + refillCostChange
-        end
-        return updateCost + costRemoved
+        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
+        return 0.0
     else
         return addedCost + costRemoved
     end
 end
-
-# TODO : by putting all bundles between two nodes on the same path, we have another way to reintroduce them
-# Doign it before the incremental ?
 
 # TODO : things that could be done also is to reintroduce bundles, than two node same path than reintroduce bundles
 # than two node oncremental than bin pack improv
@@ -275,6 +251,11 @@ function local_search!(
     percentIdx = ceil(Int, length(bundleIdxs) / 100)
     threshold = 5e-5 * startCost
     CAPACITIES = Int[]
+    # Two node gains things but takes a lot of time
+    # Do multiple bundle reintroduction and then two node incremental : not very efficient
+    # loopImprovement = -1e4
+    # while time() - startTime < timeLimit && loopImprovement < -1e3
+    #     loopImprovement = 0.0
     for (i, bundleIdx) in enumerate(bundleIdxs)
         bundle = instance.bundles[bundleIdx]
         improvement = bundle_reintroduction!(
@@ -282,10 +263,13 @@ function local_search!(
         )
         i % 10 == 0 && print("|")
         i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
+        # loopImprovement += improvement
         totalImprovement += improvement
         improvement < -1e-3 && (bunCounter += 1)
-        round((time() - startTime) * 1000) / 1000 > timeLimit && break
+        time() - startTime > timeLimit && break
     end
+    #     println()
+    # end
     println()
     @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
         totalImprovement :time = round((time() - startTime) * 1000) / 1000
@@ -296,7 +280,7 @@ function local_search!(
         twoNodeCounter = 0
         plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
         two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
-        filter
+        # threshold = 1e-4 * startCost
         i = 0
         percentIdx = ceil(Int, length(two_node_nodes) * length(TTGraph.commonNodes) / 100)
         barIdx = ceil(Int, percentIdx / 5)
@@ -333,7 +317,6 @@ function local_search!(
     @info "Bin packing improvement" :improvement = improvement :time =
         round((time() - startTime) * 1000) / 1000
     totalImprovement += improvement
-    totalImprovement < -1e-3 &&
-        @info "Total local serach improvement" :improvement = totalImprovement
+    @info "Full local search step done" :total_improvement = totalImprovement
     return totalImprovement
 end

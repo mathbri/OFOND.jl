@@ -235,7 +235,7 @@ function compute_arc_cost(
 )::Float64
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
-    arcVolume = sum(bin.load for bin in bins)
+    arcVolume = sum(bin.load for bin in bins; init=0)
     arcLeadTimeCost = sum(stock_cost(bin) for bin in bins; init=0.0)
     # Node cost 
     cost =
@@ -253,14 +253,18 @@ end
 # Compute the cost of a solution : node cost + arc cost + commodity cost
 function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
     totalCost = 0.0
-    for arc in edges(instance.timeSpaceGraph.graph)
-        arcBins = solution.bins[src(arc), dst(arc)]
-        # If there is no bins, skipping arc
-        length(arcBins) == 0 && continue
-        # Arc cost
-        totalCost += compute_arc_cost(
-            instance.timeSpaceGraph, arcBins, src(arc), dst(arc); current_cost=current_cost
-        )
+    # Iterate over sparse matrix
+    rows = rowvals(solution.bins)
+    vals = nonzeros(solution.bins)
+    for j in 1:size(solution.bins, 2)
+        for idx in nzrange(solution.bins, j)
+            i = rows[idx]
+            arcBins = vals[idx]
+            # Arc cost
+            totalCost += compute_arc_cost(
+                instance.timeSpaceGraph, arcBins, i, j; current_cost=current_cost
+            )
+        end
     end
     return totalCost
 end

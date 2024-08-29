@@ -33,9 +33,8 @@ function compute_new_bins(
     return newBins
 end
 
-# TODO : has this function a real utility now ?
 # Store previous bins before removing commodities from them
-function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int};)
+function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int})
     I, J, _ = findnz(workingArcs)
     oldBins = Vector{Vector{Bin}}(undef, length(I))
     # Efficient iteration over sparse matrices
@@ -44,13 +43,12 @@ function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Boo
         for srcIdx in nzrange(workingArcs, timedDst)
             timedSrc = rows[srcIdx]
             # Storing old bins
-            oldBins[srcIdx] = deepcopy(solution.bins[timedSrc, timedDst])
+            oldBins[srcIdx] = my_deepcopy(solution.bins[timedSrc, timedDst])
         end
     end
     return sparse(I, J, oldBins)
 end
 
-# TODO : this too
 # Revert the bin loading the the vector of bins given
 function revert_bins!(solution::Solution, previousBins::SparseMatrixCSC{Vector{Bin},Int})
     # Efficient iteration over sparse matrices
@@ -151,11 +149,13 @@ function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
     src == dst && return false
     # Cannot go back in time
     TTGraph.stepToDel[src] < TTGraph.stepToDel[dst] && return false
-    # Come from analysis of actual improvement 
+    # Come from analysis of actual improvement
+    # TODO : analysis to be done again for sure
     TTGraph.networkNodes[dst].type != :xdock && TTGraph.stepToDel[dst] > 0 && return false
     # just one arc between ports
     is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
-    return true
+    # need to have existing path
+    return has_path(TTGraph.graph, src, dst)
 end
 
 # Selecting two nodes for two node incremental

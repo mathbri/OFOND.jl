@@ -43,6 +43,16 @@ function add!(bin::Bin, commodity::Commodity)
     return false
 end
 
+function add!(bin::Bin, commodities::Vector{Commodity})
+    if bin.capacity >= sum(commodity.size for commodity in commodities; init=0)
+        append!(bin.content, commodities)
+        bin.capacity -= sum(commodity.size for commodity in commodities; init=0)
+        bin.load += sum(commodity.size for commodity in commodities; init=0)
+        return true
+    end
+    return false
+end
+
 function remove!(bin::Bin, commodity::Commodity)
     fullCapa, contentLength = bin.capacity + bin.load, length(bin.content)
     filter!(com -> com != commodity, bin.content)
@@ -90,4 +100,14 @@ end
 
 function Base.zero(::Type{Vector{Bin}})
     return Bin[]
+end
+
+# TODO
+# No more runtime dispatch but still quite a lot of garbage collecting 
+function my_deepcopy(bins::Vector{Bin})
+    newBins = [Bin(bin.capacity + bin.load) for bin in bins]
+    for (idx, bin) in enumerate(bins)
+        add!(newBins[idx], bin.content) || throw(ErrorException("Couldn't deepcopy"))
+    end
+    return newBins
 end
