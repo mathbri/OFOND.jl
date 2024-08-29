@@ -46,7 +46,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     return NetworkArc(
         arcType,
         row.distance,
-        floor(Int, row.travel_time),
+        floor(Int, row.travel_time + 0.5),
         isCommon,
         row.shipment_cost,
         row.is_linear,
@@ -61,11 +61,17 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
     csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
     @info "Reading legs from CSV file $(basename(leg_file)) ($(length(csv_reader)) lines)"
+    sameSrcDst = 0
     for row in csv_reader
         src, dst = src_dst_hash(row)
+        if src == dst
+            sameSrcDst += 1
+            continue
+        end
         arc = read_leg!(counts, row, is_common_arc(row))
         add_arc!(network, src, dst, arc)
     end
+    sameSrcDst > 0 && @warn "Ignored $(sameSrcDst) legs with same src and dst"
     @info "Read $(ne(network.graph)) legs : $counts"
 end
 

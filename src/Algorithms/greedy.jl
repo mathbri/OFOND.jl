@@ -48,6 +48,7 @@ function greedy_path(
         opening_factor=opening_factor,
         current_cost=current_cost,
     )
+    # TODO : garbage collecting in here, need to recode dijkstra_shortest_paths ?
     dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
     removedCost = remove_shortcuts!(shortestPath, TTGraph)

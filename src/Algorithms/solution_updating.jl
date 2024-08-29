@@ -44,6 +44,7 @@ function get_bins_updated(
             append!(J, timedPath[2:end])
         end
     end
+    # TODO : garbage colecting in here
     V = ones(Bool, length(I))
     # Combine function for bools is | by default
     return sparse(I, J, V)
@@ -229,6 +230,8 @@ function clean_empty_bins_with_cost!(
             for (tSrc, tDst) in partition(timedPath, 2, 1)
                 nBinsBef = length(solution.bins[tSrc, tDst])
                 filter!(bin -> bin.load > 0, solution.bins[tSrc, tDst])
+                # No need to compute cost on linear arcs
+                TSGraph.networkArcs[tSrc, tDst].isLinear && continue
                 nBinsAft = length(solution.bins[tSrc, tDst])
                 costRemoved +=
                     (nBinsAft - nBinsBef) * TSGraph.networkArcs[tSrc, tDst].unitCost

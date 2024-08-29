@@ -123,12 +123,14 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
 end
 
 function local_search_heuristic!(solution::Solution, instance::Instance; timeLimit::Int)
-    @info "Running Local Search heuristic"
+    println()
+    improvThreshold = -1e-3 * compute_cost(instance, solution)
+    @info "Running Local Search heuristic" :min_improvement = improvThreshold
     # Initialize start time
     startTime = time()
 
     improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
-    while get_elapsed_time(startTime) < timeLimit && improvement > 1
+    while get_elapsed_time(startTime) < timeLimit && improvement < improvThreshold
         improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
     end
 
@@ -141,15 +143,19 @@ function local_search_heuristic!(solution::Solution, instance::Instance; timeLim
     return println()
 end
 
-function lns_heuristic!(solution::Solution, instance::Instance; timeLimit::Int)
+function lns_heuristic!(
+    solution::Solution, instance::Instance; timeLimit::Int, lsTimeLimit::Int
+)
     @info "Running Large Neighborhood Search heuristic"
     # Initialize start time
     startTime = time()
 
     # TODO : add a mechanism to periodically reset costs ?
-    improvement = LNS!(solution, instance; timeLimit=timeLimit, resetCost=true)
+    improvement = LNS!(
+        solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit, resetCost=true
+    )
     while get_elapsed_time(startTime) < timeLimit && improvement > 1
-        improvement = LNS!(solution, instance; timeLimit=timeLimit)
+        improvement = LNS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
     end
 
     solveTime = get_elapsed_time(startTime)

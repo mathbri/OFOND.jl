@@ -56,6 +56,7 @@ function remove_order!(
     return costAdded
 end
 
+# TODO : a lot of garbage collecting for the projection
 function update_bins!(
     solution::Solution,
     TSGraph::TimeSpaceGraph,

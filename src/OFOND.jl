@@ -75,6 +75,6 @@ export lower_bound_heuristic, greedy_or_lb_then_ls_heuristic
 export perturbate!, LNS!, slope_scaling_cost_update!, local_search!
 # export lns_heuristic
 export write_solution
-export julia_main
+export julia_main, julia_main_test
 
 end
