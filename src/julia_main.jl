@@ -70,7 +70,7 @@ function julia_main()::Cint
         end
     end
     # length(ARGS) >= 5 && isfile(ARGS[5]) && (sol_file = ARGS[5])
-    solution = read_solution(instance, joinpath(directory, sol_file))
+    solution = read_solution(instance, sol_file)
 
     # cut it into smaller instances 
     # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
