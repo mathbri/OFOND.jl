@@ -44,6 +44,11 @@ function is_bundle_in_continent(bundle::Bundle, continent::String)
     return bundle.supplier.continent == continent && bundle.customer.continent == continent
 end
 
+function is_bundle_in_continents(bundle::Bundle, continents::Vector{String})
+    return bundle.supplier.continent in continents &&
+           bundle.customer.continent in continents
+end
+
 function change_idx(bundle::Bundle, idx::Int)
     return Bundle(
         bundle.supplier,

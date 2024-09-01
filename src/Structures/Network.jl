@@ -156,3 +156,9 @@ end
 function is_node_in_continent(networkGraph::NetworkGraph, node::Int, continent::String)
     return networkGraph.graph[label_for(networkGraph.graph, node)].continent == continent
 end
+
+function is_node_in_continents(
+    networkGraph::NetworkGraph, node::Int, continents::Vector{String}
+)
+    return networkGraph.graph[label_for(networkGraph.graph, node)].continent in continents
+end

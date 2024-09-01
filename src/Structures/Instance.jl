@@ -113,3 +113,44 @@ function extract_sub_instance(
         instance.partNumbers,
     )
 end
+
+function extract_sub_instance2(
+    instance::Instance; continents::Vector{String}=[""], timeHorizon::Int=3
+)
+    # Redifining network and bundles
+    newNetwork = deepcopy(instance.networkGraph)
+    newBundles = filter(bun -> is_bundle_in_continents(bun, continents), instance.bundles)
+    newVertices = filter(
+        n -> is_node_in_continents(newNetwork, n, continents), vertices(newNetwork.graph)
+    )
+    length(newBundles) == 0 && @warn "No bundles in the sub instance"
+    # Filtering bundle and orders
+    newBundles = [
+        remove_orders_outside_horizon(bundle, timeHorizon) for bundle in newBundles
+    ]
+    newBundles = [bundle for bundle in newBundles if length(bundle.orders) > 0]
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
+    newNetGraph, _ = induced_subgraph(instance.networkGraph.graph, newVertices)
+    newNetwork = NetworkGraph(newNetGraph)
+    nNode, nLeg, nBun = nv(newNetGraph), ne(newNetGraph), length(newBundles)
+    nOrd = sum(length(bundle.orders) for bundle in newBundles; init=0)
+    nCom = sum(
+        sum(length(order.content) for order in bundle.orders) for bundle in newBundles;
+        init=0,
+    )
+    nComU = sum(
+        sum(length(unique(order.content)) for order in bundle.orders) for
+        bundle in newBundles;
+        init=0,
+    )
+    @info "Extracted instance has $nNode nodes, $nLeg legs, $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique) on a $timeHorizon steps time horizon"
+    return Instance(
+        newNetwork,
+        TravelTimeGraph(newNetwork, newBundles),
+        TimeSpaceGraph(newNetwork, timeHorizon),
+        newBundles,
+        timeHorizon,
+        instance.dates[1:timeHorizon],
+        instance.partNumbers,
+    )
+end
