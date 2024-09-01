@@ -53,12 +53,17 @@ function solve_lns_milp(
     # Solving model
     set_optimizer_attribute(model, "mip_rel_gap", 0.05)
     set_time_limit_sec(model, 120.0)
-    !verbose && set_silent(model)
+    set_silent(model)
     optimize!(model)
-    # TODO : change assertion to error handling to not crash the app at running time ?
-    @assert has_values(model)
-    # Getting the solution paths and returning it
-    return get_paths(model, instance, startSol)
+    verbose && println(
+        "Objective value = $(objective_value(model)) (gap = $(objective_gap(model)))"
+    )
+    if has_values(model)
+        # Getting the solution paths and returning it
+        return get_paths(model, instance, startSol)
+    else
+        return solution.bundlePaths[startSol.bundleIdxs]
+    end
 end
 
 function perturbate!(
@@ -94,11 +99,27 @@ function perturbate!(
             src, dst, pertBundleIdxs = select_random_two_node(
                 instance, solution, costThreshold
             )
+        elseif neighborhood == :random
+            src, dst, pertBundleIdxs = select_random_bundles(
+                instance, solution, costThreshold
+            )
+        elseif neighborhood == :suppliers
+            src, dst, pertBundleIdxs = select_random_suppliers(
+                instance, solution, costThreshold
+            )
         else
             src, dst, pertBundleIdxs = select_random_common_arc(
                 neighborhood, instance, solution, costThreshold
             )
         end
+    end
+    if neighborhood == :attract && length(pertBundleIdxs) > 0.15 * length(instance.bundles)
+        println("Too much bundles taken (>15% of all bundles), capping to 15%")
+        MAX_BUNDLES = round(Int, 0.15 * length(instance.bundles))
+        pertBundleIdxs = pertBundleIdxs[randperm(length(pertBundleIdxs))[1:MAX_BUNDLES]]
+    elseif length(pertBundleIdxs) == 0
+        println("No bundles taken, aborting pertubation")
+        return 0.011 * startCost, Int[], [Int[]]
     end
     verbose && println("Nodes : $src-$dst, Bundles : $pertBundleIdxs")
 
@@ -113,8 +134,6 @@ function perturbate!(
         bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
         (bundle, oldPath) in zip(pertBundles, oldPaths)
     )
-    verbose && println("Estimated removal cost : $estimRemCost")
-    verbose && println("Cost threshold : $costThreshold")
     if estimRemCost <= costThreshold
         verbose && println("Not enough improvement possible, aborting")
         return 0.011 * startCost, Int[], [Int[]]
@@ -128,9 +147,12 @@ function perturbate!(
             startSol.bundlePaths[i] = path
         end
     end
-    verbose && println("Starting cost : $startCost")
+
+    TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
+    previousBins = save_previous_bins(
+        solution, get_bins_updated(TSGraph, TTGraph, pertBundles, oldPaths)
+    )
     costRemoved = update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
-    verbose && println("Cost removed : $costRemoved")
 
     # Apply lns milp to get new paths
     # TODO : this line has runtime dispatch
@@ -145,34 +167,21 @@ function perturbate!(
         warmStart=false,
     )
     # verbose && println("New paths : $pertPaths")
+    if verbose
+        changed = count(pertPaths[i] != oldPaths[i] for i in 1:length(oldPaths))
+        println("Path changed : ", changed)
+    end
 
     # Update solution (randomized order ?) 
     updateCost = update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
-    verbose && println("Update cost : $updateCost")
 
-    # Reverting if cost augmented by more than 1% 
-    if updateCost + costRemoved > 0.01 * startCost
+    # Reverting if cost augmented by more than 0.5% 
+    if updateCost + costRemoved > 0.005 * 0.75 * startCost
         verbose && println("Update refused")
-        # solution is already updated so needs to remove bundle on nodes again
-        # TODO : they were the last ones so maybe no refilling and just empty bins cleaning ? but need to count the cost removed
-        # TODO : same as bundle reintroduction, 100 000 to gain from removing those cost increase at refilling
-        update_solution!(solution, instance, pertBundles, pertPaths; remove=true)
-        updateCost = update_solution!(
-            solution, instance, pertBundles, oldPaths; sorted=true
-        )
-        if updateCost + costRemoved > 1e4
-            binsUpdated = get_bins_updated(TSGraph, TTGraph, pertBundles, oldPaths)
-            refillCostChange = refill_bins!(solution, TSGraph, binsUpdated)
-            if updateCost + costRemoved + refillCostChange > 1e4
-                println()
-                @warn "$neighborhood MILP : Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
-            end
-            return updateCost + costRemoved + refillCostChange
-        end
-        return updateCost + costRemoved, Int[], [Int[]]
+        revert_solution!(solution, instance, pertBundles, oldPaths, previousBins, pertPaths)
+        return 0.005 * startCost, Int[], [Int[]]
     else
         println("Update accpeted")
-        println("Improvement : $(updateCost + costRemoved)")
         return updateCost + costRemoved, pertBundleIdxs, fullOldPaths
     end
 end
@@ -186,23 +195,61 @@ end
 
 # TODO : Analyze this mechanism the same way as the other heuristics 
 
+# TODO : change from highs to gurobi
+
+# TODO : config to test :
+# - one slope scaling reset at first 
+# - slope scaling at each iteration
+# - local search after each perturbation
+
+# TODO : how to revert the solution to the previous step if the perturbation + local search didn't find a better solution ?
+# Put nodes and bundle slection outside of the loop : choose all bundles to be updated with each perturbation before applying them
+# Store previous bins for all those bundles at once
+# This will also allow for easier miw between neighborhood bundle selection and neighborhood perturbation milp :
+# - reduce / attract / two_shared_node / random bundles with single_plant milp could be a good idea
+
 # Combine the large perturbations and the small neighborhoods
 function LNS!(
-    solution::Solution, instance::Instance; timeLimit::Int=1200, resetCost::Bool=false
+    solution::Solution,
+    instance::Instance;
+    timeLimit::Int=1200,
+    lsTimeLimit::Int=300,
+    resetCost::Bool=false,
 )
     startCost = compute_cost(instance, solution)
-    threshold = 5e-3 * startCost
+    threshold = 3e-3 * startCost
     println("\n")
     @info "Starting LNS step" :start_cost = startCost :threshold = threshold
     totalImprovement = 0.0
     startTime = time()
+
+    # @assert is_feasible(instance, solution)
+    println("Saving starting solution")
+    prevSol = solution_deepcopy(solution, instance)
+    # @assert is_feasible(instance, previousSolution; verbose=true)
+
+    # println("Reverting solution because no improvement was found")
+    # revert_solution!(
+    #     solution,
+    #     instance,
+    #     instance.bundles,
+    #     previousSolution.bundlePaths,
+    #     previousSolution.bins,
+    #     solution.bundlePaths,
+    # )
+    # println("Reverted solution")
+    # @assert is_feasible(instance, solution)
+    # println("Cost after reverting solution : ", compute_cost(instance, solution))
+    # throw(ErrorException("STOP"))
+
     # Slope scaling cost update  
     if resetCost
         slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
     else
         slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
     end
-    slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
+    # slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
+
     # Apply perturbations in random order
     for neighborhood in shuffle(PERTURBATIONS)
         # Apply perturbation and get correponding solution
@@ -211,43 +258,85 @@ function LNS!(
         )
         @info "$neighborhood perturbation applied (without local search)" :improvement =
             improvement
-        if improvement > 0.01 * startCost
+        if improvement > 0.005 * 0.75 * startCost
             @info "Cost increased by more than 1% after perturbation, aborting perturbation" :increase =
                 improvement / startCost * 100
             # No need to revert, it was already done in perturbate
+            continue
         end
-        # Try a local search and if solution better, store with best sol
-        revertBunIdxs = deepcopy(pertBundleIdxs)
-        improvement += local_search!(solution, instance; twoNode=true, timeLimit=90)
-        @info "$neighborhood perturbation applied (with local search)" :improvement =
-            improvement
-        # If no improvement, revert and go to the next perturbation
-        if improvement > -1e-1
-            @info "Cost increased after perturbation + local search, aborting perturbation" :increase =
-                improvement / startCost * 100
-            pertBundles = instance.bundles[revertBunIdxs]
-            newPaths = solution.bundlePaths[revertBunIdxs]
-            update_solution!(solution, instance, pertBundles, newPaths; remove=true)
-            updateCost = update_solution!(
-                solution, instance, pertBundles, oldPaths; sorted=true
-            )
-            # TODO : add warning if too much increase
-        else
-            # Keeping solution as is and go to the next perturbation
-            startCost += improvement
-            totalImprovement += improvement
-            @info "Improvement found after perturbation + local search" :improvement = round(
-                improvement
-            )
-        end
+        totalImprovement += improvement
+
+        # # Try a local search and if solution better, store with best sol
+        # revertBunIdxs = deepcopy(pertBundleIdxs)
+        # # TODO : two node incremental makes cost go up, sometimes by a lot, need to investigate
+        # # Sometimes also helps so really want to keep just the helping stuff
+        # lsStartTime = time()
+        # lsImprovement = local_search!(solution, instance; twoNode=true, timeLimit=90)
+        # improvement += lsImprovement
+        # while (time() - lsStartTime < lsTimeLimit) &&
+        #           (time() - startTime < timeLimit) &&
+        #           lsImprovement < -1e3
+        #     lsImprovement = local_search!(solution, instance; twoNode=false, timeLimit=90)
+        #     improvement += lsImprovement
+        # end
+        # @info "$neighborhood perturbation applied (with local search)" :improvement =
+        #     improvement :local_search_improvement = lsImprovement
+
+        # # If no improvement, revert and go to the next perturbation
+        # if improvement > -1e-1
+        #     @info "Cost increased after perturbation + local search, aborting perturbation" :increase =
+        #         improvement / startCost * 100
+        #     pertBundles = instance.bundles[revertBunIdxs]
+        #     newPaths = solution.bundlePaths[revertBunIdxs]
+        #     update_solution!(solution, instance, pertBundles, newPaths; remove=true)
+        #     updateCost = update_solution!(
+        #         solution, instance, pertBundles, oldPaths; sorted=true
+        #     )
+        #     # TODO : add warning if too much increase
+        # else
+        #     # Keeping solution as is and go to the next perturbation
+        #     startCost += improvement
+        #     totalImprovement += improvement
+        #     @info "Improvement found after perturbation + local search" :improvement = round(
+        #         improvement
+        #     )
+        # end
+
         time() - startTime > timeLimit && break
     end
+
+    println("\n")
     # Final local search
-    totalImprovement += local_search!(solution, instance; twoNode=true, timeLimit=240)
+    lsStartTime = time()
+    lsImprovement = local_search!(solution, instance; twoNode=true, timeLimit=240)
+    totalImprovement += lsImprovement
+    while (time() - lsStartTime < lsTimeLimit) &&
+              (time() - startTime < timeLimit) &&
+              lsImprovement < -1e3
+        lsImprovement = local_search!(solution, instance; twoNode=true, timeLimit=240)
+        totalImprovement += lsImprovement
+    end
     @info "Full LNS step done" :time = round((time() - startTime) * 1000) / 1000 :improvement = round(
         totalImprovement
     )
-    return totalImprovement
+
+    if totalImprovement > 0
+        println("Reverting solution because no improvement was found")
+        @assert is_feasible(instance, prevSol)
+        newPaths = deepcopy(solution.bundlePaths)
+        revert_solution!(
+            solution,
+            instance,
+            instance.bundles,
+            prevSol.bundlePaths,
+            prevSol.bins,
+            newPaths,
+        )
+        println("Reverted solution")
+        return 0.0
+    else
+        return totalImprovement
+    end
 end
 
 # TODO : create analysis function for the LNS and to decide which architecture should be used 

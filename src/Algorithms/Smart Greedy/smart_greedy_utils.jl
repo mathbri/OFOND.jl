@@ -2,26 +2,6 @@
 
 # Cut a solution into a training dataset
 
-# Own deepcopy function to remove runtime dispatch with deepcopy
-function my_deepcopy(solution::Solution, instance::Instance)
-    newSol = Solution(instance)
-    for bundle in instance.bundles
-        append!(newSol.bundlePaths[bundle.idx], solution.bundlePaths[bundle.idx])
-    end
-    for node in solution.bundlesOnNode
-        append!(newSol.bundlesOnNode[node], solution.bundlesOnNode[node])
-    end
-    # Efficient iteration over sparse matrix
-    rows = rowvals(solution.bins)
-    bins = nonzeros(solution.bins)
-    for j in 1:size(A, 2)
-        for i in nzrange(solution.bins, j)
-            append!(newSol.bins[rows[i]], bins[i])
-        end
-    end
-    return newSol
-end
-
 # TODO : this a not computable at inference time, this needs to be transformed as bundle dependant, meaning its computed for the current solution seen by the bundle
 # Compute common static (aka solution state independant) features among bundles 
 function compute_global_static_features(instance::Instance, solution::Solution)

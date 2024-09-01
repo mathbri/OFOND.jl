@@ -9,7 +9,8 @@ function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundl
     arcData.type == :shortcut && return false
     bundleDst = TTGraph.bundleDst[bundle.idx]
     # If the destination is not the right plant, not updating cost
-    (arcData.type == :delivery && dst != bundleDst) && return false
+    toPlantArc = arcData.type == :delivery || arcData.type == :direct
+    (toPlantArc && dst != bundleDst) && return false
     return true
 end
 
@@ -52,6 +53,16 @@ function transport_units(
             )
         end
     end
+    # if orderTrucks == 0
+    #     println("\nArc data $arcData")
+    #     println("Timed src $timedSrc and dst $timedDst")
+    #     println(
+    #         "Node info : $(TSGraph.networkNodes[timedSrc]) and $(TSGraph.networkNodes[timedDst])",
+    #     )
+    #     println("Order $order")
+    #     println("Use bins $use_bins and linear arc $(arcData.isLinear)")
+    #     println("Length timed bins $(length(solution.bins[timedSrc, timedDst]))")
+    # end
     return orderTrucks
 end
 
@@ -87,30 +98,32 @@ function arc_update_cost(
         # Node volume cost 
         arcBundleCost += volume_stock_cost(TTGraph, src, dst, order)
         # Arc transport cost 
+        units = transport_units(
+            sol, TSGraph, tSrc, tDst, order, CAPACITIES; sorted=sorted, use_bins=use_bins
+        )
+        # if units == 0
+        #     println("Bundle $bundle")
+        #     println("Src $src -> $tSrc and dst $dst -> $tDst")
+        #     println(
+        #         "Bundle src $(TTGraph.bundleSrc[bundle.idx]) and dst $(TTGraph.bundleDst[bundle.idx])",
+        #     )
+        #     @assert units > 0
+        # end
         arcBundleCost +=
-            transport_units(
-                sol,
-                TSGraph,
-                tSrc,
-                tDst,
-                order,
-                CAPACITIES;
-                sorted=sorted,
-                use_bins=use_bins,
-            ) *
+            units *
             transport_cost(TSGraph, tSrc, tDst; current_cost=current_cost) *
             opening_factor
     end
     return arcBundleCost
 end
 
-function find_other_src_node(travelTimeGraph::TravelTimeGraph, src::Int)
+function find_other_src_node(travelTimeGraph::TravelTimeGraph, src::Int)::Int
     otherSrcIdx = findfirst(
         dst -> travelTimeGraph.networkArcs[src, dst].type == :shortcut,
         outneighbors(travelTimeGraph.graph, src),
     )
-    otherSrcIdx === nothing && return nothing
-    return outneighbors(travelTimeGraph.graph, src)[otherSrcIdx]
+    otherSrcIdx === nothing && return -1
+    return outneighbors(travelTimeGraph.graph, src)[otherSrcIdx::Int]
 end
 
 # Creating start node vector
@@ -120,7 +133,7 @@ function get_all_start_nodes(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
     # Iterating through outneighbors of the start node
     otherSrc = find_other_src_node(travelTimeGraph, src)
     # Iterating through outneighbors of the other start node 
-    while otherSrc !== nothing
+    while otherSrc != -1
         push!(startNodes, otherSrc)
         src = otherSrc
         otherSrc = find_other_src_node(travelTimeGraph, src)
@@ -144,9 +157,11 @@ function update_cost_matrix!(
     use_bins::Bool=true,
     opening_factor::Float64=1.0,
     current_cost::Bool=false,
+    findSources::Bool=true,
 )
     # Iterating through outneighbors of the start nodes and common nodes
-    for src in vcat(get_all_start_nodes(TTGraph, bundle), TTGraph.commonNodes)
+    startNodes = findSources ? get_all_start_nodes(TTGraph, bundle) : Int[]
+    for src in vcat(startNodes, TTGraph.commonNodes)
         for dst in outneighbors(TTGraph.graph, src)
             # If the arc doesn't need an update, skipping
             is_update_candidate(TTGraph, src, dst, bundle) || continue

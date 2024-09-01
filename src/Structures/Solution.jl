@@ -23,7 +23,7 @@ function Solution(
     I, J, V = findnz(timeSpaceGraph.networkArcs)
     bins = [Bin[] for _ in I]
     return Solution(
-        fill([-1, -1], length(bundles)),
+        [[-1, -1] for _ in 1:length(bundles)],
         Dict{Int,Vector{Int}}(zip(keys, [Int[] for _ in keys])),
         sparse(I, J, bins),
     )
@@ -42,6 +42,12 @@ function update_bundle_path!(
     if partial
         srcIdx = findfirst(node -> node == path[1], oldPath)
         dstIdx = findlast(node -> node == path[end], oldPath)
+        if srcIdx === nothing || dstIdx === nothing
+            println("Error : src or dst not found in path")
+            println("Bundle : $bundle")
+            println("Path : $path (partial = $partial)")
+            println("Old path : $oldPath")
+        end
         path = vcat(oldPath[1:srcIdx], path[2:(end - 1)], oldPath[dstIdx:end])
         oldPath = oldPath[srcIdx:dstIdx]
     end
@@ -59,6 +65,15 @@ function update_bundle_on_nodes!(
     for node in path
         bundleVector = get(solution.bundlesOnNode, node, Int[])
         if remove
+            # Quick fix for non-admissibility path part removal
+            fullPath = get(solution.bundlePaths, bundle.idx, Int[])
+            if partial && node in fullPath
+                println("Trying to remove node that is also elsewhere in the path")
+                println("Node : $node")
+                println("Path : $fullPath")
+                println("Old part : $path")
+                continue
+            end
             filter!(bunIdx -> bunIdx != bundle.idx, bundleVector)
         else
             push!(bundleVector, bundle.idx)
@@ -132,6 +147,12 @@ function check_path_continuity(instance::Instance, path::Vector{Int}; verbose::B
             return false
         end
     end
+    # if !is_path_admissible(instance.travelTimeGraph, path)
+    #     if verbose
+    #         @warn "Infeasible solution : path $path is not admissible"
+    #     end
+    #     return false
+    # end
     return true
 end
 
@@ -179,10 +200,28 @@ function update_routed_quantities!(
 end
 
 function check_quantities(
+    instance::Instance,
     askedQuantities::Dict{UInt,Dict{UInt,Int}},
     routedQuantities::Dict{UInt,Dict{UInt,Int}};
     verbose::Bool=false,
 )
+    for (timedPlant, quantities) in askedQuantities
+        if quantities != routedQuantities[timedPlant]
+            allNodes = instance.timeSpaceGraph.networkNodes
+            allSteps = instance.timeSpaceGraph.timeStep
+            plantIdxs = findall(node -> node.type == :plant, allNodes)
+            timedPlantIdx = findfirst(
+                i -> hash(allSteps[i], allNodes[i].hash) == timedPlant, plantIdxs
+            )
+            println(
+                "timedPlant = $(allNodes[plantIdxs[timedPlantIdx]]) on time step $(allSteps[plantIdxs[timedPlantIdx]])",
+            )
+            diff = mergewith(-, quantities, routedQuantities[timedPlant])
+            filter!(x -> x[2] > 0, diff)
+            println("diff = $diff")
+            return false
+        end
+    end
     if askedQuantities != routedQuantities
         verbose &&
             @warn "Infeasible solution : quantities mismatch between demand and routing"
@@ -207,7 +246,7 @@ function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false
     end
     # Getting routed quantities to plants
     update_routed_quantities!(routedQuantities, instance, solution)
-    return check_quantities(askedQuantities, routedQuantities; verbose=verbose)
+    return check_quantities(instance, askedQuantities, routedQuantities; verbose=verbose)
 end
 
 # Detect all infeasibility in a solution
@@ -391,4 +430,25 @@ function fuse_solutions(
     @info "Fused solution properties" :repaired = repaired :feasible = feasible :total_cost =
         totalCost
     return fusedSolution
+end
+
+# Own deepcopy function to remove runtime dispatch with deepcopy
+function solution_deepcopy(solution::Solution, instance::Instance)
+    newSol = Solution(instance)
+    for bundle in instance.bundles
+        empty!(newSol.bundlePaths[bundle.idx])
+        append!(newSol.bundlePaths[bundle.idx], solution.bundlePaths[bundle.idx])
+    end
+    for node in keys(solution.bundlesOnNode)
+        append!(newSol.bundlesOnNode[node], solution.bundlesOnNode[node])
+    end
+    # Efficient iteration over sparse matrix
+    rows = rowvals(solution.bins)
+    bins = nonzeros(solution.bins)
+    for j in 1:size(solution.bins, 2)
+        for i in nzrange(solution.bins, j)
+            append!(newSol.bins[rows[i], j], my_deepcopy(bins[i]))
+        end
+    end
+    return newSol
 end

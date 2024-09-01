@@ -38,8 +38,10 @@ function run_heuristic(
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solution)
     # detect_infeasibility(instance, solution)
-    @info "$heuristic heuristic results" :solve_time = solveTime :feasible = feasible :total_cost =
-        return instance, solution
+    @info "$heuristic heuristic results" :solve_time = solveTime :feasible = feasible :total_cost = compute_cost(
+        instance, solution
+    )
+    return instance, solution
 end
 
 function shortest_delivery_heuristic(instance::Instance)
@@ -143,18 +145,32 @@ function local_search_heuristic!(solution::Solution, instance::Instance; timeLim
     return println()
 end
 
+# TODO : put as termination criteria a certain number of unfruitful lns steps
+# TODO : add a mechanism to periodically reset costs ? if unfruitful step = 1, reset costs 
+# this needs to be parametrized
+
 function lns_heuristic!(
     solution::Solution, instance::Instance; timeLimit::Int, lsTimeLimit::Int
 )
-    @info "Running Large Neighborhood Search heuristic"
+    improvThreshold = -1e-4 * compute_cost(instance, solution)
+    @info "Running Large Neighborhood Search heuristic" :min_improvement = improvThreshold
     # Initialize start time
     startTime = time()
 
-    # TODO : add a mechanism to periodically reset costs ?
     improvement = LNS!(
         solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit, resetCost=true
     )
-    while get_elapsed_time(startTime) < timeLimit && improvement > 1
+    unfruitful = 0
+    resetCost = false
+    while get_elapsed_time(startTime) < timeLimit
+        if improvement > improvThreshold
+            unfruitful += 1
+        else
+            unfruitful = 0
+        end
+        if unfruitful == 1
+            resetCost = true
+        end
         improvement = LNS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
     end
 

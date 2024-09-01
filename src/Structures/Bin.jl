@@ -76,6 +76,7 @@ end
 global ALL_COMMODITIES = Commodity[]
 
 function get_all_commodities(bins::Vector{Bin})
+    filter!(bin -> length(bin.content) > 0, bins)
     # verify the global vector is long enough 
     nCom = sum(length(bin.content) for bin in bins; init=0)
     if nCom > length(ALL_COMMODITIES)

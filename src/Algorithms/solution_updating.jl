@@ -55,8 +55,8 @@ function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
     length(bins) == 0 && return 0
     ceil(sum(bin.load for bin in bins) / fullCapacity) == length(bins) && return 0
     # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
-    allCommodities = get_all_commodities(bins)
     binsBefore = length(bins)
+    allCommodities = get_all_commodities(bins)
     empty!(bins)
     # Filling it back again
     first_fit_decreasing!(bins, fullCapacity, allCommodities; sorted=false)

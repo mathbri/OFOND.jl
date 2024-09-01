@@ -36,6 +36,7 @@ function greedy_path(
     use_bins::Bool=true,
     opening_factor::Float64=1.0,
     current_cost::Bool=false,
+    findSources::Bool=true,
 )
     update_cost_matrix!(
         solution,
@@ -47,6 +48,7 @@ function greedy_path(
         use_bins=use_bins,
         opening_factor=opening_factor,
         current_cost=current_cost,
+        findSources=findSources,
     )
     # TODO : garbage collecting in here, need to recode dijkstra_shortest_paths ?
     dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
@@ -68,6 +70,7 @@ function greedy_insertion(
     CAPACITIES::Vector{Int};
     sorted::Bool=false,
     current_cost::Bool=false,
+    findSources::Bool=true,
 )
     shortestPath, pathCost = greedy_path(
         solution,
@@ -80,6 +83,7 @@ function greedy_insertion(
         sorted=sorted,
         use_bins=true,
         current_cost=current_cost,
+        findSources=findSources,
     )
     # If the path is not admissible, re-computing it
     if !is_path_admissible(TTGraph, shortestPath)
@@ -98,6 +102,7 @@ function greedy_insertion(
             use_bins=true,
             opening_factor=0.5,
             current_cost=current_cost,
+            findSources=findSources,
         )
         pathCost = path_cost(shortestPath, costMatrix)
         if !is_path_admissible(TTGraph, shortestPath)
@@ -114,10 +119,12 @@ function greedy_insertion(
                 sorted=sorted,
                 use_bins=false,
                 current_cost=false,
+                findSources=findSources,
             )
             pathCost = path_cost(shortestPath, costMatrix)
         end
     end
+    @assert is_path_admissible(TTGraph, shortestPath)
     return shortestPath, pathCost
 end
 

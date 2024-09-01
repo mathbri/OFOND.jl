@@ -124,9 +124,6 @@ function add_path_constraints!(
     bundleIdxs::Vector{Int},
     e::SparseMatrixCSC{Int,Int},
 )
-    println(
-        "Creating $(length(bundleIdxs) * nv(TTGraph.graph)) path constraints ($(length(bundleIdxs)) bundles * $(nv(TTGraph.graph)) nodes)",
-    )
     # TODO : those two lines have runtime dispatch
     sources = [src(arc) for arc in edges(TTGraph.graph)]
     dests = [dst(arc) for arc in edges(TTGraph.graph)]
@@ -142,7 +139,6 @@ function add_path_constraints!(
         arcDst = dests[arcIdx]
         add_to_expression!(pathConExpr[bunIdx, arcDst], 1, xVar)
     end
-    println("Created $(nnz(pathConExpr)) path constraints")
     # Efficient iteration over sparse matrices
     rows = rowvals(pathConExpr)
     # Whats happens if some node after the last one concerned by the path constraints is calles in the macro ?
@@ -154,13 +150,20 @@ function add_path_constraints!(
     )
 end
 
+# TODO : test if changing to greedy insertion have better results
+
 # Generate an attract path for arc src-dst and bundle
 function generate_attract_path(
-    instance::Instance, solution::Solution, bundle::Bundle, src::Int, dst::Int
+    instance::Instance,
+    solution::Solution,
+    bundle::Bundle,
+    src::Int,
+    dst::Int,
+    CAPACITIES::Vector{Int},
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Update cost matrix 
-    update_lb_cost_matrix!(solution, TTGraph, TSGraph, bundle; giant=true)
+    update_cost_matrix!(solution, TTGraph, TSGraph, bundle, CAPACITIES; sorted=true)
     # Compute path from bundleSrc to src and from dst to bundleDst
     bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
     # If bDst = dst then no path and that's problematic
@@ -174,11 +177,16 @@ end
 
 # Generate a reduce path for arc src-dst and bundle
 function generate_reduce_path(
-    instance::Instance, solution::Solution, bundle::Bundle, src::Int, dst::Int
+    instance::Instance,
+    solution::Solution,
+    bundle::Bundle,
+    src::Int,
+    dst::Int,
+    CAPACITIES::Vector{Int},
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Update cost matrix 
-    update_lb_cost_matrix!(solution, TTGraph, TSGraph, bundle; giant=true)
+    update_cost_matrix!(solution, TTGraph, TSGraph, bundle, CAPACITIES; sorted=true)
     TTGraph.costMatrix[src, dst] = INFINITY
     # Compute path from bundleSrc to src and from dst to bundleDst
     bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
@@ -194,11 +202,12 @@ function generate_new_paths(
     src::Int,
     dst::Int,
 )
+    CAPACITIES = Int[]
     # If attract neighborhood and the edge is known
     if neighborhood == :attract
         if has_edge(instance.travelTimeGraph.graph, src, dst)
             return [
-                generate_attract_path(instance, solution, bundle, src, dst) for
+                generate_attract_path(instance, solution, bundle, src, dst, CAPACITIES) for
                 bundle in bundles
             ]
         else
@@ -207,7 +216,8 @@ function generate_new_paths(
     end
     # Default case (chosen or not) is reduce
     return [
-        generate_reduce_path(instance, solution, bundle, src, dst) for bundle in bundles
+        generate_reduce_path(instance, solution, bundle, src, dst, CAPACITIES) for
+        bundle in bundles
     ]
 end
 
@@ -266,7 +276,6 @@ end
 
 # Initialize the packing expression as sparse matrix with space used and tau variables
 function init_packing_expr(model::Model, TSGraph::TimeSpaceGraph, solution::Solution)
-    println("Initiating packing expressions")
     I = [arc[1] for arc in TSGraph.commonArcs]
     J = [arc[2] for arc in TSGraph.commonArcs]
     # TODO : this line has runtime dispatch
@@ -288,7 +297,6 @@ function complete_packing_expr!(
     bundles::Vector{Bundle},
     edgeIndex::Matrix{Int},
 )
-    println("Completing packing expressions")
     x, TTGraph, TSGraph = model[:x], instance.travelTimeGraph, instance.timeSpaceGraph
     for bundle in bundles
         for order in bundle.orders, (src, dst) in TSGraph.commonArcs
@@ -315,7 +323,6 @@ function add_packing_constraints!(
     TSGraph = instance.timeSpaceGraph
     packing_expr = init_packing_expr(model, TSGraph, solution)
     complete_packing_expr!(model, packing_expr, instance, bundles, edgeIndex)
-    println("Creating $(length(TSGraph.commonArcs)) packing constraints")
     @constraint(
         model, packing[(src, dst) in TSGraph.commonArcs], packing_expr[src, dst] <= 0
     )
@@ -349,13 +356,27 @@ end
 
 # Constructing the objective
 
-# TODO : can be done by directly iterating on x
 # Computes direct and outsource cost
 function milp_travel_time_arc_cost(
     TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundles::Vector{Bundle}
 )
-    println("Creating MILP travel time arc costs")
+    print("Creating MILP travel time arc costs... ")
     I, J, V = Int[], Int[], Float64[]
+    # TODO : can be done by directly iterating on x
+    # # TODO : store those vectors directly in the TTGraph
+    # sources = [src(arc) for arc in edges(TTGraph.graph)]
+    # dests = [dst(arc) for arc in edges(TTGraph.graph)]
+    # for varIdx in eachindex(model[:x])
+    #     bunIdx, arcIdx = varIdx
+    #     push!(I, bunIdx)
+    #     push!(J, arcIdx)
+    #     arcSrc, arcDst = sources[arcIdx], dests[arcIdx]
+    #     # No cost for shortcut arcs
+    #     if TTGraph.networkArcs[arcSrc, arcDst].type == :shortcut
+    #         push!(V, EPS)
+    #         continue
+    #     end
+    # end
     for bundle in bundles
         # Getting all start nodes of the bundle
         startNodes = get_all_start_nodes(TTGraph, bundle)
@@ -390,6 +411,7 @@ function milp_travel_time_arc_cost(
             push!(V, arcCost)
         end
     end
+    println("done")
     return sparse(I, J, V, maximum(idx(bundles)), ne(TTGraph.graph))
 end
 
@@ -400,17 +422,9 @@ function add_objective!(model::Model, instance::Instance, startSol::RelaxedSolut
     bundles = instance.bundles[startSol.bundleIdxs]
     x_cost = milp_travel_time_arc_cost(TTGraph, TSGraph, bundles)
     objExpr = AffExpr()
-    println("Adding tau variable cost")
     for (src, dst) in TSGraph.commonArcs
         add_to_expression!(objExpr, tau[(src, dst)], TSGraph.currentCost[src, dst])
     end
-    println("Adding x variable cost")
-    # for (a, arc) in enumerate(edges(TTGraph.graph))
-    #     arcKey = (src(arc), dst(arc))
-    #     for bundle in bundles
-    #         add_to_expression!(objExpr, x[bundle.idx, arcKey], x_cost[bundle.idx, a])
-    #     end
-    # end
     for varIdx in eachindex(x)
         bunIdx, arcIdx = varIdx
         add_to_expression!(objExpr, x[bunIdx, arcIdx], x_cost[bunIdx, arcIdx])
@@ -516,13 +530,31 @@ function get_path_from_arcs(
         lastNode = loneDst
     end
     path = [src(pathArcs[idxFirst]), dst(pathArcs[idxFirst])]
-    while path[end] != lastNode
-        nextEdge = findfirst(a -> src(a) == path[end], pathArcs)
-        push!(path, dst(pathArcs[nextEdge]))
+    # TODO : pop arcs from path arcs ?
+    # some loop appeared in the path 
+    try
+        while path[end] != lastNode
+            nextEdgeIdx = findfirst(a -> src(a) == path[end], pathArcs)
+            nextEdge = popat!(pathArcs, nextEdgeIdx)
+            push!(path, dst(nextEdge))
+        end
+    catch e
+        println("bundle : $bundle")
+        println(
+            "bundle src and dst : $(TTGraph.bundleSrc[bundle.idx]), $(TTGraph.bundleDst[bundle.idx])",
+        )
+        println("path arcs : $pathArcs")
+        println("idx first : $idxFirst")
+        println("first edge : $(pathArcs[idxFirst])")
+        println("last node : $lastNode")
+        println("start of path : $(path[1:20])")
+        println("length path : $(length(path))")
     end
     remove_shortcuts!(path, TTGraph)
     return path
 end
+
+# TODO : Elementarity cinstraint could be sum of incoming x arc var of the problematic nodes to be less than one
 
 # TODO : a lot of runtime dispatch in here
 function get_paths(model::Model, instance::Instance, startSol::RelaxedSolution)
@@ -542,7 +574,9 @@ function get_paths(model::Model, instance::Instance, startSol::RelaxedSolution)
         bundlePath = get_path_from_arcs(bundle, TTGraph, usedArcs)
         !is_path_admissible(TTGraph, bundlePath) &&
             @warn "Path proposed with milp is not admissible, add elementarity constraint !" :bundle =
-                bundle :path = bundlePath
+                bundle :path = join(bundlePath, "-") :nodes = join(
+                string.(map(n -> TTGraph.networkNodes[n], bundlePath)), ", "
+            )
         push!(paths, bundlePath)
     end
     return paths
@@ -556,8 +590,9 @@ function select_random_plant(instance::Instance)
     return rand(findall(node -> node.type == :plant, TTGraph.networkNodes))
 end
 
+# TODO : stack bundles associated with plants until the cost threshold is reached ?
 function select_random_plant(instance::Instance, solution::Solution, costThreshold::Float64)
-    src, dst, pertBunIdxs, estimRemCost = -1, -1, Int[], 0.0
+    src, dst, allPertBunIdxs, estimRemCost = -1, -1, Int[], 0.0
     TTGraph = instance.travelTimeGraph
     plants = findall(node -> node.type == :plant, TTGraph.networkNodes)
     # Going through all plants in random order to select one
@@ -568,12 +603,14 @@ function select_random_plant(instance::Instance, solution::Solution, costThresho
         # Computing estimated cost
         pertBundles = instance.bundles[pertBunIdxs]
         oldPaths = get_lns_paths_to_update(:single_plant, solution, pertBundles, src, dst)
-        estimRemCost = sum(
+        estimRemCost += sum(
             bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
             (bundle, oldPath) in zip(pertBundles, oldPaths)
         )
+        # Adding bundles to the list of perturbed bundles
+        append!(allPertBunIdxs, pertBunIdxs)
         # If it is suitable, breaking search and returning
-        estimRemCost > costThreshold && return src, dst, pertBunIdxs
+        estimRemCost > costThreshold && return src, dst, allPertBunIdxs
     end
     # If no plant found, returning empty vector
     return src, dst, Int[]
@@ -590,6 +627,7 @@ function select_common_arc(instance::Instance)
     return src(arc), dst(arc)
 end
 
+# TODO : also stacking bundles for those ?
 function select_random_common_arc(
     neighborhood::Symbol, instance::Instance, solution::Solution, costThreshold::Float64
 )
@@ -662,6 +700,59 @@ function select_random_two_node(
         estimRemCost > costThreshold && return src, dst, pertBunIdxs
     end
     # If no two nodes found, returning empty vector
+    return src, dst, Int[]
+end
+
+function select_random_suppliers(
+    instance::Instance, solution::Solution, costThreshold::Float64
+)
+    src, dst, allPertBunIdxs, estimRemCost = -1, -1, Int[], 0.0
+    TTGraph = instance.travelTimeGraph
+    suppliers = findall(node -> node.type == :supplier, TTGraph.networkNodes)
+    # Going through all plants in random order to select one
+    for supplier in shuffle(suppliers)
+        pertBunIdxs = findall(bunSrc -> bunSrc == supplier, TTGraph.bundleSrc)
+        # If no bundle for this plant, skipping to another directly
+        length(pertBunIdxs) == 0 && continue
+        # Computing estimated cost
+        pertBundles = instance.bundles[pertBunIdxs]
+        oldPaths = get_lns_paths_to_update(:single_plant, solution, pertBundles, src, dst)
+        estimRemCost += sum(
+            bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
+            (bundle, oldPath) in zip(pertBundles, oldPaths)
+        )
+        # Adding bundles to the list of perturbed bundles
+        append!(allPertBunIdxs, pertBunIdxs)
+        # If it is suitable, breaking search and returning
+        estimRemCost > costThreshold && return src, dst, allPertBunIdxs
+    end
+    # If no plant found, returning empty vector
+    return src, dst, Int[]
+end
+
+function select_random_bundles(
+    instance::Instance, solution::Solution, costThreshold::Float64
+)
+    src, dst, allPertBunIdxs, estimRemCost = -1, -1, Int[], 0.0
+    TTGraph = instance.travelTimeGraph
+    shuffledBundles = randperm(length(instance.bundles))
+    # Going through all bundles in random order to select one
+    for i in 1:100
+        nBundles = round(Int, i / 100 * length(instance.bundles))
+        pertBunIdxs = shuffledBundles[1:nBundles]
+        # Computing estimated cost
+        pertBundles = instance.bundles[pertBunIdxs]
+        oldPaths = get_lns_paths_to_update(:single_plant, solution, pertBundles, src, dst)
+        estimRemCost += sum(
+            bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
+            (bundle, oldPath) in zip(pertBundles, oldPaths)
+        )
+        # Adding bundles to the list of perturbed bundles
+        allPertBunIdxs = pertBunIdxs
+        # If it is suitable, breaking search and returning
+        estimRemCost > costThreshold && return src, dst, allPertBunIdxs
+    end
+    # If no plant found, returning empty vector
     return src, dst, Int[]
 end
 

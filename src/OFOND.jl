@@ -56,6 +56,9 @@ include("Algorithms/local_search.jl")
 # Large Neighborhood Search
 include("Algorithms/LNS/lns_utils.jl")
 include("Algorithms/LNS/lns.jl")
+# Smart Greedy
+include("Algorithms/Smart Greedy/smart_greedy_utils.jl")
+include("Algorithms/Smart Greedy/smart_greedy.jl")
 
 include("run.jl")
 include("Algorithms/Utils/analysis.jl")
