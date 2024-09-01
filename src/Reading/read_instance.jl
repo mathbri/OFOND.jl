@@ -43,14 +43,23 @@ end
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
+    shipmentFactor = if arcType == :oversea
+        0.25
+    elseif arcType == :outsource
+        0.1
+    else
+        0.5
+    end
+
     return NetworkArc(
         arcType,
         row.distance,
         floor(Int, row.travel_time + 0.5),
         isCommon,
-        row.shipment_cost,
-        row.is_linear,
-        row.carbon_cost,
+        row.shipment_cost * shipmentFactor,
+        # row.is_linear,
+        false,
+        row.carbon_cost / 10,
         row.capacity * VOLUME_FACTOR,
     )
 end
@@ -83,8 +92,20 @@ function order_hash(row::CSV.Row)
     return hash(row.delivery_time_step + 1, bundle_hash(row))
 end
 
+tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
+
 function com_size(row::CSV.Row)
-    return round(Int, max(1, row.size * 100))
+    baseSize = min(round(Int, max(35, row.size * 100)), SEA_CAPACITY)
+    if baseSize > 0.5 * SEA_CAPACITY
+        return baseSize
+    elseif baseSize > 0.25 * SEA_CAPACITY
+        return min(SEA_CAPACITY, baseSize * 2)
+    elseif baseSize > 0.1 * SEA_CAPACITY
+        return min(SEA_CAPACITY, baseSize * 4)
+    end
+    return baseSize * 5
+    # return baseSize
+    # Rescaling completely
 end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
@@ -145,8 +166,9 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         partNumHash = hash(row.part_number)
         partNums[partNumHash] = row.part_number
         commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
-        append!(order.content, [commodity for _ in 1:(row.quantity)])
-        comCount += row.quantity
+        rowQuantity = round(Int, row.quantity * 1.5)
+        append!(order.content, [commodity for _ in 1:(rowQuantity)])
+        comCount += rowQuantity
         comUnique += 1
         # Is it a new time step ?
         add_date!(dates, row)

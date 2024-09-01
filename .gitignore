@@ -2,3 +2,4 @@
 *test.csv
 scripts/data/*
 scripts/export/*
+*.jld2

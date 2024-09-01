@@ -6,7 +6,9 @@ const COMMON_NODE_TYPES = [:xdock, :iln, :pol, :pod]
 const ARC_TYPES = [
     :direct, :outsource, :cross_plat, :delivery, :oversea, :port_transport, :shortcut
 ]
-const BP_ARC_TYPES = [:direct, :cross_plat, :delivery, :oversea, :port_transport]
+const BP_ARC_TYPES = [
+    :direct, :outsource, :cross_plat, :delivery, :oversea, :port_transport
+]
 const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea, :port_transport]
 
 const EPS = 1e-5
@@ -16,7 +18,10 @@ const VOLUME_FACTOR = 100
 const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
 
-const PERTURBATIONS = [:single_plant, :two_shared_node, :attract, :reduce]
+const PERTURBATIONS = [
+    :single_plant, :two_shared_node, :attract, :reduce, :random, :suppliers
+]
+# const PERTURBATION_MODE = [:classic, :all_single_plant]
 
 const NETWORK_DESIGN_COLUMNS = [
     "route_id",

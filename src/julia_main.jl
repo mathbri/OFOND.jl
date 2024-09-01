@@ -1,7 +1,8 @@
 # File used to launch all kinds of scripts using OFOND package 
 
 # using OFOND
-# using ProfileView
+using ProfileView
+using JLD2
 
 function julia_main()::Cint
     # Read files based on ARGS
@@ -122,69 +123,85 @@ end
 
 function julia_main_test()
     println("Launching OFO Network Design (test)")
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data")
-    println("Reading data from $directory")
-    node_file = joinpath(directory, "GeoDataProcessed_LC.csv")
-    leg_file = joinpath(directory, "LegDataProcessed_NV1.csv")
-    com_file = joinpath(directory, "VolumeDataProcessed_SC.csv")
+
+    # directory = joinpath(Base.dirname(@__DIR__), "scripts", "data")
+    # println("Reading data from $directory")
+    # node_file = joinpath(directory, "GeoDataProcessed_CC.csv")
+    # leg_file = joinpath(directory, "LegDataProcessed_NV1.csv")
+    # com_file = joinpath(directory, "VolumeDataProcessed_MC.csv")
     # read instance 
-    instance = read_instance(node_file, leg_file, com_file)
+    # instance = read_instance(node_file, leg_file, com_file)
     # adding properties to the instance
-    CAPACITIES = Int[]
-    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    # CAPACITIES = Int[]
+    # instance = add_properties(instance, tentative_first_fit, CAPACITIES)
     # read solution
-    sol_file = joinpath(directory, "RouteDataProcessed.csv")
-    solution = read_solution(instance, joinpath(directory, sol_file))
+    # sol_file = joinpath(directory, "RouteDataProcessed.csv")
+    # solution = read_solution(instance, joinpath(directory, sol_file))
 
     # cut it into smaller instances 
     # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
-    # instanceSub = extract_sub_instance(instance; continent="Western Europe", timeHorizon=9)
-    instanceSub = instance
+    # instanceSub = extract_sub_instance2(
+    #     instance;
+    #     continents=["Western Europe", "South America", "South-East Asia"],
+    #     timeHorizon=13,
+    # )
+
+    # instanceSub = instance
     # adding properties to the instance
     # instanceSub = add_properties(instanceSub, tentative_first_fit)
     # solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
-    solutionSub_C = solution
+    # solutionSub_C = solution
 
     # test algorithms  
 
-    _, solutionSub_LBF = lower_bound_filtering_heuristic(instanceSub)
-    println(
-        "Bundles actually filtered : $(count(x -> length(x) == 2, solutionSub_LBF.bundlePaths))",
-    )
+    # _, solutionSub_LBF = lower_bound_filtering_heuristic(instanceSub)
+    # println(
+    #     "Bundles actually filtered : $(count(x -> length(x) == 2, solutionSub_LBF.bundlePaths))",
+    # )
 
-    instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
-    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+    # instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
+    # instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+
+    # save("instance.jld2", "instance", instanceSubSub)
+    # return 0
+
+    println("Loading instance")
+    instanceSubSub = load("instance.jld2", "instance")
 
     # _, solutionSub_SD = shortest_delivery_heuristic(instanceSub)
     # global MAX_LENGTH, GREEDY_RECOMPUTATION = 0, 0
-    _, solutionSub_G = greedy_heuristic(instanceSubSub)
-    greedycost = compute_cost(instanceSubSub, solutionSub_G)
+    # _, solutionSub_G = greedy_heuristic(instanceSubSub)
+    # greedyCost = compute_cost(instanceSubSub, solutionSub_G)
 
     # println("Max length encountered for packing : $MAX_LENGTH")
     # println("Path recompuations needed : $GREEDY_RECOMPUTATION")
 
-    _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
-    lbCost = compute_cost(instanceSubSub, solutionSub_LB)
+    # _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+    # lbCost = compute_cost(instanceSubSub, solutionSub_LB)
 
     # Choosing the best initial solution on which to apply local search 
-    solution = solutionSub_G
-    if lbCost < greedyCost
-        solution = solutionSub_LB
-        @info "Choosing lower bound solution as initial solution"
-    else
-        @info "Choosing greedy solution as initial solution"
-    end
+    # solution = solutionSub_G
+    # if lbCost < greedyCost
+    #     solution = solutionSub_LB
+    #     @info "Choosing lower bound solution as initial solution"
+    # else
+    #     @info "Choosing greedy solution as initial solution"
+    # end
+
+    # save("start_solution.jld2", "solution", solution)
+    println("Loading initial solution")
+    solution = load("start_solution.jld2", "solution")
 
     # _, solutionSubSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSubSub; timeLimit=300)
 
-    _, solutionSubSub_GLS = local_search_heuristic!(solution, instanceSubSub; timeLimit=300)
+    local_search_heuristic!(solution, instanceSubSub; timeLimit=120)
 
     # TODO : need to compare just local search and LNS on the same time frame to see the difference
     # Without warm start diversity seems to lead to more improvement
     # Still need to see wether slope scaling helps
 
-    # ProfileView.@profview lns_heuristic!(solutionSubSub_GLS, instanceSubSub; timeLimit=300)
-    # println("Cost of solution : $(compute_cost(instanceSubSub, solutionSubSub_GLS))")
+    # lns_heuristic!(solution, instanceSubSub; timeLimit=900, lsTimeLimit=90)
+    # println("Cost of solution : $(compute_cost(instanceSubSub, solution))")
 
     # startCost = compute_cost(instanceSubSub, solutionSubSub_GLS)
     # costThreshold = 1e-2 * startCost
@@ -219,20 +236,18 @@ function julia_main_test()
     # )
     # local_search!(solutionSubSub_GLS, instanceSubSub; twoNode=true, timeLimit=300)
 
-    finalSolution = fuse_solutions(
-        solutionSubSub_GLS, solutionSub_LBF, instanceSub, instanceSubSub
-    )
+    # finalSolution = fuse_solutions(solution, solutionSub_LBF, instanceSub, instanceSubSub)
 
     # Cleaning final solution linears arcs
-    @info "Cleaning final solution before extraction"
-    bin_packing_improvement!(finalSolution, instanceSub; sorted=true, skipLinear=false)
-    clean_empty_bins!(finalSolution, instanceSub)
+    # @info "Cleaning final solution before extraction"
+    # bin_packing_improvement!(finalSolution, instanceSub; sorted=true, skipLinear=false)
+    # clean_empty_bins!(finalSolution, instanceSub)
 
     # export only for the full instance
-    directory = joinpath(dirname(@__DIR__), "scripts", "export")
-    println("Exporting data to $directory")
-    write_solution(finalSolution, instanceSub; suffix="proposed", directory=dirname)
-    write_soluton(solutionSub_C, instanceSub; suffix="current", directory=dirname)
+    # exportDir = joinpath(dirname(@__DIR__), "scripts", "export")
+    # println("Exporting data to $exportDir")
+    # write_solution(finalSolution, instanceSub; suffix="proposed", directory=dirname)
+    # write_soluton(solutionSub_C, instanceSub; suffix="current", directory=dirname)
 
     return 0 # if things finished successfully
 end
