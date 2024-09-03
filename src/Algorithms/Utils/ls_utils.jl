@@ -152,8 +152,23 @@ function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
     # Come from analysis of actual improvement
     # TODO : analysis to be done again for sure
     TTGraph.networkNodes[dst].type != :xdock && TTGraph.stepToDel[dst] > 0 && return false
+    # TTGraph.stepToDel[dst] > 0 && return false
     # just one arc between ports
     is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
+    # need to have existing path
+    return has_path(TTGraph.graph, src, dst)
+end
+
+function are_nodes_candidate2(TTGraph::TravelTimeGraph, src::Int, dst::Int)
+    src == dst && return false
+    # Cannot go back in time
+    TTGraph.stepToDel[src] < TTGraph.stepToDel[dst] && return false
+    # Come from analysis of actual improvement
+    # TODO : analysis to be done again for sure
+    # TTGraph.networkNodes[dst].type != :xdock && TTGraph.stepToDel[dst] > 0 && return false
+    # TTGraph.stepToDel[dst] > 0 && return false
+    # just one arc between ports
+    # is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
     # need to have existing path
     return has_path(TTGraph.graph, src, dst)
 end

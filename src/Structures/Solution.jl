@@ -66,12 +66,12 @@ function update_bundle_on_nodes!(
         bundleVector = get(solution.bundlesOnNode, node, Int[])
         if remove
             # Quick fix for non-admissibility path part removal
-            fullPath = get(solution.bundlePaths, bundle.idx, Int[])
-            if partial && node in fullPath
-                println("Trying to remove node that is also elsewhere in the path")
-                println("Node : $node")
-                println("Path : $fullPath")
-                println("Old part : $path")
+            # fullPath = get(solution.bundlePaths, bundle.idx, Int[])
+            if partial && node in solution.bundlePaths[bundle.idx]
+                # println("Trying to remove node that is also elsewhere in the path")
+                # println("Node : $node")
+                # println("Path : $fullPath")
+                # println("Old part : $path")
                 continue
             end
             filter!(bunIdx -> bunIdx != bundle.idx, bundleVector)

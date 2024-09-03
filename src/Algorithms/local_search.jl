@@ -237,6 +237,8 @@ end
 # By changing middle parts of paths, some can become non-admissible
 # Good idea but can't make it work for now
 
+# TODO : to be optimized to the fullest because works better than classical local search 
+
 function two_node_common_incremental!(
     solution::Solution,
     instance::Instance,
@@ -252,27 +254,111 @@ function two_node_common_incremental!(
     length(twoNodeBundles) == 0 && return 0.0
     oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
 
-    # The filtering could also occur in terms of cost removed : it must be above a certain threshold
-    sum(
-        bundle_estimated_removal_cost(bundle, path, instance, solution) for
-        (bundle, path) in zip(twoNodeBundles, oldPaths)
-    ) <= costThreshold && return 0.0
+    # Saving previous bins and removing bundle 
+    prevSol = solution_deepcopy(solution, instance)
+    costRemoved = update_solution!(
+        solution, instance, twoNodeBundles, oldPaths; remove=true
+    )
 
-    # Checking bundles paths and bundles on nodes corresponds
-    for bundle in instance.bundles
-        for node in solution.bundlePaths[bundle.idx][2:end]
-            @assert bundle.idx in solution.bundlesOnNode[node]
+    # Creating a unique bundle for all the bundles concerned
+    # Putting one order for each delivery date to fuse them together
+    newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
+    for bundle in twoNodeBundles
+        # Fusing all orders
+        for order in bundle.orders
+            append!(newOrders[order.deliveryDate].content, order.content)
         end
     end
-    for node in keys(solution.bundlesOnNode)
-        for bunIdx in solution.bundlesOnNode[node]
-            @assert node in solution.bundlePaths[bunIdx][2:end]
-        end
+    filter!(o -> length(o.content) > 0, newOrders)
+    for order in newOrders
+        sort!(order.content)
     end
-    @assert is_feasible(instance, solution)
+    newOrders = [
+        add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
+    ]
+    bunIdx = twoNodeBundleIdxs[1]
+    commonBundle = Bundle(
+        twoNodeBundles[1].supplier,
+        twoNodeBundles[1].customer,
+        newOrders,
+        bunIdx,
+        UInt(0),
+        0,
+        0,
+    )
+
+    # Inserting it back
+    newPath, pathCost = greedy_insertion(
+        solution,
+        TTGraph,
+        TSGraph,
+        commonBundle,
+        src,
+        dst,
+        CAPACITIES;
+        sorted=true,
+        findSources=false,
+    )
+    
+    # Updating solution for the next step
+    newPaths = [newPath for _ in 1:length(twoNodeBundles)]
+    updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
+    improvement = updateCost + costRemoved
+    
+    # Inserting back concerned bundles
+    for (i, bIdx) in enumerate(twoNodeBundleIdxs) 
+        bundle = instance.bundles[bIdx]
+        improvement += bundle_reintroduction!(solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=1.0)
+        i % 10 == 0 && print(".")
+    end
+
+    # If no improvement at the end, reverting solution to its first state
+    if improvement > 1e2
+        newPaths = deepcopy(solution.bundlePaths)
+        revert_solution!(
+            solution,
+            instance,
+            instance.bundles,
+            prevSol.bundlePaths,
+            prevSol.bins,
+            newPaths,
+        )
+        print("x")
+        return 0.0
+    elseif !is_feasible(instance, solution)
+        newPaths = deepcopy(solution.bundlePaths)
+        revert_solution!(
+            solution,
+            instance,
+            instance.bundles,
+            prevSol.bundlePaths,
+            prevSol.bins,
+            newPaths,
+        )
+        print("X")
+        return 0.0
+    else
+        print("o")
+        return improvement
+    end
+end
+
+function two_node_common!(
+    solution::Solution,
+    instance::Instance,
+    src::Int,
+    dst::Int,
+    CAPACITIES::Vector{Int};
+    costThreshold::Float64=EPS,
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
+    twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
+    # If there is no bundles concerned, returning
+    length(twoNodeBundles) == 0 && return 0.0
+    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
 
     # Saving previous bins and removing bundle 
-    # prevSol = solution_deepcopy(solution, instance)
     oldBins = save_previous_bins(
         solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
     )
@@ -280,29 +366,132 @@ function two_node_common_incremental!(
         solution, instance, twoNodeBundles, oldPaths; remove=true
     )
 
-    # If the cost removed only amouts to the linear part of the cost, improvements are too small compared to the computational cost
-    pathsLinearCost = sum(
-        bundle_path_linear_cost(bundle, path, TTGraph) for
-        (bundle, path) in zip(twoNodeBundles, oldPaths)
-    )
-    if costRemoved + pathsLinearCost >= -EPS
-        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
-
-        # Checking bundles paths and bundles on nodes corresponds
-        for bundle in instance.bundles
-            for node in solution.bundlePaths[bundle.idx][2:end]
-                @assert bundle.idx in solution.bundlesOnNode[node]
-            end
+    # Creating a unique bundle for all the bundles concerned
+    # Putting one order for each delivery date to fuse them together
+    newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
+    for bundle in twoNodeBundles
+        # Fusing all orders
+        for order in bundle.orders
+            append!(newOrders[order.deliveryDate].content, order.content)
         end
-        for node in keys(solution.bundlesOnNode)
-            for bunIdx in solution.bundlesOnNode[node]
-                @assert node in solution.bundlePaths[bunIdx][2:end]
-            end
-        end
-        @assert is_feasible(instance, solution)
-
-        return 0.0
     end
+    filter!(o -> length(o.content) > 0, newOrders)
+    for order in newOrders
+        sort!(order.content)
+    end
+    newOrders = [
+        add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
+    ]
+    bunIdx = twoNodeBundleIdxs[1]
+    commonBundle = Bundle(
+        twoNodeBundles[1].supplier,
+        twoNodeBundles[1].customer,
+        newOrders,
+        bunIdx,
+        UInt(0),
+        0,
+        0,
+    )
+
+    # Inserting it back
+    newPath, pathCost = greedy_insertion(
+        solution,
+        TTGraph,
+        TSGraph,
+        commonBundle,
+        src,
+        dst,
+        CAPACITIES;
+        sorted=true,
+        findSources=false,
+    )
+    
+    # Updating solution for the next step
+    newPaths = [newPath for _ in 1:length(twoNodeBundles)]
+    updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
+    improvement = updateCost + costRemoved
+
+    # If no improvement at the end, reverting solution to its first state
+    if improvement > 1e2
+        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
+        print("x")
+        return 0.0
+    elseif !is_feasible(instance, solution)
+        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
+        print("X")
+        return 0.0
+    else
+        print("o")
+        return improvement
+    end
+end
+
+function two_node_common_incremental_debug!(
+    solution::Solution,
+    instance::Instance,
+    src::Int,
+    dst::Int,
+    CAPACITIES::Vector{Int};
+    costThreshold::Float64=EPS,
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
+    twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
+    # If there is no bundles concerned, returning
+    length(twoNodeBundles) == 0 && return 0.0
+    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
+
+    # The filtering could also occur in terms of cost removed : it must be above a certain threshold
+    # sum(
+    #     bundle_estimated_removal_cost(bundle, path, instance, solution) for
+    #     (bundle, path) in zip(twoNodeBundles, oldPaths)
+    # ) <= costThreshold && return 0.0
+
+    # Checking bundles paths and bundles on nodes corresponds
+    # for bundle in instance.bundles
+    #     for node in solution.bundlePaths[bundle.idx][2:end]
+    #         @assert bundle.idx in solution.bundlesOnNode[node]
+    #     end
+    # end
+    # for node in keys(solution.bundlesOnNode)
+    #     for bunIdx in solution.bundlesOnNode[node]
+    #         @assert node in solution.bundlePaths[bunIdx][2:end]
+    #     end
+    # end
+    @assert is_feasible(instance, solution)
+
+    # Saving previous bins and removing bundle 
+    prevSol = solution_deepcopy(solution, instance)
+    # oldBins = save_previous_bins(
+    #     solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
+    # )
+    costRemoved = update_solution!(
+        solution, instance, twoNodeBundles, oldPaths; remove=true
+    )
+
+    # If the cost removed only amouts to the linear part of the cost, improvements are too small compared to the computational cost
+    # pathsLinearCost = sum(
+    #     bundle_path_linear_cost(bundle, path, TTGraph) for
+    #     (bundle, path) in zip(twoNodeBundles, oldPaths)
+    # )
+    # if costRemoved + pathsLinearCost >= -EPS
+    #     revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
+
+    #     # Checking bundles paths and bundles on nodes corresponds
+    #     for bundle in instance.bundles
+    #         for node in solution.bundlePaths[bundle.idx][2:end]
+    #             @assert bundle.idx in solution.bundlesOnNode[node]
+    #         end
+    #     end
+    #     for node in keys(solution.bundlesOnNode)
+    #         for bunIdx in solution.bundlesOnNode[node]
+    #             @assert node in solution.bundlePaths[bunIdx][2:end]
+    #         end
+    #     end
+    #     @assert is_feasible(instance, solution)
+
+    #     return 0.0
+    # end
     # Creating a unique bundle for all the bundles concerned
     # Putting one order for each delivery date to fuse them together
     newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
@@ -353,35 +542,42 @@ function two_node_common_incremental!(
     # if improvement < -1
     #     prevSol = solution_deepcopy(solution, instance)
     # end
+    # @assert is_feasible(instance, solution)
+
+    for (i, bIdx) in enumerate(twoNodeBundleIdxs) 
+        bundle = instance.bundles[bIdx]
+        improvement += bundle_reintroduction!(solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=1.0)
+        print(".")
+    end
     @assert is_feasible(instance, solution)
 
     # Checking bundles paths and bundles on nodes corresponds
-    for bundle in instance.bundles
-        for node in solution.bundlePaths[bundle.idx][2:end]
-            if !(bundle.idx in solution.bundlesOnNode[node])
-                println("bundle $bundle")
-                localIdx = findfirst(x -> x == bundle.idx, twoNodeBundleIdxs)
-                println("old path $(oldPaths[localIdx])")
-                println("new path $(commonPaths[localIdx])")
-                println("node $node and bundles on node $(solution.bundlesOnNode[node])")
-            end
-            @assert bundle.idx in solution.bundlesOnNode[node]
-        end
-    end
-    for node in keys(solution.bundlesOnNode)
-        for bunIdx in solution.bundlesOnNode[node]
-            if !(node in solution.bundlePaths[bunIdx][2:end])
-                println("bundle $(instance.bundles[bunIdx])")
-                localIdx = findfirst(x -> x == bunIdx, twoNodeBundleIdxs)
-                println("old path $(oldPaths[localIdx])")
-                println(
-                    "new path $(commonPaths[localIdx]) (full path $(solution.bundlePaths[bunIdx]))",
-                )
-                println("node $node and bundles on node $(solution.bundlesOnNode[node])")
-            end
-            @assert node in solution.bundlePaths[bunIdx][2:end]
-        end
-    end
+    # for bundle in instance.bundles
+    #     for node in solution.bundlePaths[bundle.idx][2:end]
+    #         if !(bundle.idx in solution.bundlesOnNode[node])
+    #             println("bundle $bundle")
+    #             localIdx = findfirst(x -> x == bundle.idx, twoNodeBundleIdxs)
+    #             println("old path $(oldPaths[localIdx])")
+    #             println("new path $(commonPaths[localIdx])")
+    #             println("node $node and bundles on node $(solution.bundlesOnNode[node])")
+    #         end
+    #         @assert bundle.idx in solution.bundlesOnNode[node]
+    #     end
+    # end
+    # for node in keys(solution.bundlesOnNode)
+    #     for bunIdx in solution.bundlesOnNode[node]
+    #         if !(node in solution.bundlePaths[bunIdx][2:end])
+    #             println("bundle $(instance.bundles[bunIdx])")
+    #             localIdx = findfirst(x -> x == bunIdx, twoNodeBundleIdxs)
+    #             println("old path $(oldPaths[localIdx])")
+    #             println(
+    #                 "new path $(commonPaths[localIdx]) (full path $(solution.bundlePaths[bunIdx]))",
+    #             )
+    #             println("node $node and bundles on node $(solution.bundlesOnNode[node])")
+    #         end
+    #         @assert node in solution.bundlePaths[bunIdx][2:end]
+    #     end
+    # end
 
     # Some new path parts can render the whole bundle path non-admissible
     # for (i, bundle) in enumerate(twoNodeBundles)
@@ -562,43 +758,42 @@ function two_node_common_incremental!(
     # end
 
     # If no improvement at the end, reverting solution to its first state
-    if improvement > 1e3
-        # println("Reverting solution because no improvement was found")
-        # @assert is_feasible(instance, prevSol)
-        # newPaths = deepcopy(solution.bundlePaths)
-        # revert_solution!(
-        #     solution,
-        #     instance,
-        #     instance.bundles,
-        #     prevSol.bundlePaths,
-        #     prevSol.bins,
-        #     newPaths,
-        # )
-        # revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
-        # println("Reverted solution")
+    if improvement > 1e2
+        println("Reverting solution because no improvement was found")
+        @assert is_feasible(instance, prevSol)
+        newPaths = deepcopy(solution.bundlePaths)
+        revert_solution!(
+            solution,
+            instance,
+            instance.bundles,
+            prevSol.bundlePaths,
+            prevSol.bins,
+            newPaths,
+        )
+        println("Reverted solution")
 
-        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
+        # revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
 
-        # Checking bundles paths and bundles on nodes corresponds
-        for bundle in instance.bundles
-            for node in solution.bundlePaths[bundle.idx][2:end]
-                @assert bundle.idx in solution.bundlesOnNode[node]
-            end
-        end
-        for node in keys(solution.bundlesOnNode)
-            for bunIdx in solution.bundlesOnNode[node]
-                if !(node in solution.bundlePaths[bunIdx][2:end])
-                    println("bundle $bundle")
-                    localIdx = findfirst(x -> x == bunIdx, twoNodeBundleIdxs)
-                    println("old path $(oldPaths[localIdx])")
-                    println("new path $(newPaths[localIdx])")
-                    println(
-                        "node $node and bundles on node $(solution.bundlesOnNode[node])"
-                    )
-                end
-                @assert node in solution.bundlePaths[bunIdx][2:end]
-            end
-        end
+        # # Checking bundles paths and bundles on nodes corresponds
+        # for bundle in instance.bundles
+        #     for node in solution.bundlePaths[bundle.idx][2:end]
+        #         @assert bundle.idx in solution.bundlesOnNode[node]
+        #     end
+        # end
+        # for node in keys(solution.bundlesOnNode)
+        #     for bunIdx in solution.bundlesOnNode[node]
+        #         if !(node in solution.bundlePaths[bunIdx][2:end])
+        #             println("bundle $bundle")
+        #             localIdx = findfirst(x -> x == bunIdx, twoNodeBundleIdxs)
+        #             println("old path $(oldPaths[localIdx])")
+        #             println("new path $(newPaths[localIdx])")
+        #             println(
+        #                 "node $node and bundles on node $(solution.bundlesOnNode[node])"
+        #             )
+        #         end
+        #         @assert node in solution.bundlePaths[bunIdx][2:end]
+        #     end
+        # end
         @assert is_feasible(instance, solution)
 
         return 0.0
@@ -720,7 +915,7 @@ end
 # This needs testing to see if the added computation time is worth it
 
 function local_search!(
-    solution::Solution, instance::Instance; twoNode::Bool=false, timeLimit::Int=300
+    solution::Solution, instance::Instance; twoNodePerturb::Bool=false, timeLimit::Int=300
 )
     # Combine the three small neighborhoods
     TTGraph = instance.travelTimeGraph
@@ -740,48 +935,57 @@ function local_search!(
     # loopImprovement = -1e4
     # while time() - startTime < timeLimit && loopImprovement < -1e3
     #     loopImprovement = 0.0
-    for (i, bundleIdx) in enumerate(bundleIdxs)
-        bundle = instance.bundles[bundleIdx]
-        improvement = bundle_reintroduction!(
-            solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
-        )
-        i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
-        # loopImprovement += improvement
-        totalImprovement += improvement
-        improvement < -1e-3 && (bunCounter += 1)
-        time() - startTime > timeLimit && break
-    end
-    #     println()
+    # for (i, bundleIdx) in enumerate(bundleIdxs)
+    #     bundle = instance.bundles[bundleIdx]
+    #     improvement = bundle_reintroduction!(
+    #         solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
+    #     )
+    #     i % 10 == 0 && print("|")
+    #     i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
+    #     # loopImprovement += improvement
+    #     totalImprovement += improvement
+    #     improvement < -1e-3 && (bunCounter += 1)
+    #     time() - startTime > timeLimit && break
     # end
-    println()
-    feasible = is_feasible(instance, solution)
-    @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
-        totalImprovement :time = round((time() - startTime) * 1000) / 1000 :feasible =
-        feasible
+    # #     println()
+    # # end
+    # println()
+    # feasible = is_feasible(instance, solution)
+    # @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
+    #     totalImprovement :time = round((time() - startTime) * 1000) / 1000 :feasible =
+    #     feasible
     # Second, two node incremental to optimize shared network
-    if twoNode
-        startTime = time()
-        twoNodeImprovement = 0.0
-        twoNodeCounter = 0
-        twoNodeTested = 0
-        plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
-        two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
-        # threshold = 1e-4 * startCost
-        i = 0
-        percentIdx = ceil(Int, length(two_node_nodes) * length(TTGraph.commonNodes) / 100)
-        barIdx = ceil(Int, percentIdx / 5)
-        println("Two node common incremental progress : (| = $barIdx combinations)")
+    startTime = time()
+    twoNodeImprovement = 0.0
+    twoNodeCounter = 0
+    twoNodeTested = 0
+    plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
+    two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
+    threshold = 5e-5 * compute_cost(instance, solution)
+    i = 0
+    percentIdx = ceil(Int, length(two_node_nodes) * length(TTGraph.commonNodes) / 100)
+    barIdx = ceil(Int, percentIdx / 5)
+    println("Two node common incremental progress : (| = $barIdx combinations)")
+    
+    for _ in 1:1
         for dst in shuffle(two_node_nodes), src in TTGraph.commonNodes
             i += 1
             i % percentIdx == 0 && print(
                 " $(round(Int, i * 100 / (length(two_node_nodes) * length(TTGraph.commonNodes))))% ",
             )
             i % barIdx == 0 && print("|")
-            are_nodes_candidate(TTGraph, src, dst) || continue
-            improvement = two_node_common_incremental!(
+            are_nodes_candidate2(TTGraph, src, dst) || continue
+            
+            if twoNodePerturb
+                improvement = two_node_common_incremental!(
                 solution, instance, src, dst, CAPACITIES; costThreshold=threshold
             )
+            else
+                improvement = two_node_common!(
+                solution, instance, src, dst, CAPACITIES; costThreshold=threshold
+            )
+            end
+            
             twoNodeTested += 1
             (improvement < -1e-1) && (twoNodeCounter += 1)
             twoNodeImprovement += improvement
@@ -789,34 +993,37 @@ function local_search!(
             round((time() - startTime) * 1000) / 1000 > timeLimit && break
         end
         println()
-        @info "Total two-node improvement" :couples_computed = twoNodeTested :improved =
-            twoNodeCounter :improvement = twoNodeImprovement :time =
-            round((time() - startTime) * 1000) / 1000
     end
+    
+    @info "Total two-node improvement" :couples_computed = twoNodeTested :improved =
+        twoNodeCounter :improvement = twoNodeImprovement :time =
+        round((time() - startTime) * 1000) / 1000
     # Again reintroduction
-    print("Bundle reintroduction progress : ")
-    percentIdx = ceil(Int, length(bundleIdxs) / 100)
-    threshold = 5e-5 * startCost
-    CAPACITIES = Int[]
-    reintroImprov = 0.0
-    for (i, bundleIdx) in enumerate(bundleIdxs)
-        bundle = instance.bundles[bundleIdx]
-        improvement = bundle_reintroduction!(
-            solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
-        )
-        i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
-        totalImprovement += improvement
-        reintroImprov += improvement
-        improvement < -1e-3 && (bunCounter += 1)
-        time() - startTime > timeLimit && break
-    end
-    println()
-    feasible = is_feasible(instance, solution)
-    @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
-        reintroImprov :time = round((time() - startTime) * 1000) / 1000 :feasible = feasible
+    # print("Bundle reintroduction progress : ")
+    # bundleIdxs = randperm(length(instance.bundles))
+    # percentIdx = ceil(Int, length(bundleIdxs) / 100)
+    # threshold = 5e-5 * startCost
+    # CAPACITIES = Int[]
+    # reintroImprov = 0.0
+    # startTime = time()
+    # for (i, bundleIdx) in enumerate(bundleIdxs)
+    #     bundle = instance.bundles[bundleIdx]
+    #     improvement = bundle_reintroduction!(
+    #         solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
+    #     )
+    #     i % 10 == 0 && print("|")
+    #     i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
+    #     totalImprovement += improvement
+    #     reintroImprov += improvement
+    #     improvement < -1e-3 && (bunCounter += 1)
+    #     time() - startTime > timeLimit && break
+    # end
+    # println()
+    # feasible = is_feasible(instance, solution)
+    # @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
+    #     reintroImprov :time = round((time() - startTime) * 1000) / 1000 :feasible = feasible
     # Second, two node incremental to optimize shared network
-    if twoNode
+    # if twoNode
         startTime = time()
         twoNodeImprovement = 0.0
         twoNodeCounter = 0
@@ -855,7 +1062,28 @@ function local_search!(
         @info "Total two-node improvement" :couples_computed = twoNodeTested :improved =
             twoNodeCounter :improvement = twoNodeImprovement :time =
             round((time() - startTime) * 1000) / 1000
+    # end
+    reintroImprov = 0.0
+    # Bundle reintroduction at last 
+    for (i, bundleIdx) in enumerate(bundleIdxs)
+        bundle = instance.bundles[bundleIdx]
+        improvement = bundle_reintroduction!(
+            solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
+        )
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
+        reintroImprov += improvement
+        totalImprovement += improvement
+        improvement < -1e-3 && (bunCounter += 1)
+        time() - startTime > timeLimit && break
     end
+    #     println()
+    # end
+    println()
+    feasible = is_feasible(instance, solution)
+    @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
+        reintroImprov :time = round((time() - startTime) * 1000) / 1000 :feasible =
+        feasible
     # Finally, bin packing improvement to optimize packings
     startTime = time()
     improvement = bin_packing_improvement!(solution, instance; sorted=true)
