@@ -128,15 +128,16 @@ function local_search_heuristic!(
     solution::Solution, instance::Instance; timeLimit::Int, stepLimit::Int=120
 )
     println()
-    improvThreshold = -1e-3 * compute_cost(instance, solution)
+    improvThreshold = -5e-4 * compute_cost(instance, solution)
     @info "Running Local Search heuristic" :min_improvement = improvThreshold
     # Initialize start time
     startTime = time()
 
-    improvement = local_search!(solution, instance; timeLimit=stepLimit, twoNode=true)
+    improvement = local_search!(solution, instance; timeLimit=stepLimit)
     while get_elapsed_time(startTime) < timeLimit && improvement < improvThreshold
-        improvement = local_search!(solution, instance; timeLimit=stepLimit, twoNode=true)
+        improvement = local_search!(solution, instance; timeLimit=stepLimit)
     end
+    local_search!(solution, instance; timeLimit=stepLimit)
 
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solution)
@@ -147,14 +148,13 @@ function local_search_heuristic!(
     return println()
 end
 
-# TODO : put as termination criteria a certain number of unfruitful lns steps
-# TODO : add a mechanism to periodically reset costs ? if unfruitful step = 1, reset costs 
-# this needs to be parametrized
+# TODO : add mechanism to restart from a completely diffreent solution
 
 function lns_heuristic!(
     solution::Solution, instance::Instance; timeLimit::Int, lsTimeLimit::Int
 )
     improvThreshold = -1e-4 * compute_cost(instance, solution)
+    bestSol = solution_deepcopy(solution, instance)
     @info "Running Large Neighborhood Search heuristic" :min_improvement = improvThreshold
     # Initialize start time
     startTime = time()
@@ -165,15 +165,19 @@ function lns_heuristic!(
     unfruitful = 0
     resetCost = false
     while get_elapsed_time(startTime) < timeLimit
+        if unfruitful == 1
+            resetCost = true
+        elseif unfruitful == 3
+            # We are restarting so we need to store the best solution found so far
+            bestSol = solution_deepcopy(solution, instance)
+            # TODO : restart with greedy and random insertion order
+        end
+        improvement = LNS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
         if improvement > improvThreshold
             unfruitful += 1
         else
             unfruitful = 0
         end
-        if unfruitful == 1
-            resetCost = true
-        end
-        improvement = LNS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
     end
 
     solveTime = get_elapsed_time(startTime)
