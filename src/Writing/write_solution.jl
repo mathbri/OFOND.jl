@@ -10,6 +10,7 @@ end
 
 function write_network_design(io::IO, solution::Solution, instance::Instance)
     # push data into a vector 
+    nLines = 0
     data = Vector{Any}(undef, length(NETWORK_DESIGN_COLUMNS))
     data[1] = 1  # route_id
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
@@ -34,15 +35,18 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                         data[11] = id  # shipment_id
                         # writing data in csv formatted string
                         println(io, join(data, ","))
+                        nLines += 1
                     end
                 end
             end
             data[1] += 1  # route_id
         end
     end
+    return nLines
 end
 
 function write_shipment_info(io::IO, solution::Solution, instance::Instance)
+    nLines = 0
     data = Vector{Any}(undef, length(SHIPMENT_INFO_COLUMNS))
     TSGraph = instance.timeSpaceGraph
     for arc in edges(TSGraph.graph)
@@ -62,8 +66,10 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             data[9] = arcData.carbonCost * fillingRate  # carbon_cost
             data[10] = dstData.volumeCost * fillingRate  # platform_cost
             println(io, join(data, ","))
+            nLines += 1
         end
     end
+    return nLines
 end
 
 # Find the bundle corresponding to the commodity
@@ -76,6 +82,7 @@ function find_bundle(instance::Instance, com::Commodity)
 end
 
 function write_shipment_content(io::IO, solution::Solution, instance::Instance)
+    nLines = 0
     data = Vector{Any}(undef, length(SHIPMENT_CONTENT_COLUMNS))
     data[1] = 1  # content_id
     for arc in edges(instance.timeSpaceGraph.graph)
@@ -93,9 +100,11 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
                 data[8] = data[6] * data[7]  # volume  
                 println(io, join(data, ","))
                 data[1] += 1
+                nLines += 1
             end
         end
     end
+    return nLines
 end
 
 function write_solution(
@@ -103,21 +112,22 @@ function write_solution(
 )
     @info "Writing solution to CSV files (suffix: $suffix, directory: $directory)"
     # network design file 
+    nLines = 0
     open(joinpath(directory, "network_design_$suffix.csv"), "w") do io
-        join(io, NETWORK_DESIGN_COLUMNS, ",", "\n")
-        write_network_design(io, solution, instance)
+        println(io, join(NETWORK_DESIGN_COLUMNS, ","))
+        nLines = write_network_design(io, solution, instance)
     end
-    @info "Network design file done"
+    @info "Network design file done ($nLines lines x $(length(NETWORK_DESIGN_COLUMNS)) columns)"
     # shipment info file
     open(joinpath(directory, "shipment_info_$suffix.csv"), "w") do io
-        join(io, SHIPMENT_INFO_COLUMNS, ",", "\n")
-        write_shipment_info(io, solution, instance)
+        println(io, join(SHIPMENT_INFO_COLUMNS, ","))
+        nLines = write_shipment_info(io, solution, instance)
     end
-    @info "Shipment info file done"
+    @info "Shipment info file done ($nLines lines x $(length(SHIPMENT_INFO_COLUMNS)) columns)"
     # shipment content file
     open(joinpath(directory, "shipment_content_$suffix.csv"), "w") do io
-        join(io, SHIPMENT_CONTENT_COLUMNS, ",", "\n")
-        write_shipment_content(io, solution, instance)
+        println(io, join(SHIPMENT_CONTENT_COLUMNS, ","))
+        nLines = write_shipment_content(io, solution, instance)
     end
-    @info "Shipment content file done"
+    @info "Shipment content file done ($nLines lines x $(length(SHIPMENT_CONTENT_COLUMNS)) columns)"
 end

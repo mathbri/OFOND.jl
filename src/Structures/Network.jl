@@ -85,40 +85,57 @@ end
 
 # Adding a node to the network
 function add_node!(network::NetworkGraph, node::NetworkNode; verbose::Bool=false)
+    ignore_type = :all_good
     if haskey(network.graph, node.hash)
         verbose &&
             @warn "Same node already in the network" :nodeInGraph = network.graph[node.hash] :nodeToAdd =
                 node
+        ignore_type = :same_node
     elseif !(node.type in NODE_TYPES)
         verbose && @warn "Node type not in NodeTypes" :node = node :nodeTypes = join(
             NODE_TYPES, ", "
         )
+        ignore_type = :unknown_type
     else
         # Adding the node to the network graph
         network.graph[node.hash] = node
         # If its a supplier adding shortcut arc to the network 
         node.type == :supplier && add_arc!(network, node, node, SHORTCUT)
         # Returning true if everything went well
-        return true
+        return true, ignore_type
     end
     # Returning false otherwise
+    return false, ignore_type
 end
 
 # Adding a leg to the network
-function add_arc!(network::NetworkGraph, src::UInt, dst::UInt, arc::NetworkArc)
+function add_arc!(
+    network::NetworkGraph, src::UInt, dst::UInt, arc::NetworkArc; verbose=false
+)
+    ignore_type = :all_good
     if haskey(network.graph, src, dst)
-        @warn "Source and destination already have arc data" :srcInGraph = network.graph[src] :dstInGraph = network.graph[dst] :srcToAdd =
-            src :dstToAdd = dst
+        verbose &&
+            @warn "Source and destination already have arc data" :srcInGraph = network.graph[src] :dstInGraph = network.graph[dst] :srcToAdd =
+                src :dstToAdd = dst
+        ignore_type = :same_arc
     elseif !haskey(network.graph, src)
-        @warn "Source unknown in the network" :source = src
+        verbose && @warn "Source unknown in the network" :source = src
+        ignore_type = :unknown_source
     elseif !haskey(network.graph, dst)
-        @warn "Destination unknown in the network" :destination = dst
+        verbose && @warn "Destination unknown in the network" :destination = dst
+        ignore_type = :unknown_dest
     elseif !(arc.type in ARC_TYPES)
-        @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = join(ARC_TYPES, ", ")
+        verbose &&
+            @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = join(ARC_TYPES, ", ")
+        ignore_type = :unknown_type
     else
         # Adding the leg to the network graph (if no anomaly)
         network.graph[src, dst] = arc
+        # Returning true if everything went well
+        return true, ignore_type
     end
+    # Returning false otherwise
+    return false, ignore_type
 end
 
 # Wrapper for network nodes

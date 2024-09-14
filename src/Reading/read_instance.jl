@@ -23,11 +23,14 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String)
         node_file; types=Dict("point_account" => String, "point_type" => String)
     )
     @info "Reading nodes from CSV file $(basename(node_file)) ($(length(csv_reader)) lines)"
+    ignored = Dict(:same_node => 0, :unknown_type => 0)
     for row in csv_reader
         node = read_node!(counts, row)
-        add_node!(network, node)
+        added, ignore_type = add_node!(network, node)
+        added || (ignored[ignore_type] += 1)
     end
-    @info "Read $(nv(network.graph)) nodes : $counts"
+    ignoredStr = join(pairs(ignored), ", ")
+    @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr
 end
 
 function src_dst_hash(row::CSV.Row)
@@ -71,7 +74,9 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
     csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
     @info "Reading legs from CSV file $(basename(leg_file)) ($(length(csv_reader)) lines)"
-    sameSrcDst = 0
+    ignored = Dict(
+        :same_arc => 0, :unknown_type => 0, :unknown_source => 0, :unknown_dest => 0
+    )
     for row in csv_reader
         src, dst = src_dst_hash(row)
         if src == dst
@@ -79,10 +84,11 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
             continue
         end
         arc = read_leg!(counts, row, is_common_arc(row))
-        add_arc!(network, src, dst, arc)
+        added, ignore_type = add_arc!(network, src, dst, arc)
+        added || (ignored[ignore_type] += 1)
     end
-    sameSrcDst > 0 && @warn "Ignored $(sameSrcDst) legs with same src and dst"
-    @info "Read $(ne(network.graph)) legs : $counts"
+    ignoredStr = join(pairs(ignored), ", ")
+    @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
 end
 
 function bundle_hash(row::CSV.Row)
