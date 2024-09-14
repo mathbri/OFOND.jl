@@ -37,9 +37,11 @@ function run_heuristic(
 
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solution)
+    totalCost = compute_cost(instance, solution)
     # detect_infeasibility(instance, solution)
     @info "$heuristic heuristic results" :solve_time = solveTime :feasible = feasible :total_cost =
-        return instance, solution
+        totalCost
+    return instance, solution
 end
 
 function shortest_delivery_heuristic(instance::Instance)
@@ -117,7 +119,9 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
 
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solution)
+    totalCost = compute_cost(instance, solution)
     # detect_infeasibility(instance, solution)
     @info "Final results" :solve_time = solveTime :feasible = feasible :total_cost =
-        return instance, solution
+        totalCost
+    return instance, solution
 end

@@ -76,7 +76,14 @@ function time_space_projector(
     timeSpaceDate < 1 && (timeSpaceDate += timeSpaceGraph.timeHorizon)
     # Using travel time link dict to return the right node idx
     nodeData = travelTimeGraph.networkNodes[travelTimeNode]
-    return timeSpaceGraph.hashToIdx[hash(timeSpaceDate, nodeData.hash)]
+    if haskey(timeSpaceGraph.hashToIdx, hash(timeSpaceDate, nodeData.hash))
+        return timeSpaceGraph.hashToIdx[hash(timeSpaceDate, nodeData.hash)]
+
+    else
+        stepToDel = travelTimeGraph.stepToDel[travelTimeNode]
+        @warn "Could not project node $travelTimeNode ($nodeData) on step to del $stepToDel for delivery date $deliveryDate -> time step $timeSpaceDate (time horizon = [1, ..., $(timeSpaceGraph.timeHorizon)])"
+        return -1
+    end
 end
 
 # Wrapper for Order object

@@ -69,6 +69,16 @@ function update_bins!(
     for order in bundle.orders
         # Projecting path
         timedPath = time_space_projector(TTGraph, TSGraph, path, order)
+        if -1 in timedPath
+            bundleSrcDst = (TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx])
+            pathStr = join(path, ", ")
+            pathInfo = join(string.(TTGraph.networkNodes[path]), ", ")
+            pathSteps = join(string.(TTGraph.stepToDel[path]), ", ")
+            timedPathStr = join(timedPath, ", ")
+            @error "At least one node was not projected in bin updating" :bundle = bundle :bundleSrcDst =
+                bundleSrcDst :order = order :path = pathStr :pathInfo = pathInfo :pathSteps =
+                pathSteps :timedPath = timedPathStr
+        end
         # Add or Remove order
         if remove
             costAdded += remove_order!(solution, TSGraph, timedPath, order)
