@@ -69,7 +69,7 @@ function get_all_commodities(bins::Vector{Bin})
     # verify the global vector is long enough 
     nCom = sum(length(bin.content) for bin in bins; init=0)
     if nCom > length(ALL_COMMODITIES)
-        append!(ALL_COMMODITIES, fill(bins[1].content[1], nCom - length(ALL_COMMODITIES)))
+        append!(ALL_COMMODITIES, zeros(Commodity, nCom - length(ALL_COMMODITIES)))
     end
     # put all commodities in the global vector
     idx = 1

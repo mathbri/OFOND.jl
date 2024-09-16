@@ -2,5 +2,6 @@
 *test.csv
 scripts/data/*
 scripts/data_test/*
+scripts/data_8M/*
 scripts/export/*
 *.jld2
