@@ -34,3 +34,7 @@ function Base.show(io::IO, commodity::Commodity)
         "Commodity($(commodity.orderHash), $(commodity.partNumHash), $(commodity.size), $(commodity.stockCost))",
     )
 end
+
+function Base.zero(::Type{Commodity})
+    return Commodity(UInt(0), UInt(0), 0, 0.0)
+end

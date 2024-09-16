@@ -115,8 +115,8 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
     else
         @info "Choosing greedy solution as initial solution"
     end
-    improvement = 1.0
-    while get_elapsed_time(startTime) < timeLimit && improvement > 1e-3
+    improvement, lsLoops = 1.0, 0
+    while (get_elapsed_time(startTime) < timeLimit || lsLoops < 1) && improvement > 1e-3
         improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
     end
 
