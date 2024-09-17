@@ -11,35 +11,37 @@ end
 function write_network_design(io::IO, solution::Solution, instance::Instance)
     # push data into a vector 
     nLines = 0
-    data = Vector{Any}(undef, length(NETWORK_DESIGN_COLUMNS))
-    data[1] = 1  # route_id
+    routeId = 1
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     for bundle in instance.bundles
-        data[2] = bundle.supplier.account  # supplier_account
-        data[3] = bundle.customer.account  # customer_account
         path = solution.bundlePaths[bundle.idx]
         for order in bundle.orders
-            data[7] = instance.dates[order.deliveryDate]  # delivery_date
             orderCom = unique(order.content)
             timedPath = time_space_projector(TTGraph, TSGraph, path, order)
             for com in orderCom
-                data[4] = instance.partNumbers[com.partNumHash]  # part_number
-                data[5] = com.size         # packaging
-                data[6] = length(findall(x -> x === com, order.content))  # quantity_part_in_route
+                quantPartInRoute = length(findall(x -> x === com, order.content))
+                comSize = round(com.size / VOLUME_FACTOR; digits=2)
                 for (idx, node) in enumerate(timedPath)
-                    data[8] = TSGraph.networkNodes[node].account  # point_account
-                    data[9] = idx  # point_index
-                    data[10] = instance.dates[TSGraph.timeStep[node]]  # point_date
+                    # TODO : all the time is lost in this function, by the findall
                     shipments_ids = get_shipments_ids(solution, timedPath, node, idx, com)
                     for id in shipments_ids
-                        data[11] = id  # shipment_id
                         # writing data in csv formatted string
-                        println(io, join(data, ","))
+                        print(io, routeId, ",") # route_id
+                        print(io, bundle.supplier.account, ",") # supplier_account
+                        print(io, bundle.customer.account, ",") # customer_account
+                        print(io, instance.partNumbers[com.partNumHash], ",") # part_number
+                        print(io, comSize, ",") # packaging
+                        print(io, quantPartInRoute, ",") # quantity_part_in_route
+                        print(io, instance.dates[order.deliveryDate], ",") # delivery_date
+                        print(io, TSGraph.networkNodes[node].account, ",") # point_account
+                        print(io, idx, ",") # point_index
+                        print(io, instance.dates[TSGraph.timeStep[node]], ",") # point_date
+                        println(io, id, ",") # shipment_id
                         nLines += 1
                     end
                 end
             end
-            data[1] += 1  # route_id
+            routeId += 1  # route_id
         end
     end
     return nLines
@@ -47,60 +49,68 @@ end
 
 function write_shipment_info(io::IO, solution::Solution, instance::Instance)
     nLines = 0
-    data = Vector{Any}(undef, length(SHIPMENT_INFO_COLUMNS))
     TSGraph = instance.timeSpaceGraph
     for arc in edges(TSGraph.graph)
-        data[2] = TSGraph.networkNodes[src(arc)].account  # source_point_account
-        data[3] = TSGraph.networkNodes[dst(arc)].account  # destination_point_account
-        data[4] = instance.dates[TSGraph.timeStep[src(arc)]]  # point_start_date
-        data[5] = instance.dates[TSGraph.timeStep[dst(arc)]]  # point_end_date
         arcData = TSGraph.networkArcs[src(arc), dst(arc)]
         dstData = TSGraph.networkNodes[dst(arc)]
         for bin in solution.bins[src(arc), dst(arc)]
-            data[1] = bin.idx  # shipment_id
-            data[6] = arcData.type  # type
-            data[7] = bin.load  # volume
-            data[8] = arcData.unitCost  # unit_cost
             fillingRate = (bin.load / arcData.capacity)
-            arcData.isLinear && (data[8] *= fillingRate)
-            data[9] = arcData.carbonCost * fillingRate  # carbon_cost
-            data[10] = dstData.volumeCost * fillingRate  # platform_cost
-            println(io, join(data, ","))
+            transportCost = arcData.unitCost
+            arcData.isLinear && (transportCost *= fillingRate)
+            print(io, bin.idx, ",") # shipment_id
+            print(io, TSGraph.networkNodes[src(arc)].account, ",") # source_point_account
+            print(io, TSGraph.networkNodes[dst(arc)].account, ",") # destination_point_account
+            print(io, instance.dates[TSGraph.timeStep[src(arc)]], ",") # point_start_date
+            print(io, instance.dates[TSGraph.timeStep[dst(arc)]], ",") # point_end_date
+            print(io, arcData.type, ",") # type
+            print(io, bin.load / VOLUME_FACTOR, ",") # volume
+            print(io, transportCost, ",") # unit_cost
+            print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
+            println(io, dstData.volumeCost * fillingRate, ",") # platform_cost
             nLines += 1
         end
     end
     return nLines
 end
 
-# Find the bundle corresponding to the commodity
-function find_bundle(instance::Instance, com::Commodity)
+# Construct the bundle finder dictionnary
+function create_bundle_finder(instance::Instance)
+    bunFinder = Dict{UInt,Int}()
     for bundle in instance.bundles
         for order in bundle.orders
-            order.hash == com.orderHash && return bundle
+            bunFinder[order.hash] = bundle.idx
         end
     end
+    return bunFinder
 end
 
 function write_shipment_content(io::IO, solution::Solution, instance::Instance)
     nLines = 0
-    data = Vector{Any}(undef, length(SHIPMENT_CONTENT_COLUMNS))
-    data[1] = 1  # content_id
-    for arc in edges(instance.timeSpaceGraph.graph)
-        arcData = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)]
-        for bin in solution.bins[src(arc), dst(arc)]
-            data[2] = bin.idx  # shipment_id
-            contentCom = unique(bin.content)
-            for com in contentCom
-                data[3] = instance.partNumbers[com.partNumHash]  # part_number
-                bundle = find_bundle(instance, com)
-                data[4] = bundle.supplier.account  # part_supplier_account
-                data[5] = bundle.customer.account  # part_customer_account
-                data[6] = length(findall(x -> x === com, bin.content))  # quantity
-                data[7] = com.size  # packaging_size
-                data[8] = data[6] * data[7]  # volume  
-                println(io, join(data, ","))
-                data[1] += 1
-                nLines += 1
+    # order hash to bundle idx dict to efficiently recover bundle of commodities
+    bundleFinder = create_bundle_finder(instance)
+    contentId = 1  # content_id
+    # Efficient iteration over sparse matrix
+    allBins = nonzeros(solution.bins)
+    for dst in 1:size(solution.bins, 2)
+        for i in nzrange(solution.bins, dst)
+            # allBins[i] get solution.bins[src, dst] with src = rowvals(solution.bins)[i]
+            for bin in allBins[i]
+                contentCom = unique(bin.content)
+                for com in contentCom
+                    bunIdx = bundleFinder[com.orderHash]
+                    bundle = instance.bundles[bunIdx]
+                    print(io, contentId, ",") # content_id
+                    print(io, bin.idx, ",") # shipment_id
+                    print(io, instance.partNumbers[com.partNumHash], ",") # part_number
+                    print(io, bundle.supplier.account, ",") # part_supplier_account
+                    print(io, bundle.customer.account, ",") # part_customer_account
+                    quantity = length(findall(x -> x === com, bin.content))
+                    print(io, quantity, ",") # quantity
+                    print(io, com.size / VOLUME_FACTOR, ",") # packaging_size
+                    println(io, quantity * com.size / VOLUME_FACTOR, ",") # volume
+                    contentId += 1
+                    nLines += 1
+                end
             end
         end
     end
