@@ -8,7 +8,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     # Read files based on ARGS
     println("Launching OFO Network Design")
     println("Arguments : ", ARGS)
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_test")
     if length(ARGS) >= 1
         if isdir(ARGS[1])
             directory = ARGS[1]
@@ -19,7 +19,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     end
     # length(ARGS) >= 1 && isdir(ARGS[1]) && (directory = ARGS[1])
     println("Reading data from $directory")
-    node_file = joinpath(directory, "GeoDataProcessed_LC.csv")
+    node_file = joinpath(directory, "ND-MD-Geo_V5_preprocessing 1.csv")
     if length(ARGS) >= 2
         node_file_given = joinpath(directory, ARGS[2])
         if isfile(node_file_given)
@@ -30,7 +30,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
         end
     end
     # length(ARGS) >= 2 && isfile(ARGS[2]) && (node_file = ARGS[2])
-    leg_file = joinpath(directory, "LegDataProcessed_NV1.csv")
+    leg_file = joinpath(directory, "Legs_preprocessed 1.csv")
     if length(ARGS) >= 3
         leg_file_given = joinpath(directory, ARGS[3])
         if isfile(leg_file_given)
@@ -41,7 +41,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
         end
     end
     # length(ARGS) >= 3 && isfile(ARGS[3]) && (leg_file = ARGS[3])
-    com_file = joinpath(directory, "VolumeDataProcessed_SC.csv")
+    com_file = joinpath(directory, "Volumes_preprocessed 1.csv")
     if length(ARGS) >= 4
         com_file_given = joinpath(directory, ARGS[4])
         if isfile(com_file_given)
@@ -54,13 +54,14 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     # length(ARGS) >= 4 && isfile(ARGS[4]) && (com_file = ARGS[4])
     # read instance 
     instance = read_instance(node_file, leg_file, com_file)
+    # println("Instance dates : $(instance.dates)")
 
     # adding properties to the instance
     CAPACITIES = Int[]
     instance = add_properties(instance, tentative_first_fit, CAPACITIES)
 
     # read solution
-    sol_file = joinpath(directory, "RouteDataProcessed.csv")
+    sol_file = joinpath(directory, "route_Preprocessed 1.csv")
     if length(ARGS) >= 5
         sol_file_given = joinpath(directory, ARGS[5])
         if isfile(sol_file_given)
@@ -73,37 +74,7 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     # length(ARGS) >= 5 && isfile(ARGS[5]) && (sol_file = ARGS[5])
     solution = read_solution(instance, sol_file)
 
-    # cut it into smaller instances 
-    # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
-    # instanceSub = extract_sub_instance(instance; continent="Western Europe", timeHorizon=9)
-    instanceSub = instance
-    # adding properties to the instance
-    # instanceSub = add_properties(instanceSub, tentative_first_fit)
-    # solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
-    solutionSub_C = solution
-
-    # Filtering procedure 
-    _, solutionSub_LBF = lower_bound_filtering_heuristic(instanceSub)
-    println(
-        "Bundles actually filtered : $(count(x -> length(x) == 2, solutionSub_LBF.bundlePaths))",
-    )
-    instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
-    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
-
-    # Greedy or Lower Bound than Local Search heuristic
-    _, solutionSubSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSubSub; timeLimit=300)
-
-    # Fusing solutions
-    finalSolution = fuse_solutions(
-        solutionSubSub_GLS, solutionSub_LBF, instanceSub, instanceSubSub
-    )
-
-    # Cleaning final solution linears arcs
-    @info "Cleaning final solution before extraction"
-    bin_packing_improvement!(finalSolution, instanceSub; sorted=true, skipLinear=false)
-    clean_empty_bins!(finalSolution, instanceSub)
-
-    # export only for the full instance
+    # Export directory
     exportDir = joinpath(dirname(@__DIR__), "scripts", "export")
     if length(ARGS) >= 6
         if isdir(ARGS[6])
@@ -113,10 +84,32 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
                 exportDir
         end
     end
+
+    println("Exporting current solution to $exportDir")
+    write_solution(solution, instance; suffix="current", directory=exportDir)
+
+    # Filtering procedure 
+    _, solution_LBF = lower_bound_filtering_heuristic(instance)
+    println(
+        "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
+    )
+    instanceSub = extract_filtered_instance(instance, solution_LBF)
+    instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
+
+    # Greedy or Lower Bound than Local Search heuristic
+    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=30)
+
+    # Fusing solutions
+    finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
+
+    # Cleaning final solution linears arcs
+    @info "Cleaning final solution before extraction"
+    bin_packing_improvement!(finalSolution, instance; sorted=true, skipLinear=false)
+    clean_empty_bins!(finalSolution, instance)
+
     # length(ARGS) >= 6 && isdir(directory) && (directory = ARGS[6])
-    println("Exporting data to $exportDir")
-    write_solution(finalSolution, instanceSub; suffix="proposed", directory=exportDir)
-    write_solution(solutionSub_C, instanceSub; suffix="current", directory=exportDir)
+    println("Exporting proposed solution to $exportDir")
+    write_solution(finalSolution, instance; suffix="proposed", directory=exportDir)
 
     return 0 # if things finished successfully
 end
@@ -154,13 +147,13 @@ function julia_main_test()
 
     # test algorithms  
 
-    _, solutionSub_LBF = lower_bound_filtering_heuristic(instanceSub)
+    _, solution_LBF = lower_bound_filtering_heuristic(instance)
     println(
-        "Bundles actually filtered : $(count(x -> length(x) == 2, solutionSub_LBF.bundlePaths))",
+        "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
     )
 
-    instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
-    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+    instanceSub = extract_filtered_instance(instance, solution_LBF)
+    instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
 
     solutionSub_C = extract_sub_solution(solution, instance, instanceSubSub)
     # solutionSub_C = solution
@@ -213,8 +206,8 @@ function julia_main_test()
     # println("Max length encountered for packing : $MAX_LENGTH")
     # println("Path recompuations needed : $GREEDY_RECOMPUTATION")
 
-    _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
-    lbCost = compute_cost(instanceSubSub, solutionSub_LB)
+    _, solutionSub_LB = lower_bound_heuristic(instanceSub)
+    lbCost = compute_cost(instanceSub, solutionSub_LB)
 
     # Choosing the best initial solution on which to apply local search 
     solution = solutionSub_G
@@ -244,38 +237,38 @@ function julia_main_test()
 
     # TODO : do soluttion analysis function to print relevant KPIs
 
-    # startCost = compute_cost(instanceSubSub, solutionSubSub_GLS)
+    # startCost = compute_cost(instanceSub, solutionSubSub_GLS)
     # costThreshold = 1e-2 * startCost
-    # slope_scaling_cost_update!(instanceSubSub.timeSpaceGraph, Solution(instanceSubSub))
-    # # slope_scaling_cost_update!(instanceSubSub.timeSpaceGraph, solutionSubSub_GLS)
+    # slope_scaling_cost_update!(instanceSub.timeSpaceGraph, Solution(instanceSub))
+    # # slope_scaling_cost_update!(instanceSub.timeSpaceGraph, solutionSubSub_GLS)
     # ProfileView.@profile perturbate!(
     #     solutionSubSub_GLS,
-    #     instanceSubSub,
+    #     instanceSub,
     #     :single_plant,
     #     startCost,
     #     costThreshold;
     #     verbose=true,
     # )
-    # local_search!(solutionSubSub_GLS, instanceSubSub; twoNode=true, timeLimit=300)
+    # local_search!(solutionSubSub_GLS, instanceSub; twoNode=true, timeLimit=300)
 
-    # startCost = compute_cost(instanceSubSub, solutionSubSub_GLS)
-    # # slope_scaling_cost_update!(instanceSubSub.timeSpaceGraph, solutionSubSub_GLS)
+    # startCost = compute_cost(instanceSub, solutionSubSub_GLS)
+    # # slope_scaling_cost_update!(instanceSub.timeSpaceGraph, solutionSubSub_GLS)
     # perturbate!(
-    #     solutionSubSub_GLS, instanceSubSub, :reduce, startCost, costThreshold; verbose=true
+    #     solutionSubSub_GLS, instanceSub, :reduce, startCost, costThreshold; verbose=true
     # )
-    # local_search!(solutionSubSub_GLS, instanceSubSub; twoNode=true, timeLimit=300)
+    # local_search!(solutionSubSub_GLS, instanceSub; twoNode=true, timeLimit=300)
 
-    # startCost = compute_cost(instanceSubSub, solutionSubSub_GLS)
-    # # slope_scaling_cost_update!(instanceSubSub.timeSpaceGraph, solutionSubSub_GLS)
+    # startCost = compute_cost(instanceSub, solutionSubSub_GLS)
+    # # slope_scaling_cost_update!(instanceSub.timeSpaceGraph, solutionSubSub_GLS)
     # perturbate!(
     #     solutionSubSub_GLS,
-    #     instanceSubSub,
+    #     instanceSub,
     #     :two_shared_node,
     #     startCost,
     #     costThreshold;
     #     verbose=true,
     # )
-    # local_search!(solutionSubSub_GLS, instanceSubSub; twoNode=true, timeLimit=300)
+    # local_search!(solutionSubSub_GLS, instanceSub; twoNode=true, timeLimit=300)
 
     # finalSolution = fuse_solutions(solution, solutionSub_LBF, instanceSub, instanceSubSub)
 

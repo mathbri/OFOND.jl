@@ -28,6 +28,12 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String)
         node = read_node!(counts, row)
         added, ignore_type = add_node!(network, node)
         added || (ignored[ignore_type] += 1)
+        if node.volumeCost < EPS && node.type in [:xdock, :iln]
+            # println(row)
+            # println(node)
+            # @error "No volume cost on this platform"
+            # throw(ErrorException("No volume cost on this platform"))
+        end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr
@@ -86,6 +92,14 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
         arc = read_leg!(counts, row, is_common_arc(row))
         added, ignore_type = add_arc!(network, src, dst, arc)
         added || (ignored[ignore_type] += 1)
+        if arc.carbonCost < EPS
+            # println(row)
+            # println(network.graph[src])
+            # println(network.graph[dst])
+            # println(arc)
+            # @error "No carbon cost on this arc"
+            # throw(ErrorException("No carbon cost on this arc"))
+        end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
