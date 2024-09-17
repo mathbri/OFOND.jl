@@ -30,6 +30,7 @@ function first_fit_decreasing!(
     end
     lengthBefore = length(bins)
     # Adding commodities on top of others
+    # TODO : for massive updates, this loop scheme can be really optimized, for example by storing last index and cap size to trigger full search 
     for idxC in comIdxs
         commodity = commodities[idxC]
         # TODO : maybe it would be faster to computes with CAPACITIES to find the index in which to put the commodity and then put it 

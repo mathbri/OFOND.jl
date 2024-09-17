@@ -423,7 +423,7 @@ function fuse_solutions(
     repaired = repair_paths!(fusedPaths, instance)
     # Compute the new solution with update solution
     fusedSolution = Solution(instance)
-    update_solution!(fusedSolution, instance, instance.bundles, fusedPaths)
+    update_solution!(fusedSolution, instance, instance.bundles, fusedPaths; sorted=true)
     # Checking feasibility and cost
     feasible = is_feasible(instance, fusedSolution; verbose=true)
     totalCost = compute_cost(instance, fusedSolution)
