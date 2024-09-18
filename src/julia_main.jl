@@ -96,7 +96,7 @@ function julia_main()::Cint
     instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
 
     # Greedy or Lower Bound than Local Search heuristic
-    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=30)
+    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=300)
 
     # Fusing solutions
     finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
