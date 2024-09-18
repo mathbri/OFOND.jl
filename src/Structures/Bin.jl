@@ -12,7 +12,8 @@ mutable struct Bin
 
     function Bin(capacity::Int, load::Int, content::Vector{Commodity})
         @assert capacity >= 0 && load >= 0
-        return new(rand(Int), capacity, load, content)
+        binIdx = round(Int, rand() * typemax(Int))
+        return new(binIdx, capacity, load, content)
     end
     Bin(capacity::Int) = new(rand(Int), capacity, 0, Vector{Commodity}())
     function Bin(fullCapacity::Int, commodity::Commodity)

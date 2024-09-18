@@ -41,8 +41,15 @@ function check_paths(paths::Vector{Vector{NetworkNode}})
         x -> findfirst(y -> y == zero(NetworkNode), x) !== nothing, paths
     )
     if length(missingPointPaths) > 0
-        missingPointBundles = join(missingPointPaths[1:10], ", ", ", ")
-        @warn "Missing points in $(length(missingPointPaths)) paths for bundles $missingPointBundles ..."
+        if length(missingPointPaths) > 10
+            missingPointBundles = join(missingPointPaths[1:10], ", ")
+            @warn "Missing points in $(length(missingPointPaths)) paths for bundles $missingPointBundles ..."
+        else
+            missingPointBundles = join(missingPointPaths, ", ")
+            @warn "Missing points in $(length(missingPointPaths)) paths for bundles $missingPointBundles"
+        end
+        # missingPointBundles = join(missingPointPaths[1:10], ", ", ", ")
+        # @warn "Missing points in $(length(missingPointPaths)) paths for bundles $missingPointBundles ..."
         # @warn "Missing points in $(length(missingPointPaths)) paths for bundles"
     end
 end
