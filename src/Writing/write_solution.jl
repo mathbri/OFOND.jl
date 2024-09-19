@@ -36,7 +36,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                         print(io, TSGraph.networkNodes[node].account, ",") # point_account
                         print(io, idx, ",") # point_index
                         print(io, instance.dates[TSGraph.timeStep[node]], ",") # point_date
-                        println(io, id, ",") # shipment_id
+                        println(io, id) # shipment_id
                         nLines += 1
                     end
                 end
@@ -66,7 +66,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, bin.load / VOLUME_FACTOR, ",") # volume
             print(io, transportCost, ",") # unit_cost
             print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
-            println(io, dstData.volumeCost * fillingRate, ",") # platform_cost
+            println(io, dstData.volumeCost * fillingRate) # platform_cost
             nLines += 1
         end
     end
@@ -107,7 +107,7 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
                     quantity = length(findall(x -> x === com, bin.content))
                     print(io, quantity, ",") # quantity
                     print(io, com.size / VOLUME_FACTOR, ",") # packaging_size
-                    println(io, quantity * com.size / VOLUME_FACTOR, ",") # volume
+                    println(io, quantity * com.size / VOLUME_FACTOR) # volume
                     contentId += 1
                     nLines += 1
                 end
