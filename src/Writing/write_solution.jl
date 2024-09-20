@@ -1,11 +1,11 @@
 function get_shipments_ids(
     solution::Solution, path::Vector{Int}, node::Int, idx::Int, commodity::Commodity
-)
+)::Vector{Int}
     idx == length(path) && return [""]
     next_node = path[idx + 1]
     bins = solution.bins[node, next_node]
     binIdxs = findall(b -> commodity in b.content, bins)
-    return string.([bin.idx for bin in bins[binIdxs]])
+    return [bin.idx for bin in bins[binIdxs]]
 end
 
 function write_network_design(io::IO, solution::Solution, instance::Instance)
