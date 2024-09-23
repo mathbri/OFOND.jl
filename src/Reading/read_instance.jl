@@ -64,6 +64,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         arcType,
         row.distance,
         floor(Int, row.travel_time + 0.5),
+        # min(floor(Int, row.travel_time), 7),
         isCommon,
         # row.shipment_cost * shipmentFactor,
         row.shipment_cost,
