@@ -52,16 +52,11 @@ end
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
-    # travelTime = if row.travel_time > 7
-    #     floor(Int, row.travel_time - 2)
-    # else
-    #     floor(Int, row.travel_time)
-    # end
     return NetworkArc(
         arcType,
         row.distance,
-        # travelTime,
-        min(floor(Int, row.travel_time), 7),
+        floor(Int, row.travel_time),
+        # min(floor(Int, row.travel_time), 7),
         isCommon,
         row.shipment_cost,
         row.is_linear,
