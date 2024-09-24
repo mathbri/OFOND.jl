@@ -85,7 +85,12 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
 end
 
 function bundle_hash(row::CSV.Row)
-    return hash(row.supplier_account, hash(row.customer_account))
+    return hash(
+        row.supplier_account,
+        hash(
+            row.customer_account, hash(row.part_number, hash(row.delivery_time_step % 12))
+        ),
+    )
 end
 
 function order_hash(row::CSV.Row)
@@ -93,16 +98,7 @@ function order_hash(row::CSV.Row)
 end
 
 function com_size(row::CSV.Row)
-    baseSize = min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
-    # if baseSize > 0.5 * SEA_CAPACITY
-    #     return baseSize
-    # elseif baseSize > 0.25 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 2)
-    # elseif baseSize > 0.1 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 4)
-    # end
-    # return baseSize * 5
-    return baseSize
+    return min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
 end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
@@ -114,10 +110,14 @@ function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkG
     else
         supplierNode = network.graph[hash(row.supplier_account, hash(:supplier))]
         customerNode = network.graph[hash(row.customer_account, hash(:plant))]
+        partNumHash = hash(row.part_number)
+        horizonPart = row.delivery_time_step % 12
         return get!(
             bundles,
             bundle_hash(row),
-            Bundle(supplierNode, customerNode, length(bundles) + 1),
+            Bundle(
+                supplierNode, customerNode, partNumHash, horizonPart, length(bundles) + 1
+            ),
         )
     end
 end

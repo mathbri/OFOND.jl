@@ -12,6 +12,8 @@ function add_properties(bundle::Bundle, network::NetworkGraph)
     return Bundle(
         bundle.supplier,
         bundle.customer,
+        bundle.partNumHash,
+        bundle.horizonPart,
         bundle.orders,
         bundle.idx,
         bundle.hash,

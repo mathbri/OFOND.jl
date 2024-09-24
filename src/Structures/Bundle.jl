@@ -7,7 +7,9 @@
 struct Bundle
     # Core fields
     supplier::NetworkNode  # supplier node
-    customer::NetworkNode  # customer node
+    customer::NetworkNode  # customer 
+    partNumHash::UInt      # hash of the part number
+    horizonPart::Int       # in which part (of 12 weeks) does the bundle belong
     orders::Vector{Order}  # vector of order
     # Properties
     idx::Int               # index in the instance vector (fast and easy retrieval of informations)
@@ -16,12 +18,21 @@ struct Bundle
     maxDelTime::Int        # maximum number of steps for delivery authorized
 end
 
-function Bundle(supplier::NetworkNode, customer::NetworkNode, idx::Int)
-    return Bundle(supplier, customer, Order[], idx, hash(supplier, hash(customer)), 0, 0)
+function Bundle(
+    supplier::NetworkNode,
+    customer::NetworkNode,
+    partNumber::String,
+    horizonPart::Int,
+    idx::Int,
+)
+    bunH = hash(supplier, hash(customer, hash(partNumber, hash(horizonPart))))
+    return Bundle(
+        supplier, customer, hash(partNumber), horizonPart, Order[], idx, bunH, 0, 0
+    )
 end
 
 function Base.hash(bundle::Bundle)
-    return hash(bundle.supplier, hash(bundle.customer))
+    return hash(supplier, hash(customer, hash(partNumber, hash(horizonPart))))
 end
 
 function Base.:(==)(bun1::Bundle, bun2::Bundle)
@@ -33,7 +44,10 @@ function idx(bundles::Vector{Bundle})
 end
 
 function Base.show(io::IO, bundle::Bundle)
-    return print(io, "Bundle($(bundle.supplier), $(bundle.customer), idx=$(bundle.idx))")
+    return print(
+        io,
+        "Bundle($(bundle.supplier), $(bundle.customer), $(bundle.partNumHash), $(bundle.horizonPart), idx=$(bundle.idx))",
+    )
 end
 
 function is_bundle_in_country(bundle::Bundle, country::String)
@@ -53,6 +67,8 @@ function change_idx(bundle::Bundle, idx::Int)
     return Bundle(
         bundle.supplier,
         bundle.customer,
+        bundle.partNumHash,
+        bundle.horizonPart,
         bundle.orders,
         idx,
         bundle.hash,
@@ -65,6 +81,8 @@ function remove_orders_outside_horizon(bundle::Bundle, timeHorizon::Int)
     return Bundle(
         bundle.supplier,
         bundle.customer,
+        bundle.partNumHash,
+        bundle.horizonPart,
         [order for order in bundle.orders if order.deliveryDate <= timeHorizon],
         bundle.idx,
         bundle.hash,

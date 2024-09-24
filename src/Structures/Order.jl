@@ -7,6 +7,7 @@
 # It would therefore need to differentiate between ffd for a vector of commodities -> refilling bins 
 # and ffd for an order as the implementation would not be the same -> filling bins
 
+# TODO : one optimization here would be to store one Commodity and the quantity
 struct Order
     # Core fields
     bundleHash::UInt            # hash of the bundle to which the order belongs
