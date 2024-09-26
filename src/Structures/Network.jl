@@ -84,18 +84,24 @@ function NetworkGraph()
 end
 
 # Adding a node to the network
-function add_node!(network::NetworkGraph, node::NetworkNode)
+function add_node!(network::NetworkGraph, node::NetworkNode; verbose::Bool=false)
     if haskey(network.graph, node.hash)
-        @warn "Same node already in the network" :nodeInGraph = network.graph[node.hash] :nodeToAdd =
-            node
+        verbose &&
+            @warn "Same node already in the network" :nodeInGraph = network.graph[node.hash] :nodeToAdd =
+                node
     elseif !(node.type in NODE_TYPES)
-        @warn "Node type not in NodeTypes" :node = node :nodeTypes = join(NODE_TYPES, ", ")
+        verbose && @warn "Node type not in NodeTypes" :node = node :nodeTypes = join(
+            NODE_TYPES, ", "
+        )
     else
         # Adding the node to the network graph
         network.graph[node.hash] = node
         # If its a supplier adding shortcut arc to the network 
         node.type == :supplier && add_arc!(network, node, node, SHORTCUT)
+        # Returning true if everything went well
+        return true
     end
+    # Returning false otherwise
 end
 
 # Adding a leg to the network

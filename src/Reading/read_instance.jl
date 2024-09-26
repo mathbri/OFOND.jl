@@ -43,20 +43,21 @@ end
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
-    shipmentFactor = if arcType == :oversea
-        0.25
-    elseif arcType == :outsource
-        0.1
-    else
-        0.5
-    end
+    # shipmentFactor = if arcType == :oversea
+    #     0.25
+    # elseif arcType == :outsource
+    #     0.1
+    # else
+    #     0.5
+    # end
 
     return NetworkArc(
         arcType,
         row.distance,
         floor(Int, row.travel_time + 0.5),
         isCommon,
-        row.shipment_cost * shipmentFactor,
+        # row.shipment_cost * shipmentFactor,
+        row.shipment_cost,
         row.is_linear,
         # false,
         row.carbon_cost / 10,
