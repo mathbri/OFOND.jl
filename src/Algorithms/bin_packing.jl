@@ -336,3 +336,9 @@ function milp_packing(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{
     milp_packing!(newBins, fullCapacity, commodities)
     return newBins
 end
+
+###########################################################################################
+# Vector packing functions
+###########################################################################################
+
+# TODO : code simple vector packing functions

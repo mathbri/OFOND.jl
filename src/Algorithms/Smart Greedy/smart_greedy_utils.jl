@@ -19,10 +19,24 @@ function compute_bundle_static_features(
     instance::Instance, solution::Solution, bundle::Bundle
 )
     TTGraph = instance.travelTimeGraph
-    nFeatures = 1
+    nFeatures = 3 + (2 + nQuantiles) * instance.timeHorizon
     features = zeros(ne(TTGraph.graph), nFeatures)
     for (i, arc) in enumerate(edges(TTGraph.graph))
         # TODO : that's where you need notes from Max
+        # Total volume 
+        totVolume = 0.0
+        # Mean commodity size
+        meanSize = 0.0
+        # Direct arc distance
+        directDist = 0.0
+        # Order volume for each delivery date
+        orderVolumes = zeros(instance.timeHorizon)
+        # Order commodity quantile volume for each delivery date 
+        orderQuantiles = zeros(instance.timeHorizon, nQuantiles)
+        # compute quantiles
+        # flatten it
+        # Order stock costs
+        stockCosts = zeros(instance.timeHorizon)
     end
     return features
 end
@@ -32,10 +46,17 @@ function compute_bundle_dynamic_features(
     instance::Instance, solution::Solution, bundle::Bundle
 )
     TTGraph = instance.travelTimeGraph
-    nFeatures = 1
+    nFeatures = 2
     features = zeros(ne(TTGraph.graph), nFeatures)
     for (i, arc) in enumerate(edges(TTGraph.graph))
         # TODO : that's where you need notes from Max
+        # Greedy insertion cost
+        gCost = arc_update_cost(
+            solution, TTGraph, TSGraph, bundle, src(arc), dst(arc), CAPACITIES; sorted=true
+        )
+        # Lower bound insertion cost
+        lbCost = arc_lb_update_cost(solution, TTGraph, TSGraph, bundle, src(arc), dst(arc))
+        # Current arc utilization
     end
     return features
 end
