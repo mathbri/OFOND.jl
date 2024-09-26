@@ -279,4 +279,23 @@ function my_deepcopy(solution::Solution, instance::Instance)
     )
 end
 
-# TODO : create a revert solution function to make it clearer in the code
+function fuse_bundles(instance::Instance, bundles::vector{Bundle})
+    # Putting one order for each delivery date to fuse them together
+    newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
+    for bundle in bundles
+        # Fusing all orders
+        for order in bundle.orders
+            append!(newOrders[order.deliveryDate].content, order.content)
+        end
+    end
+    filter!(o -> length(o.content) > 0, newOrders)
+    for order in newOrders
+        sort!(order.content)
+    end
+    newOrders = [
+        add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
+    ]
+    return Bundle(
+        bundles[1].supplier, bundles[1].customer, newOrders, bundles[1].idx, UInt(0), 0, 0
+    )
+end

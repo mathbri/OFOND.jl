@@ -124,16 +124,18 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
         return instance, solution
 end
 
-function local_search_heuristic!(solution::Solution, instance::Instance; timeLimit::Int)
+function local_search_heuristic!(
+    solution::Solution, instance::Instance; timeLimit::Int, stepLimit::Int=120
+)
     println()
     improvThreshold = -1e-3 * compute_cost(instance, solution)
     @info "Running Local Search heuristic" :min_improvement = improvThreshold
     # Initialize start time
     startTime = time()
 
-    improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+    improvement = local_search!(solution, instance; timeLimit=stepLimit, twoNode=true)
     while get_elapsed_time(startTime) < timeLimit && improvement < improvThreshold
-        improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+        improvement = local_search!(solution, instance; timeLimit=stepLimit, twoNode=true)
     end
 
     solveTime = get_elapsed_time(startTime)
