@@ -804,3 +804,205 @@ function get_lns_paths_to_update(
         return solution.bundlePaths[idx(bundles)]
     end
 end
+
+#######################################################################################
+# New idea to be tested
+#######################################################################################
+
+# The neighborhood only determines the bundles concerned and the potential paths for them
+# Doesn't work for two node for now because need to put src and dst as arguments
+# Works for single_plant, random, suppliers, attract and reduce
+# POC for now
+
+function generate_bundle_potential_paths(
+    instance::Instance, solution::Solution, bundle::Bundle; nPaths::Int
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Update cost matrix 
+    update_lb_cost_matrix!(solution, TTGraph, TSGraph, bundle; use_bins=false)
+    # Compute n paths from bundleSrc to bundleDst
+    # TODO : with this setting, as all paths are independent, this generation can be done once at the beginning
+    # Even without this setting it could be done once at the beginning and updated once in a while
+    bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
+    yenState = yen_k_shortest_paths(
+        travelTimeGraph.graph, src, travelTimeGraph.costMatrix, nPaths; maxdist=INFINITY
+    )
+    # TODO : maybe the k shortest path generation will be the bottleneck
+    # Keeping shortcuts or ease of MILP implementation
+    return enumerate_paths(yenState)
+end
+
+function add_variables_paths!(
+    model::Model, instance::Instance, startSol::RelaxedSolution, nPaths::Int
+)
+    TSGraph = instance.timeSpaceGraph
+    bundleIdxs = startSol.bundleIdxs
+    # Variable p[b, k] in {0, 1} indicate if bundle b uses path k in the travel time graph
+    @variable(model, p[b in bundleIdxs, k in 1:nPaths], Bin)
+    # Varible tau_a indicate the number of transport units used on arc a in the time space graph
+    @variable(model, tau[arc in timeSpaceGraph.commonArcs], Int)
+end
+
+function add_path_constraints_paths!(model::Model, bundleIdxs::Vector{Int})
+    p = model[:p]
+    # 1 path needs to be chosen between all potential paths
+    @constraint(model, paths[b in bundleIdxs], sum(p[b, :]) == 1)
+end
+
+function complete_packing_expr_paths!(
+    model::Model,
+    expr::SparseMatrixCSC{AffExpr,Int},
+    instance::Instance,
+    bundles::Vector{Bundle},
+    potentialPaths::Vector{Vector{Vector{Int}}},
+)
+    p, TTGraph, TSGraph = model[:p], instance.travelTimeGraph, instance.timeSpaceGraph
+    # Iterating each potential paths of each bundle
+    for bundle in bundles
+        for bundlePaths in potentialPaths[bundle.idx]
+            # For each potential path
+            for (k, path) in bundlePaths
+                # For each arc of this potential bundle path
+                for (src, dst) in partition(path, 2, 1)
+                    # If it is not a common arc, filtering 
+                    !TTGraph.networkArcs[src, dst].isCommon && continue
+                    # Projecting arc on the time space graph for each order of the bundle
+                    for order in bundle.orders
+                        tSrc, tDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
+                        # Adding the corresponding variable to the packing constraint
+                        add_to_expression!(expr[tSrc, tDst], p[bundle.idx, k], order.volume)
+                    end
+                end
+            end
+        end
+    end
+end
+
+# Add all relaxed packing constraints on shared arc of the time space graph
+function add_packing_constraints_paths!(
+    model::Model,
+    instance::Instance,
+    bundles::Vector{Bundle},
+    solution::Solution,
+    potentialPaths::Vector{Vector{Vector{Int}}},
+)
+    TSGraph = instance.timeSpaceGraph
+    packing_expr = init_packing_expr(model, TSGraph, solution)
+    complete_packing_expr_paths!(model, packing_expr, instance, bundles, potentialPaths)
+    @constraint(
+        model, packing[(src, dst) in TSGraph.commonArcs], packing_expr[src, dst] <= 0
+    )
+end
+
+function add_constraints_paths!(
+    model::Model,
+    instance::Instance,
+    solution::Solution,
+    startSol::RelaxedSolution,
+    potentialPaths::Vector{Vector{Vector{Int}}},
+)
+    # Path constraints on the travel time graph
+    add_path_constraints_paths!(model, startSol.bundleIdxs)
+    bundles = instance.bundles[startSol.bundleIdxs]
+    # Relaxed packing constraint on the time space graph
+    return add_packing_constraints_paths!(
+        model, instance, bundles, solution, potentialPaths
+    )
+end
+
+# TODO : base costs can also be precomputed once at the beginning
+function milp_travel_time_path_cost(
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundles::Vector{Bundle},
+    potentialPaths::Vector{Vector{Vector{Int}}},
+)
+    print("Creating MILP potential paths costs... ")
+    nBun, nPaths = length(potentialPaths), length(potentialPaths[1])
+    potentialCosts = [zeros(nPaths) for _ in 1:nBun]
+    for bundle in bundles
+        for bundlePaths in potentialPaths[bundle.idx]
+            for (k, path) in bundlePaths
+                pathCost = 0.0
+                for (src, dst) in partition(path, 2, 1)
+                    arcData = TTGraph.networkArcs[src, dst]
+                    # No cost for shortcut arcs
+                    if arcData.type == :shortcut
+                        pathCost += 1e-5
+                        continue
+                    end
+                    # Common cost is the sum for orders of volume and stock cost
+                    pathCost += sum(
+                        volume_stock_cost(TTGraph, src, dst, order) for
+                        order in bundle.orders
+                    )
+                    # Complete cost for outsource and direct arcs
+                    if arcData.type in [:outsource, :direct]
+                        for order in bundle.orders
+                            tSrc, tDst = time_space_projector(
+                                TTGraph, TSGraph, src, dst, order
+                            )
+                            orderTrucks = get_lb_transport_units(order, arcData)
+                            pathCost +=
+                                orderTrucks * TSGraph.currentCost[timedSrc, timedDst]
+                        end
+                    end
+                end
+                potentialCosts[bundle.idx][k] = pathCost
+            end
+        end
+    end
+    println("done")
+    return potentialCosts
+end
+
+# Sums the current cost of shared timed arcs and pre-computed surect and outsource arcs
+function add_objective_paths!(
+    model::Model,
+    instance::Instance,
+    startSol::RelaxedSolution,
+    potentialPaths::Vector{Vector{Vector{Int}}},
+)
+    p, tau = model[:p], model[:tau]
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    bundles = instance.bundles[startSol.bundleIdxs]
+    p_cost = milp_travel_time_path_cost(TTGraph, TSGraph, bundles, potentialPaths)
+    objExpr = AffExpr()
+    for (src, dst) in TSGraph.commonArcs
+        add_to_expression!(objExpr, tau[(src, dst)], TSGraph.currentCost[src, dst])
+    end
+    for varIdx in eachindex(p)
+        bunIdx, pathIdx = varIdx
+        add_to_expression!(objExpr, p[bunIdx, pathIdx], p_cost[bunIdx][pathIdx])
+    end
+    @objective(model, Min, objExpr)
+end
+
+function get_paths_paths(
+    model::Model,
+    instance::Instance,
+    startSol::RelaxedSolution,
+    potentialPaths::Vector{Vector{Vector{Int}}},
+)
+    TTGraph = instance.travelTimeGraph
+    bundles = instance.bundles[startSol.bundleIdxs]
+    # getting x variable value
+    pValue = value.(model[:p])
+    paths = Vector{Vector{Int}}()
+    allArcs = collect(edges(TTGraph.graph))
+    for bundle in bundles
+        # finding the non zero value to indicate path used
+        pBundleValue = pvalue[bundle.idx, :]
+        usedPathIdx = findfirst(x -> x > 1 - 1e-3, pBundleValue)
+        bundlePath = potentialPaths[bundle.idx][usedPathIdx]
+        !is_path_admissible(TTGraph, bundlePath) &&
+            @warn "Path proposed with milp is not admissible, add elementarity constraint !" :bundle =
+                bundle :path = join(bundlePath, "-") :nodes = join(
+                string.(map(n -> TTGraph.networkNodes[n], bundlePath)), ", "
+            )
+        push!(paths, bundlePath)
+    end
+    return paths
+end
+
+# bundle, arc, and so on selection unction don't need to be changed

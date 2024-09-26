@@ -66,6 +66,58 @@ function solve_lns_milp(
     end
 end
 
+function solve_lns_milp_paths(
+    instance::Instance,
+    solution::Solution,
+    startSol::RelaxedSolution,
+    neighborhood::Symbol,
+    potentialPaths::Vector{Vector{Vector{Int}}};
+    src::Int=-1,
+    dst::Int=-1,
+    warmStart::Bool=true,
+    verbose::Bool=false,
+)
+    # Buidling model
+    model = Model(HiGHS.Optimizer)
+    nPaths = length(potentialPaths[1])
+    add_variables_paths!(model, instance, startSol, nPaths)
+    if verbose
+        nVarBin = count(is_binary, all_variables(model))
+        nVarInt = count(is_integer, all_variables(model))
+        @info "$neighborhood MILP : Added $(num_variables(model)) variables" :binary =
+            nVarBin :integer = nVarInt
+    end
+    add_constraints_paths!(model, instance, solution, startSol, potentialPaths)
+    if verbose
+        nConPath = length(model[:path])
+        nConPack = length(model[:packing])
+        @info "$neighborhood MILP : Added $nConTot constraints" :paths = nConPath :packing =
+            nConPack
+    end
+    add_objective_paths!(model, instance, startSol, potentialPaths)
+    # If warm start option, doing it 
+    # TODO : find a way to activate warm start for two node neighborhood
+    # if warmStart && neighborhood != :two_shared_node
+    #     edgeIndex = create_edge_index(instance.travelTimeGraph)
+    #     warm_start_milp!(model, neighborhood, instance, startSol, edgeIndex)
+    # end
+    # warmStart && warm_start_milp_test(model, instance, startSol)
+    # Solving model
+    set_optimizer_attribute(model, "mip_rel_gap", 0.05)
+    set_time_limit_sec(model, 120.0)
+    # set_silent(model)
+    optimize!(model)
+    # verbose && println(
+    #     "Objective value = $(objective_value(model)) (gap = $(objective_gap(model)))"
+    # )
+    if has_values(model)
+        # Getting the solution paths and returning it
+        return get_paths(model, instance, startSol)
+    else
+        return solution.bundlePaths[startSol.bundleIdxs]
+    end
+end
+
 function perturbate!(
     solution::Solution,
     instance::Instance,
