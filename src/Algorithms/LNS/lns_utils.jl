@@ -23,6 +23,10 @@ function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::So
         costFactor = length(arcBins) * arcData.capacity / arcVolume
         # Limiting cost factor to 2
         costFactor = min(2.0, costFactor)
+        # Allowing cost decrease for common arcs
+        if arcData.type in COMMON_ARC_TYPES
+            costFactor -= 0.5
+        end
         timeSpaceGraph.currentCost[src(arc), dst(arc)] *= costFactor
     end
 end
@@ -163,7 +167,9 @@ function generate_attract_path(
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Update cost matrix 
-    update_cost_matrix!(solution, TTGraph, TSGraph, bundle, CAPACITIES; sorted=true)
+    update_lb_cost_matrix!(
+        solution, TTGraph, TSGraph, bundle; use_bins=true, current_cost=true
+    )
     # Compute path from bundleSrc to src and from dst to bundleDst
     bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
     # If bDst = dst then no path and that's problematic
@@ -186,7 +192,9 @@ function generate_reduce_path(
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Update cost matrix 
-    update_cost_matrix!(solution, TTGraph, TSGraph, bundle, CAPACITIES; sorted=true)
+    update_lb_cost_matrix!(
+        solution, TTGraph, TSGraph, bundle; use_bins=true, current_cost=true
+    )
     TTGraph.costMatrix[src, dst] = INFINITY
     # Compute path from bundleSrc to src and from dst to bundleDst
     bSrc, bDst = TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx]
@@ -356,6 +364,7 @@ end
 
 # Constructing the objective
 
+# TODO : loses a lot of time here
 # Computes direct and outsource cost
 function milp_travel_time_arc_cost(
     TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundles::Vector{Bundle}
@@ -404,7 +413,7 @@ function milp_travel_time_arc_cost(
                         TTGraph, TSGraph, src(arc), dst(arc), order
                     )
                     arcData = TTGraph.networkArcs[src(arc), dst(arc)]
-                    orderTrucks = get_lb_transport_units(order, arcData)
+                    orderTrucks = get_transport_units(order, arcData)
                     arcCost += orderTrucks * TSGraph.currentCost[timedSrc, timedDst]
                 end
             end
@@ -423,11 +432,11 @@ function add_objective!(model::Model, instance::Instance, startSol::RelaxedSolut
     x_cost = milp_travel_time_arc_cost(TTGraph, TSGraph, bundles)
     objExpr = AffExpr()
     for (src, dst) in TSGraph.commonArcs
-        add_to_expression!(objExpr, tau[(src, dst)], TSGraph.currentCost[src, dst])
+        add_to_expression!(objExpr, tau[(src, dst)], TSGraph.currentCost[src, dst] / 100)
     end
     for varIdx in eachindex(x)
         bunIdx, arcIdx = varIdx
-        add_to_expression!(objExpr, x[bunIdx, arcIdx], x_cost[bunIdx, arcIdx])
+        add_to_expression!(objExpr, x[bunIdx, arcIdx], x_cost[bunIdx, arcIdx] / 100)
     end
     @objective(model, Min, objExpr)
 end
@@ -572,11 +581,12 @@ function get_paths(model::Model, instance::Instance, startSol::RelaxedSolution)
             (arcIdx,) in eachindex(xBundleValue) if xBundleValue[arcIdx] > EPS
         ]
         bundlePath = get_path_from_arcs(bundle, TTGraph, usedArcs)
-        !is_path_admissible(TTGraph, bundlePath) &&
-            @warn "Path proposed with milp is not admissible, add elementarity constraint !" :bundle =
-                bundle :path = join(bundlePath, "-") :nodes = join(
-                string.(map(n -> TTGraph.networkNodes[n], bundlePath)), ", "
-            )
+        # TODO : attract paths may result in non admissible paths
+        # !is_path_admissible(TTGraph, bundlePath) &&
+        #     @warn "Path proposed with milp is not admissible, add elementarity constraint !" :bundle =
+        #         bundle :path = join(bundlePath, "-") :nodes = join(
+        #         string.(map(n -> TTGraph.networkNodes[n], bundlePath)), ", "
+        #     )
         push!(paths, bundlePath)
     end
     return paths
@@ -726,7 +736,7 @@ function select_random_suppliers(
         # If it is suitable, breaking search and returning
         estimRemCost > costThreshold && return src, dst, allPertBunIdxs
     end
-    # If no plant found, returning empty vector
+    # If no suppliers found, returning empty vector
     return src, dst, Int[]
 end
 
@@ -737,7 +747,7 @@ function select_random_bundles(
     TTGraph = instance.travelTimeGraph
     shuffledBundles = randperm(length(instance.bundles))
     # Going through all bundles in random order to select one
-    for i in 1:100
+    for i in 10:100
         nBundles = round(Int, i / 100 * length(instance.bundles))
         pertBunIdxs = shuffledBundles[1:nBundles]
         # Computing estimated cost

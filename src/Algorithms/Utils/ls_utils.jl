@@ -155,6 +155,9 @@ function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
     # TTGraph.stepToDel[dst] > 0 && return false
     # just one arc between ports
     is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
+    # Authorize going to the same node at different time steps ?
+    # TODO : compare hashs if too slow
+    TTGraph.networkNodes[src] == TTGraph.networkNodes[dst] && return false
     # need to have existing path
     return has_path(TTGraph.graph, src, dst)
 end
@@ -169,7 +172,10 @@ function are_nodes_candidate2(TTGraph::TravelTimeGraph, src::Int, dst::Int)
     # TTGraph.stepToDel[dst] > 0 && return false
     # just one arc between ports
     # is_port(TTGraph, src) && is_port(TTGraph, dst) && return false
-    # need to have existing path
+    # Authorize going to the same node at different time steps ?
+    # TODO : compare hashs if too slow
+    TTGraph.networkNodes[src] == TTGraph.networkNodes[dst] && return false
+    # Need to have existing path
     return has_path(TTGraph.graph, src, dst)
 end
 
@@ -197,8 +203,9 @@ function get_bundles_to_update(
     instance::Instance, solution::Solution, node1::Int, node2::Int=-1
 )
     node2 == -1 && return solution.bundlesOnNode[node1]
+    # TODO : Why are there key errors here ???
     twoNodeBundleIdxs = intersect(
-        solution.bundlesOnNode[node1], solution.bundlesOnNode[node2]
+        get(solution.bundlesOnNode, node1, Int[]), get(solution.bundlesOnNode, node2, Int[])
     )
     return filter(
         b -> is_node1_before_node2(solution.bundlePaths[b], node1, node2), twoNodeBundleIdxs

@@ -19,7 +19,9 @@ function solve_lns_milp(
     verbose::Bool=false,
 )
     # Buidling model
-    model = Model(HiGHS.Optimizer)
+    # model = Model(HiGHS.Optimizer)
+    # model = Model(CPLEX.Optimizer)
+    model = Model(Gurobi.Optimizer)
     add_variables!(model, neighborhood, instance, startSol)
     if verbose
         nVarBin = count(is_binary, all_variables(model))
@@ -51,65 +53,19 @@ function solve_lns_milp(
     end
     # warmStart && warm_start_milp_test(model, instance, startSol)
     # Solving model
-    set_optimizer_attribute(model, "mip_rel_gap", 0.05)
-    set_time_limit_sec(model, 120.0)
+    # set_optimizer_attribute(model, "mip_rel_gap", 0.05)
+    # set_optimizer_attribute(model, "CPXPARAM_MIP_Tolerances_MIPGap", 0.01)
+    set_optimizer_attribute(model, "MIPGap", 0.02)
+    set_time_limit_sec(model, 150.0)
     set_silent(model)
     optimize!(model)
-    verbose && println(
-        "Objective value = $(objective_value(model)) (gap = $(objective_gap(model)))"
-    )
-    if has_values(model)
-        # Getting the solution paths and returning it
-        return get_paths(model, instance, startSol)
-    else
-        return solution.bundlePaths[startSol.bundleIdxs]
-    end
-end
 
-function solve_lns_milp_paths(
-    instance::Instance,
-    solution::Solution,
-    startSol::RelaxedSolution,
-    neighborhood::Symbol,
-    potentialPaths::Vector{Vector{Vector{Int}}};
-    src::Int=-1,
-    dst::Int=-1,
-    warmStart::Bool=true,
-    verbose::Bool=false,
-)
-    # Buidling model
-    model = Model(HiGHS.Optimizer)
-    nPaths = length(potentialPaths[1])
-    add_variables_paths!(model, instance, startSol, nPaths)
-    if verbose
-        nVarBin = count(is_binary, all_variables(model))
-        nVarInt = count(is_integer, all_variables(model))
-        @info "$neighborhood MILP : Added $(num_variables(model)) variables" :binary =
-            nVarBin :integer = nVarInt
-    end
-    add_constraints_paths!(model, instance, solution, startSol, potentialPaths)
-    if verbose
-        nConPath = length(model[:path])
-        nConPack = length(model[:packing])
-        @info "$neighborhood MILP : Added $nConTot constraints" :paths = nConPath :packing =
-            nConPack
-    end
-    add_objective_paths!(model, instance, startSol, potentialPaths)
-    # If warm start option, doing it 
-    # TODO : find a way to activate warm start for two node neighborhood
-    # if warmStart && neighborhood != :two_shared_node
-    #     edgeIndex = create_edge_index(instance.travelTimeGraph)
-    #     warm_start_milp!(model, neighborhood, instance, startSol, edgeIndex)
-    # end
-    # warmStart && warm_start_milp_test(model, instance, startSol)
-    # Solving model
-    set_optimizer_attribute(model, "mip_rel_gap", 0.05)
-    set_time_limit_sec(model, 120.0)
-    # set_silent(model)
-    optimize!(model)
-    # verbose && println(
-    #     "Objective value = $(objective_value(model)) (gap = $(objective_gap(model)))"
-    # )
+    # Computing gap
+    objValue = JuMP.objective_value(model) + 1
+    objBound = objective_bound(model)
+    objGap = round(min(100, abs(objValue - objBound) / objValue); digits=3)
+    verbose && println("Objective value = $objValue) (gap = $objGap %)")
+
     if has_values(model)
         # Getting the solution paths and returning it
         return get_paths(model, instance, startSol)
@@ -163,11 +119,17 @@ function perturbate!(
             src, dst, pertBundleIdxs = select_random_common_arc(
                 neighborhood, instance, solution, costThreshold
             )
+            # If cost threshold too high, loosening it one time
+            if length(pertBundleIdxs) == 0
+                src, dst, pertBundleIdxs = select_random_common_arc(
+                    neighborhood, instance, solution, costThreshold / 5
+                )
+            end
         end
     end
-    if neighborhood == :attract && length(pertBundleIdxs) > 0.15 * length(instance.bundles)
-        println("Too much bundles taken (>15% of all bundles), capping to 15%")
-        MAX_BUNDLES = round(Int, 0.15 * length(instance.bundles))
+    MAX_BUNDLES = round(Int, 0.015 * length(instance.bundles))
+    if length(pertBundleIdxs) > MAX_BUNDLES
+        println("Too much bundles taken (>1.5% of all bundles), capping to 1.5%")
         pertBundleIdxs = pertBundleIdxs[randperm(length(pertBundleIdxs))[1:MAX_BUNDLES]]
     elseif length(pertBundleIdxs) == 0
         println("No bundles taken, aborting pertubation")
@@ -182,14 +144,14 @@ function perturbate!(
     # verbose && println("Old paths : $oldPaths")
 
     # The filtering could also occur in terms of cost removed : it must be above a certain threshold
-    estimRemCost = sum(
-        bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
-        (bundle, oldPath) in zip(pertBundles, oldPaths)
-    )
-    if estimRemCost <= costThreshold
-        verbose && println("Not enough improvement possible, aborting")
-        return 0.011 * startCost, Int[], [Int[]]
-    end
+    # estimRemCost = sum(
+    #     bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
+    #     (bundle, oldPath) in zip(pertBundles, oldPaths)
+    # )
+    # if estimRemCost <= costThreshold
+    #     verbose && println("Not enough improvement possible, aborting")
+    #     return 0.011 * startCost, Int[], [Int[]]
+    # end
 
     # Removing bundle and creating starting solution
     startSol = RelaxedSolution(solution, instance, pertBundles)
@@ -227,11 +189,11 @@ function perturbate!(
     # Update solution (randomized order ?) 
     updateCost = update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
 
-    # Reverting if cost augmented by more than 0.5% 
-    if updateCost + costRemoved > 0.005 * 0.75 * startCost
+    # Reverting if cost augmented by more than 0.75% 
+    if updateCost + costRemoved > 0.0075 * startCost
         verbose && println("Update refused")
         revert_solution!(solution, instance, pertBundles, oldPaths, previousBins, pertPaths)
-        return 0.005 * startCost, Int[], [Int[]]
+        return updateCost + costRemoved, Int[], [Int[]]
     else
         println("Update accpeted")
         return updateCost + costRemoved, pertBundleIdxs, fullOldPaths
@@ -264,12 +226,13 @@ end
 function LNS!(
     solution::Solution,
     instance::Instance;
-    timeLimit::Int=1200,
-    lsTimeLimit::Int=300,
+    timeLimit::Int=1800,
+    lsTimeLimit::Int=600,
+    lsStepTimeLimit::Int=150,
     resetCost::Bool=false,
 )
     startCost = compute_cost(instance, solution)
-    threshold = 3e-3 * startCost
+    threshold = 1e-3 * startCost
     println("\n")
     @info "Starting LNS step" :start_cost = startCost :threshold = threshold
     totalImprovement = 0.0
@@ -308,11 +271,27 @@ function LNS!(
         improvement, pertBundleIdxs, oldPaths = perturbate!(
             solution, instance, neighborhood, startCost, threshold; verbose=true
         )
+
+        # If no path changed, trying one more time the perturbation 
+        if improvement < 0.0075 * startCost
+            pertPaths = solution.bundlePaths[pertBundleIdxs]
+            changed = count(pertPaths[i] != oldPaths[i] for i in 1:length(oldPaths))
+            if changed == 0
+                println("No path changed, trying one more time")
+                improvement, pertBundleIdxs, oldPaths = perturbate!(
+                    solution, instance, neighborhood, startCost, threshold; verbose=true
+                )
+            end
+        end
+
         @info "$neighborhood perturbation applied (without local search)" :improvement =
             improvement
-        if improvement > 0.005 * 0.75 * startCost
-            @info "Cost increased by more than 1% after perturbation, aborting perturbation" :increase =
-                improvement / startCost * 100
+
+        # TODO : instead of this, if the cost increased by more than 1%, starting local search before end of loop
+        if improvement > 0.0075 * startCost
+            @info "Cost increased by more than 1% after perturbation, aborting perturbation" :increase = round(
+                improvement / startCost * 100; digits=2
+            )
             # No need to revert, it was already done in perturbate
             continue
         end
@@ -360,14 +339,21 @@ function LNS!(
     println("\n")
     # Final local search
     lsStartTime = time()
-    lsImprovement = local_search!(solution, instance; twoNode=true, timeLimit=240)
+    lsImprovThreshold = -5e-4 * compute_cost(instance, solution)
+    lsImprovement = local_search!(
+        solution, instance; twoNodePerturb=true, timeLimit=lsStepTimeLimit
+    )
     totalImprovement += lsImprovement
     while (time() - lsStartTime < lsTimeLimit) &&
               (time() - startTime < timeLimit) &&
-              lsImprovement < -1e3
-        lsImprovement = local_search!(solution, instance; twoNode=true, timeLimit=240)
+              lsImprovement < lsImprovThreshold
+        lsImprovement = local_search!(
+            solution, instance; twoNodePerturb=true, timeLimit=lsStepTimeLimit
+        )
         totalImprovement += lsImprovement
     end
+    local_search!(solution, instance; timeLimit=lsStepTimeLimit)
+
     @info "Full LNS step done" :time = round((time() - startTime) * 1000) / 1000 :improvement = round(
         totalImprovement
     )
@@ -392,3 +378,59 @@ function LNS!(
 end
 
 # TODO : create analysis function for the LNS and to decide which architecture should be used 
+
+#######################################################################################
+# New idea to be tested
+#######################################################################################
+
+function solve_lns_milp_paths(
+    instance::Instance,
+    solution::Solution,
+    startSol::RelaxedSolution,
+    neighborhood::Symbol,
+    potentialPaths::Vector{Vector{Vector{Int}}};
+    src::Int=-1,
+    dst::Int=-1,
+    warmStart::Bool=true,
+    verbose::Bool=false,
+)
+    # Buidling model
+    model = Model(HiGHS.Optimizer)
+    nPaths = length(potentialPaths[1])
+    add_variables_paths!(model, instance, startSol, nPaths)
+    if verbose
+        nVarBin = count(is_binary, all_variables(model))
+        nVarInt = count(is_integer, all_variables(model))
+        @info "$neighborhood MILP : Added $(num_variables(model)) variables" :binary =
+            nVarBin :integer = nVarInt
+    end
+    add_constraints_paths!(model, instance, solution, startSol, potentialPaths)
+    if verbose
+        nConPath = length(model[:path])
+        nConPack = length(model[:packing])
+        @info "$neighborhood MILP : Added $nConTot constraints" :paths = nConPath :packing =
+            nConPack
+    end
+    add_objective_paths!(model, instance, startSol, potentialPaths)
+    # If warm start option, doing it 
+    # TODO : find a way to activate warm start for two node neighborhood
+    # if warmStart && neighborhood != :two_shared_node
+    #     edgeIndex = create_edge_index(instance.travelTimeGraph)
+    #     warm_start_milp!(model, neighborhood, instance, startSol, edgeIndex)
+    # end
+    # warmStart && warm_start_milp_test(model, instance, startSol)
+    # Solving model
+    set_optimizer_attribute(model, "mip_rel_gap", 0.05)
+    set_time_limit_sec(model, 120.0)
+    # set_silent(model)
+    optimize!(model)
+    # verbose && println(
+    #     "Objective value = $(objective_value(model)) (gap = $(objective_gap(model)))"
+    # )
+    if has_values(model)
+        # Getting the solution paths and returning it
+        return get_paths(model, instance, startSol)
+    else
+        return solution.bundlePaths[startSol.bundleIdxs]
+    end
+end

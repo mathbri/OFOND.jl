@@ -140,15 +140,15 @@ function julia_main_test()
 
     # cut it into smaller instances 
     # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
-    # instanceSub = extract_sub_instance2(
-    #     instance;
-    #     continents=["Western Europe", "South America", "South-East Asia"],
-    #     timeHorizon=13,
-    # )
+    instanceSub = extract_sub_instance2(
+        instance;
+        continents=["Western Europe", "South America", "South-East Asia"],
+        timeHorizon=9,
+    )
 
-    instanceSub = instance
+    # instanceSub = instance
     # adding properties to the instance
-    # instanceSub = add_properties(instanceSub, tentative_first_fit)
+    # instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
     # solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
     # solutionSub_C = solution
 
@@ -161,9 +161,32 @@ function julia_main_test()
 
     instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
     instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
-    # TODO : extract sub solution also
 
-    # save("instance_world.jld2", "instance", instanceSubSub)
+    solutionSub_C = extract_sub_solution(solution, instance, instanceSubSub)
+    # solutionSub_C = solution
+
+    # save("instance.jld2", "instance", instanceSubSub)
+
+    netGraph = instanceSubSub.networkGraph.graph
+    nSuppliers = count(lab -> netGraph[lab].type == :supplier, labels(netGraph))
+    nPlants = count(lab -> netGraph[lab].type == :plant, labels(netGraph))
+    println("$nSuppliers suppliers and $nPlants plants")
+
+    nPlat = length(labels(netGraph)) - nSuppliers - nPlants
+    meanPlatCost = sum(lab -> netGraph[lab].volumeCost, labels(netGraph)) / nPlat
+    nCom = sum(b -> sum(o -> length(o.content), b.orders), instance.bundles)
+    meanSize =
+        sum(b -> sum(o -> sum(c -> c.size, o.content), b.orders), instance.bundles) / nCom /
+        VOLUME_FACTOR
+    meanCost =
+        sum(b -> sum(o -> sum(c -> c.stockCost, o.content), b.orders), instance.bundles) /
+        nCom
+    println(
+        "Mean platform cost $meanPlatCost and mean size $meanSize and mean cost $meanCost"
+    )
+    allTransCost = sum(a -> netGraph[a[1], a[2]].unitCost, edge_labels(netGraph))
+    allCarbCost = sum(a -> netGraph[a[1], a[2]].carbonCost, edge_labels(netGraph))
+    println("Share of transportation cost $(allTransCost / (allTransCost + allCarbCost))")
     # return 0
 
     # println("Loading instance")
@@ -190,20 +213,24 @@ function julia_main_test()
         @info "Choosing greedy solution as initial solution"
     end
 
-    save("start_solution_world.jld2", "solution", solution)
+    # save("start_solution.jld2", "solution", solution)
     # println("Loading initial solution")
     # solution = load("start_solution.jld2", "solution")
 
     # _, solutionSubSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSubSub; timeLimit=300)
 
-    local_search_heuristic!(solution, instanceSubSub; timeLimit=1800, stepLimit=150)
+    local_search_heuristic!(solution, instanceSubSub; timeLimit=600, stepLimit=90)
 
     # TODO : need to compare just local search and LNS on the same time frame to see the difference
     # Without warm start diversity seems to lead to more improvement
     # Still need to see wether slope scaling helps
 
-    # lns_heuristic!(solution, instanceSubSub; timeLimit=900, lsTimeLimit=90)
+    lns_heuristic!(
+        solution, instanceSubSub; timeLimit=1800, lsTimeLimit=600, lsStepTimeLimit=90
+    )
     # println("Cost of solution : $(compute_cost(instanceSubSub, solution))")
+
+    # TODO : do soluttion analysis function to print relevant KPIs
 
     # startCost = compute_cost(instanceSubSub, solutionSubSub_GLS)
     # costThreshold = 1e-2 * startCost
