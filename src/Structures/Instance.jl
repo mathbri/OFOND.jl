@@ -120,6 +120,7 @@ function extract_sub_instance2(
     # Redifining network and bundles
     newNetwork = deepcopy(instance.networkGraph)
     newBundles = filter(bun -> is_bundle_in_continents(bun, continents), instance.bundles)
+    filter!(bun -> bun.maxDelTime <= timeHorizon, newBundles)
     newVertices = filter(
         n -> is_node_in_continents(newNetwork, n, continents), vertices(newNetwork.graph)
     )

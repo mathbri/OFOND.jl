@@ -104,7 +104,6 @@ function greedy_insertion(
             current_cost=current_cost,
             findSources=findSources,
         )
-        pathCost = path_cost(shortestPath, costMatrix)
         if !is_path_admissible(TTGraph, shortestPath)
             # Then not taking into account the current solution
             # If this happens, we want to be sure to have an admissible path
@@ -121,10 +120,21 @@ function greedy_insertion(
                 current_cost=false,
                 findSources=findSources,
             )
-            pathCost = path_cost(shortestPath, costMatrix)
+            if !is_path_admissible(TTGraph, shortestPath)
+                println("\nAll tentative path were non admissible")
+                println("Bundle $bundle")
+                println("Bundle src and dst : $(TTGraph.bundleSrc[bundle.idx])-$(TTGraph.bundleDst[bundle.idx])")
+                println("Path src and dst : $src-$dst")
+                println("Path nodes : $shortestPath")
+                println("Path info : $(join(string.(map(n -> TTGraph.networkNodes[n], shortestPath)), ", "))")
+                # shortestPath = [src, dst]
+                # @assert is_path_admissible(TTGraph, shortestPath)
+                # direct arc between two random nodes may not exist
+                # TODO : Need to switch to constrained shortest paths ?
+            end
         end
+        pathCost = path_cost(shortestPath, costMatrix)
     end
-    @assert is_path_admissible(TTGraph, shortestPath)
     return shortestPath, pathCost
 end
 

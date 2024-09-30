@@ -109,6 +109,7 @@ function revert_solution!(
     # end
 end
 
+# TODO : profile again because it seems too slow for what it has done in the past
 # Removing and inserting back the bundle in the solution.
 # If the operation did not lead to a cost improvement, reverting back to the former state of the solution.
 function bundle_reintroduction!(
@@ -251,10 +252,11 @@ function two_node_common_incremental!(
     twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
     twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
     # If there is no bundles concerned, returning
-    length(twoNodeBundles) == 0 && return 0.0
+    length(twoNodeBundles) == 0 && return 0.0, 0
     oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
 
     # Saving previous bins and removing bundle 
+    # TODO : time lost here, storing just the bins needed will help a lot
     prevSol = solution_deepcopy(solution, instance)
     costRemoved = update_solution!(
         solution, instance, twoNodeBundles, oldPaths; remove=true
@@ -304,16 +306,21 @@ function two_node_common_incremental!(
     newPaths = [newPath for _ in 1:length(twoNodeBundles)]
     updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
     improvement = updateCost + costRemoved
+    bunCounter = length(twoNodeBundles)
     
     # Inserting back concerned bundles
     for (i, bIdx) in enumerate(twoNodeBundleIdxs) 
         bundle = instance.bundles[bIdx]
+        # TODO : time also lost here, to see how we can optimize this further
+        # Still need to only accept improving updates so as is seems fine
         improvement += bundle_reintroduction!(solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=1.0)
         i % 10 == 0 && print(".")
+        (improvement < -1) && (bunCounter += 1)
     end
 
     # If no improvement at the end, reverting solution to its first state
     if improvement > 1e2
+        # TODO : little bit of time lost here
         newPaths = deepcopy(solution.bundlePaths)
         revert_solution!(
             solution,
@@ -324,22 +331,23 @@ function two_node_common_incremental!(
             newPaths,
         )
         print("x")
-        return 0.0
-    elseif !is_feasible(instance, solution)
-        newPaths = deepcopy(solution.bundlePaths)
-        revert_solution!(
-            solution,
-            instance,
-            instance.bundles,
-            prevSol.bundlePaths,
-            prevSol.bins,
-            newPaths,
-        )
-        print("X")
-        return 0.0
+        return 0.0, 0
+        # TODO : quite some time lost by feasibility checks
+    # elseif !is_feasible(instance, solution)
+    #     newPaths = deepcopy(solution.bundlePaths)
+    #     revert_solution!(
+    #         solution,
+    #         instance,
+    #         instance.bundles,
+    #         prevSol.bundlePaths,
+    #         prevSol.bins,
+    #         newPaths,
+    #     )
+    #     print("X")
+    #     return 0.0, 0
     else
         print("o")
-        return improvement
+        return improvement, bunCounter
     end
 end
 
@@ -355,7 +363,7 @@ function two_node_common!(
     twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
     twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
     # If there is no bundles concerned, returning
-    length(twoNodeBundles) == 0 && return 0.0
+    length(twoNodeBundles) == 0 && return 0.0, 0
     oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
 
     # Saving previous bins and removing bundle 
@@ -410,19 +418,20 @@ function two_node_common!(
     newPaths = [newPath for _ in 1:length(twoNodeBundles)]
     updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
     improvement = updateCost + costRemoved
+    bunCounter = length(twoNodeBundles)
 
     # If no improvement at the end, reverting solution to its first state
     if improvement > 1e2
         revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
         print("x")
-        return 0.0
+        return 0.0, 0
     elseif !is_feasible(instance, solution)
         revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
         print("X")
-        return 0.0
+        return 0.0, 0
     else
         print("o")
-        return improvement
+        return improvement, bunCounter
     end
 end
 
@@ -926,7 +935,7 @@ function local_search!(
     startTime = time()
     bundleIdxs = randperm(length(instance.bundles))
     bunCounter = 0
-    print("Bundle reintroduction progress : ")
+    # print("Bundle reintroduction progress : ")
     percentIdx = ceil(Int, length(bundleIdxs) / 100)
     threshold = 5e-5 * startCost
     CAPACITIES = Int[]
@@ -966,7 +975,7 @@ function local_search!(
     percentIdx = ceil(Int, length(two_node_nodes) * length(TTGraph.commonNodes) / 100)
     barIdx = ceil(Int, percentIdx / 5)
     println("Two node common incremental progress : (| = $barIdx combinations)")
-    
+    improvement, bunCounter, bunCount = 0.0, 0, 0
     for _ in 1:1
         for dst in shuffle(two_node_nodes), src in TTGraph.commonNodes
             i += 1
@@ -977,26 +986,28 @@ function local_search!(
             are_nodes_candidate2(TTGraph, src, dst) || continue
             
             if twoNodePerturb
-                improvement = two_node_common_incremental!(
+                improvement, bunCount = two_node_common_incremental!(
                 solution, instance, src, dst, CAPACITIES; costThreshold=threshold
             )
             else
-                improvement = two_node_common!(
+                improvement, bunCount = two_node_common!(
                 solution, instance, src, dst, CAPACITIES; costThreshold=threshold
             )
             end
             
             twoNodeTested += 1
+            bunCounter += bunCount
             (improvement < -1e-1) && (twoNodeCounter += 1)
             twoNodeImprovement += improvement
             totalImprovement += improvement
-            round((time() - startTime) * 1000) / 1000 > timeLimit && break
+            # More time for this as this is the main component gaining cost
+            (time() - startTime) > 2*timeLimit && break
         end
         println()
     end
     
     @info "Total two-node improvement" :couples_computed = twoNodeTested :improved =
-        twoNodeCounter :improvement = twoNodeImprovement :time =
+        twoNodeCounter :bundles_changed = bunCounter :improvement = twoNodeImprovement :time =
         round((time() - startTime) * 1000) / 1000
     # Again reintroduction
     # print("Bundle reintroduction progress : ")
@@ -1063,6 +1074,12 @@ function local_search!(
             twoNodeCounter :improvement = twoNodeImprovement :time =
             round((time() - startTime) * 1000) / 1000
     # end
+    startTime = time()
+    bundleIdxs = randperm(length(instance.bundles))
+    bunCounter = 0
+    print("Bundle reintroduction progress : ")
+    percentIdx = ceil(Int, length(bundleIdxs) / 100)
+    threshold = 5e-5 * startCost
     reintroImprov = 0.0
     # Bundle reintroduction at last 
     for (i, bundleIdx) in enumerate(bundleIdxs)

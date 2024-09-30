@@ -124,84 +124,105 @@ end
 function julia_main_test()
     println("Launching OFO Network Design (test)")
 
-    # directory = joinpath(Base.dirname(@__DIR__), "scripts", "data")
-    # println("Reading data from $directory")
-    # node_file = joinpath(directory, "GeoDataProcessed_CC.csv")
-    # leg_file = joinpath(directory, "LegDataProcessed_NV1.csv")
-    # com_file = joinpath(directory, "VolumeDataProcessed_MC.csv")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data")
+    println("Reading data from $directory")
+    node_file = joinpath(directory, "GeoDataProcessed_LC.csv")
+    leg_file = joinpath(directory, "LegDataProcessed_NV1.csv")
+    com_file = joinpath(directory, "VolumeDataProcessed_SC.csv")
     # read instance 
-    # instance = read_instance(node_file, leg_file, com_file)
+    instance = read_instance(node_file, leg_file, com_file)
     # adding properties to the instance
-    # CAPACITIES = Int[]
-    # instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    CAPACITIES = Int[]
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
     # read solution
-    # sol_file = joinpath(directory, "RouteDataProcessed.csv")
-    # solution = read_solution(instance, joinpath(directory, sol_file))
+    sol_file = joinpath(directory, "RouteDataProcessed.csv")
+    solution = read_solution(instance, joinpath(directory, sol_file))
 
     # cut it into smaller instances 
     # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
-    # instanceSub = extract_sub_instance2(
-    #     instance;
-    #     continents=["Western Europe", "South America", "South-East Asia"],
-    #     timeHorizon=13,
-    # )
+    instanceSub = extract_sub_instance2(
+        instance;
+        continents=["Western Europe", "South America", "South-East Asia"],
+        timeHorizon=9,
+    )
 
     # instanceSub = instance
     # adding properties to the instance
-    # instanceSub = add_properties(instanceSub, tentative_first_fit)
+    # instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
     # solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
     # solutionSub_C = solution
 
     # test algorithms  
 
-    # _, solutionSub_LBF = lower_bound_filtering_heuristic(instanceSub)
-    # println(
-    #     "Bundles actually filtered : $(count(x -> length(x) == 2, solutionSub_LBF.bundlePaths))",
-    # )
+    _, solutionSub_LBF = lower_bound_filtering_heuristic(instanceSub)
+    println(
+        "Bundles actually filtered : $(count(x -> length(x) == 2, solutionSub_LBF.bundlePaths))",
+    )
 
-    # instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
-    # instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+    instanceSubSub = extract_filtered_instance(instanceSub, solutionSub_LBF)
+    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+
+    solutionSub_C = extract_sub_solution(solution, instance, instanceSubSub)
+    # solutionSub_C = solution
 
     # save("instance.jld2", "instance", instanceSubSub)
+
+    netGraph = instanceSubSub.networkGraph.graph
+    nSuppliers = count(lab -> netGraph[lab].type == :supplier, labels(netGraph))
+    nPlants = count(lab -> netGraph[lab].type == :plant, labels(netGraph))
+    println("$nSuppliers suppliers and $nPlants plants")
+
+    nPlat = length(labels(netGraph)) - nSuppliers - nPlants
+    meanPlatCost = sum(lab -> netGraph[lab].volumeCost, labels(netGraph)) / nPlat
+    nCom = sum(b -> sum(o -> length(o.content), b.orders), instance.bundles)
+    meanSize = sum(b -> sum(o -> sum(c -> c.size, o.content), b.orders), instance.bundles) / nCom / VOLUME_FACTOR
+    meanCost = sum(b -> sum(o -> sum(c -> c.stockCost, o.content), b.orders), instance.bundles) / nCom
+    println("Mean platform cost $meanPlatCost and mean size $meanSize and mean cost $meanCost")
+    allTransCost = sum(a -> netGraph[a[1], a[2]].unitCost, edge_labels(netGraph))
+    allCarbCost = sum(a -> netGraph[a[1], a[2]].carbonCost, edge_labels(netGraph))
+    println("Share of transportation cost $(allTransCost / (allTransCost + allCarbCost))")
     # return 0
 
-    println("Loading instance")
-    instanceSubSub = load("instance.jld2", "instance")
+    # println("Loading instance")
+    # instanceSubSub = load("instance.jld2", "instance")
 
     # _, solutionSub_SD = shortest_delivery_heuristic(instanceSub)
     # global MAX_LENGTH, GREEDY_RECOMPUTATION = 0, 0
-    # _, solutionSub_G = greedy_heuristic(instanceSubSub)
-    # greedyCost = compute_cost(instanceSubSub, solutionSub_G)
+    
+    _, solutionSub_G = greedy_heuristic(instanceSubSub)
+    greedyCost = compute_cost(instanceSubSub, solutionSub_G)
 
     # println("Max length encountered for packing : $MAX_LENGTH")
     # println("Path recompuations needed : $GREEDY_RECOMPUTATION")
 
-    # _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
-    # lbCost = compute_cost(instanceSubSub, solutionSub_LB)
+    _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+    lbCost = compute_cost(instanceSubSub, solutionSub_LB)
 
     # Choosing the best initial solution on which to apply local search 
-    # solution = solutionSub_G
-    # if lbCost < greedyCost
-    #     solution = solutionSub_LB
-    #     @info "Choosing lower bound solution as initial solution"
-    # else
-    #     @info "Choosing greedy solution as initial solution"
-    # end
+    solution = solutionSub_G
+    if lbCost < greedyCost
+        solution = solutionSub_LB
+        @info "Choosing lower bound solution as initial solution"
+    else
+        @info "Choosing greedy solution as initial solution"
+    end
 
     # save("start_solution.jld2", "solution", solution)
-    println("Loading initial solution")
-    solution = load("start_solution.jld2", "solution")
+    # println("Loading initial solution")
+    # solution = load("start_solution.jld2", "solution")
 
     # _, solutionSubSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSubSub; timeLimit=300)
 
-    local_search_heuristic!(solution, instanceSubSub; timeLimit=120)
+    local_search_heuristic!(solution, instanceSubSub; timeLimit=600, stepLimit=90)
 
     # TODO : need to compare just local search and LNS on the same time frame to see the difference
     # Without warm start diversity seems to lead to more improvement
     # Still need to see wether slope scaling helps
 
-    # lns_heuristic!(solution, instanceSubSub; timeLimit=900, lsTimeLimit=90)
+    lns_heuristic!(solution, instanceSubSub; timeLimit=1800, lsTimeLimit=600, lsStepTimeLimit=90)
     # println("Cost of solution : $(compute_cost(instanceSubSub, solution))")
+
+    # TODO : do soluttion analysis function to print relevant KPIs
 
     # startCost = compute_cost(instanceSubSub, solutionSubSub_GLS)
     # costThreshold = 1e-2 * startCost

@@ -6,6 +6,11 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     account, country, continent = promote(
         row.point_account, row.point_country, row.point_continent
     )
+    m3Cost = if nodeType in [:supplier, :plant]
+        0.0
+    else
+        0.1
+    end
     return NetworkNode(
         account,
         nodeType,
@@ -13,6 +18,7 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
         continent,
         nodeType in COMMON_NODE_TYPES,
         row.point_m3_cost,
+        # m3Cost,
     )
 end
 
@@ -50,16 +56,20 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     else
         0.5
     end
-
+    travelTime = if arcType == :oversea 
+        floor(Int, row.distance / (1.3 * 2500))
+    else
+        floor(Int, row.travel_time + 0.5)
+    end
     return NetworkArc(
         arcType,
         row.distance,
-        floor(Int, row.travel_time + 0.5),
+        travelTime,
         isCommon,
-        row.shipment_cost * shipmentFactor,
-        # row.is_linear,
-        false,
-        row.carbon_cost / 10,
+        row.shipment_cost,
+        row.is_linear,
+        # false,
+        row.carbon_cost,
         row.capacity * VOLUME_FACTOR,
     )
 end
@@ -95,16 +105,16 @@ end
 tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
 
 function com_size(row::CSV.Row)
-    baseSize = min(round(Int, max(35, row.size * 100)), SEA_CAPACITY)
-    if baseSize > 0.5 * SEA_CAPACITY
-        return baseSize
-    elseif baseSize > 0.25 * SEA_CAPACITY
-        return min(SEA_CAPACITY, baseSize * 2)
-    elseif baseSize > 0.1 * SEA_CAPACITY
-        return min(SEA_CAPACITY, baseSize * 4)
-    end
-    return baseSize * 5
-    # return baseSize
+    baseSize = min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
+    # if baseSize > 0.5 * SEA_CAPACITY
+    #     return baseSize
+    # elseif baseSize > 0.25 * SEA_CAPACITY
+    #     return min(SEA_CAPACITY, baseSize * 2)
+    # elseif baseSize > 0.1 * SEA_CAPACITY
+    #     return min(SEA_CAPACITY, baseSize * 4)
+    # end
+    # return baseSize * 5
+    return baseSize
     # Rescaling completely
 end
 

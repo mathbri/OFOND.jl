@@ -58,6 +58,9 @@ function lower_bound_heuristic(instance::Instance)
     return run_heuristic(instance, lower_bound!)
 end
 
+# TODO : add a mix startup heuristic where it starts with lower bound and little by little goes to greedy
+# Like the cost update would be (i * greedy + (B - i) * lower_bound) / B  
+
 function lower_bound_filtering_heuristic(instance::Instance)
     return run_heuristic(instance, lower_bound_filtering!)
 end
@@ -150,7 +153,7 @@ end
 # TODO : add mechanism to restart from a completely diffreent solution
 
 function lns_heuristic!(
-    solution::Solution, instance::Instance; timeLimit::Int, lsTimeLimit::Int
+    solution::Solution, instance::Instance; timeLimit::Int, lsTimeLimit::Int, lsStepTimeLimit::Int
 )
     improvThreshold = -1e-4 * compute_cost(instance, solution)
     bestSol = solution_deepcopy(solution, instance)
@@ -167,6 +170,7 @@ function lns_heuristic!(
         if unfruitful == 1
             resetCost = true
         elseif unfruitful == 3
+            break
             # We are restarting so we need to store the best solution found so far
             bestSol = solution_deepcopy(solution, instance)
             # TODO : restart with greedy and random insertion order
