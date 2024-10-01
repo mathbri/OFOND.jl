@@ -341,4 +341,6 @@ end
 # Vector packing functions
 ###########################################################################################
 
+# TODO : adapt Bin, Commodity and read_instance to this addition
+
 # TODO : code simple vector packing functions
