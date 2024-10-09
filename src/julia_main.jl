@@ -59,6 +59,9 @@ function julia_main()::Cint
     CAPACITIES = Int[]
     instance = add_properties(instance, tentative_first_fit, CAPACITIES)
 
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
+    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+
     # read solution
     sol_file = joinpath(directory, "route_Preprocessed 1.csv")
     if length(ARGS) >= 5
@@ -94,6 +97,12 @@ function julia_main()::Cint
     )
     instanceSub = extract_filtered_instance(instance, solution_LBF)
     instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
+
+    totVol = sum(sum(o.volume for o in b.orders) for b in instanceSub.bundles)
+    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+    println(
+        "Common arcs in travel time graph : $(count(x -> x.type in BP_ARC_TYPES, instanceSub.travelTimeGraph.networkArcs))",
+    )
 
     # Greedy or Lower Bound than Local Search heuristic
     _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=300)

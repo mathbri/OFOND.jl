@@ -148,5 +148,7 @@ function greedy!(solution::Solution, instance::Instance)
         i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(sortedBundleIdxs)))% ")
     end
     println()
+    println("\nTotal arc computed : $ARC_COMPUTED")
+    println("Total bin packing computed : $BP_COMPUTED\n")
     return totalCost
 end

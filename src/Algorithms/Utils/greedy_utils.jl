@@ -2,6 +2,9 @@
 
 # TODO : carbon cost for direct arcs are not linear
 
+global ARC_COMPUTED = 0
+global BP_COMPUTED = 0
+
 # Check whether the arc is fit for a cost update
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]
@@ -50,6 +53,7 @@ function transport_units(
             orderTrucks = tentative_first_fit(
                 bins, arcData, order, CAPACITIES; sorted=sorted
             )
+            global BP_COMPUTED += 1
         end
     end
     return orderTrucks
@@ -80,6 +84,7 @@ function arc_update_cost(
     # If the arc is forbidden for the bundle, returning INF
     is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
     # Otherwise, computing the new cost
+    global ARC_COMPUTED += 1
     arcBundleCost = EPS
     for order in bundle.orders
         # Getting time space projection

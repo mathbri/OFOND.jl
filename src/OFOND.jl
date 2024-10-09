@@ -29,6 +29,7 @@ include("Structures/projectors.jl")
 include("Structures/struct_utils.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
+include("Structures/OldStructures.jl")
 
 # Import and Export of data
 include("Reading/read_instance.jl")
