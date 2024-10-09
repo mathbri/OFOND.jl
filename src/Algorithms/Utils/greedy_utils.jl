@@ -2,6 +2,9 @@
 
 # TODO : carbon cost for direct arcs are not linear
 
+global ARC_COMPUTED = 0
+global BP_COMPUTED = 0
+
 # Check whether the arc is fit for a cost update
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]
@@ -62,6 +65,7 @@ function transport_units(
             # computeTime2 = time() - startTime
             # @assert orderTrucks == orderTrucks2
             # computeTime2 < computeTime ? print("O") : print("X")
+            global BP_COMPUTED += 1
         end
     end
     return orderTrucks
@@ -114,6 +118,7 @@ function arc_update_cost(
     #     println("Arc $(src)-$(dst)")
     # end
     # Otherwise, computing the new cost
+    global ARC_COMPUTED += 1
     arcBundleCost = EPS
     for order in bundle.orders
         # Getting time space projection

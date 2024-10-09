@@ -49,6 +49,9 @@ function julia_main(;
     CAPACITIES = Int[]
     instance = add_properties(instance, tentative_first_fit, CAPACITIES)
 
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
+    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+
     # Read solution based on file given
     sol_file = joinpath(inputFolder, routeFile)
     if !isfile(sol_file)
@@ -73,6 +76,12 @@ function julia_main(;
     )
     instanceSub = extract_filtered_instance(instance, solution_LBF)
     instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
+
+    totVol = sum(sum(o.volume for o in b.orders) for b in instanceSub.bundles)
+    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+    println(
+        "Common arcs in travel time graph : $(count(x -> x.type in BP_ARC_TYPES, instanceSub.travelTimeGraph.networkArcs))",
+    )
 
     @info "Constructing greedy, lower bound and mixed solution"
     solution_Mix = Solution(instanceSubSub)
@@ -114,6 +123,9 @@ function julia_main(;
             lsStepTimeLimit=90,
         )
     end
+
+    # Greedy or Lower Bound than Local Search heuristic
+    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=300)
 
     # Fusing solutions
     finalSolution = fuse_solutions(solutionSub, solution_LBF, instance, instanceSub)
