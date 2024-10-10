@@ -109,17 +109,32 @@ function lower_bound!(solution::Solution, instance::Instance)
 end
 
 function parrallel_lower_bound!(solution::Solution, instance::Instance)
-    lowerBound = 0.0
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
-    # Computing the lower bound delivery for each bundle
-    # TODO : parrallelize here with native @threads
-    #       deepcopy travel time graph
-    #       compute lower bound insertion
-    #       write shortest path at bundle idx or collect paths and costs to avoid false sharing
-    # update solution all together
-    # cut the instance by bundles and merge them at the end
+
+    # Using tmap() of OhMyThreads to parallelize
+    # - tmap_lb_insertion is an inner function that takes for only argument the bundle
+    # - Tuple{Vector{Int}, Float64} is an output type to store paths and costs for each bundle
+    println("Lower Bound computation (parrallel version so no progress bar)")
+
+    # Defining function to use tmap
+    function tmap_lb_insertion(bundle::Bundle)::Tuple{Vector{Int},Float64}
+        suppNode = TTGraph.bundleSrc[bundle.idx]
+        custNode = TTGraph.bundleDst[bundle.idx]
+        # Computing shortest path
+        return lower_bound_insertion(
+            solution, TTGraph, TSGraph, bundle, suppNode, custNode;
+        )
+    end
+    pathAndCosts = tmap(tmap_lb_insertion, Tuple{Vector{Int},Float64}, instance.bundles)
+
+    # Computing lower bound
+    lowerBound = sum(x -> x[2], pathAndCosts)
+    # Updating solution with the paths computed 
+    update_solution!(
+        solution, instance, instance.bundles, [x[1] for x in pathAndCosts]; sorted=true
+    )
     println("Lower Bound Computed : $lowerBound")
     return lowerBound
 end
@@ -160,4 +175,22 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
     return println()
 end
 
-# TODO : like lower bound, this can be parrallelized
+function parrallel_lower_bound_filtering!(solution::Solution, instance::Instance)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Sorting commodities in orders and bundles between them
+    sort_order_content!(instance)
+
+    println("Lower Bound computation (parrallel version so no progress bar)")
+    # Defining function to use tmap
+    function tmap_lb_filtering_path(bundle::Bundle)::Vector{Int}
+        suppNode = TTGraph.bundleSrc[bundle.idx]
+        custNode = TTGraph.bundleDst[bundle.idx]
+        # Computing shortest path
+        return lower_bound_filtering_path(TTGraph, TSGraph, bundle, suppNode, custNode;)
+    end
+    paths = tmap(tmap_lb_filtering_path, Vector{Int}, instance.bundles)
+
+    # Updating solution with the paths computed 
+    update_solution!(solution, instance, instance.bundles, paths; sorted=true)
+    return println()
+end

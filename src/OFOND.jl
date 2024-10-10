@@ -13,6 +13,7 @@ using HiGHS, CPLEX, Gurobi
 using SparseArrays
 using Flux
 using InferOpt
+using OhMyThreads
 
 # Project files
 
