@@ -93,6 +93,22 @@ function get_all_commodities(bins::Vector{Bin})
     return view(ALL_COMMODITIES, 1:nCom)
 end
 
+function get_all_commodities!(ALL_COMMODITIES::Vector{Commodity}, bins::Vector{Bin})
+    bins = filter(bin -> length(bin.content) > 0, bins)
+    # verify the global vector is long enough 
+    nCom = sum(length(bin.content) for bin in bins; init=0)
+    if nCom > length(ALL_COMMODITIES)
+        append!(ALL_COMMODITIES, fill(bins[1].content[1], nCom - length(ALL_COMMODITIES)))
+    end
+    # put all commodities in the global vector
+    idx = 1
+    for bin in bins
+        nBinCom = length(bin.content)
+        ALL_COMMODITIES[idx:(idx + nBinCom - 1)] = bin.content
+        idx += nBinCom
+    end
+end
+
 function stock_cost(bin::Bin)::Float64
     return sum(com.stockCost for com in bin.content; init=0.0)
 end

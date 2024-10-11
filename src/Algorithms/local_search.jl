@@ -20,6 +20,9 @@
 # Instead of computing greedy and lower boud paths, would it be better to divide it into two different operators ?
 # Like reintroduce all bundles with greedy path and then reintroduce all bundles with lower bound paths ?
 
+# When we will split bundles, a new neighborhhod based on the perturb than optimize is to a full path for the old bundle and then reintroduce with the new bundles
+# It can also be done between two nodes of the shared network 
+
 # Improving all bin packings if possible
 # The idea is to put skip linear to false just before returning the solution to get a more compact solution but it does not affect the cost
 function bin_packing_improvement!(
@@ -59,12 +62,54 @@ function bin_packing_improvement!(
     return costImprov
 end
 
-# All arcs are independant when computing bin-packing so can be parrallelized
+# Parallel version of the bin packing improvement
 function parrallel_bin_packing_improvement!(
     solution::Solution, instance::Instance; sorted::Bool=false, skipLinear::Bool=true
 )
-    # TODO : parrallelize here with native @threads
-    # TODO : check memory sharing between threads if the get all commodity workaround is in place
+    computedArcs = Tuple{Int,Int}[
+        (src(arc), dst(arc)) for arc in edges(instance.timeSpaceGraph.graph)
+    ]
+    computedBins = @task for (arcSrc, arcDst) in computedArcs
+        @set collecting = true
+        # Using task local storage for the commodities retrieved from the arcs
+        @local ALL_COMMODITIES = Commodity[]
+        # Gathering all commodities
+        allCommodities = get_all_commodities!(
+            ALL_COMMODITIES, solution.bins[arcSrc, arcDst]
+        )
+        # Computing new bins and "returning" them
+        compute_new_bins(arcData, allCommodities; sorted=sorted)
+    end
+    costImprov, computedNoImprov, computable = 0.0, 0, 0
+    # Updating counters in parrallel
+    costImprov, computedNoImprov, computable = @tasks for ((arcSrc, arcDst), newBins) in
+                                                          zip(computedArcs, computedBins)
+        # Setting reducer
+        @set reducer = +
+        arcBins = solution.bins[arcSrc, arcDst]
+        arcData = instance.timeSpaceGraph.networkArcs[arcSrc, arcDst]
+        # Computing counters
+        computable = length(arcBins) > 1
+        costImprov, computedNoImprov = 0.0, 0
+        if length(newBins) >= length(arcBins)
+            computedNoImprov += 1
+        elseif !arcData.isLinear
+            costImprov -= arcData.unitCost * (length(arcBins) - length(newBins))
+        end
+        # "Returning" the counters
+        (costImprov, computedNoImprov, computable)
+    end
+    # Updating bins iteratively to avoid race conditions
+    for ((arcSrc, arcDst), newBins) in zip(computedArcs, computedBins)
+        # If the number of bins did not change, not updating content
+        length(newBins) >= length(solution.bins[arcSrc, arcDst]) && continue
+        # Updating bins
+        solution.bins[arcSrc, arcDst] = newBins
+    end
+    println("All packings computable : $computable")
+    println("Computed packings (lower bound not reached) : $(length(computedArcs))")
+    println("Computed packings with no improvement : $computedNoImprov")
+    return costImprov
 end
 
 # TODO : major profiling problems in bundle reintroduction comes from the deepcopy done in save and remove
@@ -201,7 +246,6 @@ function two_node_incremental!(
         return 0.0
     end
 
-    # TODO : try adding all on the same path 
     # Inserting it back
     addedCost = 0.0
     # sortedBundleIdxs = sortperm(twoNodeBundles; by=bun -> bun.maxPackSize, rev=true)
@@ -234,13 +278,88 @@ function two_node_incremental!(
     end
 end
 
-# TODO : Mix this two by doing the together first and then the incremental in a reintridcution fashion to question the common path
-# By changing middle parts of paths, some can become non-admissible
-# Good idea but can't make it work for now
+# Remove and insert back all bundles flowing from src to dst on the same path
+function two_node_common!(
+    solution::Solution,
+    instance::Instance,
+    src::Int,
+    dst::Int,
+    CAPACITIES::Vector{Int};
+    costThreshold::Float64=EPS,
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
+    twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
+    # If there is no bundles concerned, returning
+    length(twoNodeBundles) == 0 && return 0.0, 0
+    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
+
+    # Saving previous bins and removing bundle 
+    oldBins = save_previous_bins(
+        solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
+    )
+    costRemoved = update_solution!(
+        solution, instance, twoNodeBundles, oldPaths; remove=true
+    )
+
+    # Creating a unique bundle for all the bundles concerned
+    commonBundle = fuse_bundles(instance, twoNodeBundles)
+
+    # Inserting it back
+    newPath, pathCost = greedy_insertion(
+        solution,
+        TTGraph,
+        TSGraph,
+        commonBundle,
+        src,
+        dst,
+        CAPACITIES;
+        sorted=true,
+        findSources=false,
+    )
+
+    # TODO : check replacement is correct
+    # # Updating solution for the next step
+    # newPaths = [newPath for _ in 1:length(twoNodeBundles)]
+    # updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
+    # improvement = updateCost + costRemoved
+    # bunCounter = length(twoNodeBundles)
+
+    # # If no improvement at the end, reverting solution to its first state
+    # if improvement > 1e2
+    #     revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
+    #     print("x")
+    #     return 0.0, 0
+    # elseif !is_feasible(instance, solution)
+    #     revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
+    #     print("X")
+    #     return 0.0, 0
+    # else
+    #     print("o")
+    #     return improvement, bunCounter
+    # end
+
+    feasible = false
+    # Updating path possible if it improves the cost and the new paths are admissible
+    if (pathCost + costRemoved < -1e-3) && feasible
+        newPaths = [newPath for _ in 1:length(twoNodeBundles)]
+        updateCost = update_solution!(
+            solution, instance, twoNodeBundles, newPaths; sorted=true
+        )
+        print("o")
+        return updateCost + costRemoved, length(twoNodeBundles)
+    else
+        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
+        feasible ? print("X") : print("o")
+        return 0.0, 0
+    end
+end
 
 # TODO : use fuse_bundles function
 
 # TODO : to be optimized to the fullest because works better than classical local search 
+
+# TODO : rename two_node_pertub_than_introduce
 
 function two_node_common_incremental!(
     solution::Solution,
@@ -259,6 +378,9 @@ function two_node_common_incremental!(
 
     # Saving previous bins and removing bundle 
     # TODO : time lost here, storing just the bins needed will help a lot
+
+    # In the worst case, you modify all paths of the bundles involved, which means you only need to store the old bins on the intersection of the old paths
+
     prevSol = solution_deepcopy(solution, instance)
     costRemoved = update_solution!(
         solution, instance, twoNodeBundles, oldPaths; remove=true
@@ -349,90 +471,6 @@ function two_node_common_incremental!(
         #     )
         #     print("X")
         #     return 0.0, 0
-    else
-        print("o")
-        return improvement, bunCounter
-    end
-end
-
-function two_node_common!(
-    solution::Solution,
-    instance::Instance,
-    src::Int,
-    dst::Int,
-    CAPACITIES::Vector{Int};
-    costThreshold::Float64=EPS,
-)
-    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
-    twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
-    # If there is no bundles concerned, returning
-    length(twoNodeBundles) == 0 && return 0.0, 0
-    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
-
-    # Saving previous bins and removing bundle 
-    oldBins = save_previous_bins(
-        solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
-    )
-    costRemoved = update_solution!(
-        solution, instance, twoNodeBundles, oldPaths; remove=true
-    )
-
-    # Creating a unique bundle for all the bundles concerned
-    # Putting one order for each delivery date to fuse them together
-    newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
-    for bundle in twoNodeBundles
-        # Fusing all orders
-        for order in bundle.orders
-            append!(newOrders[order.deliveryDate].content, order.content)
-        end
-    end
-    filter!(o -> length(o.content) > 0, newOrders)
-    for order in newOrders
-        sort!(order.content)
-    end
-    newOrders = [
-        add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
-    ]
-    bunIdx = twoNodeBundleIdxs[1]
-    commonBundle = Bundle(
-        twoNodeBundles[1].supplier,
-        twoNodeBundles[1].customer,
-        newOrders,
-        bunIdx,
-        UInt(0),
-        0,
-        0,
-    )
-
-    # Inserting it back
-    newPath, pathCost = greedy_insertion(
-        solution,
-        TTGraph,
-        TSGraph,
-        commonBundle,
-        src,
-        dst,
-        CAPACITIES;
-        sorted=true,
-        findSources=false,
-    )
-
-    # Updating solution for the next step
-    newPaths = [newPath for _ in 1:length(twoNodeBundles)]
-    updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
-    improvement = updateCost + costRemoved
-    bunCounter = length(twoNodeBundles)
-
-    # If no improvement at the end, reverting solution to its first state
-    if improvement > 1e2
-        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
-        print("x")
-        return 0.0, 0
-    elseif !is_feasible(instance, solution)
-        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins, newPaths)
-        print("X")
-        return 0.0, 0
     else
         print("o")
         return improvement, bunCounter
@@ -815,113 +853,6 @@ function two_node_common_incremental_debug!(
     else
         # println(" total $(round(improvement, digits=1)) ")
         return improvement
-    end
-end
-
-# Remove and insert back all bundles flowing from src to dst on the same path
-function two_node_together!(
-    solution::Solution,
-    instance::Instance,
-    src::Int,
-    dst::Int,
-    CAPACITIES::Vector{Int};
-    costThreshold::Float64=EPS,
-)
-    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    twoNodeBundleIdxs = get_bundles_to_update(instance, solution, src, dst)
-    twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
-    # If there is no bundles concerned, returning
-    length(twoNodeBundles) == 0 && return 0.0
-    @assert is_feasible(instance, solution)
-    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
-
-    # The filtering could also occur in terms of cost removed : it must be above a certain threshold
-    sum(
-        bundle_estimated_removal_cost(bundle, path, instance, solution) for
-        (bundle, path) in zip(twoNodeBundles, oldPaths)
-    ) <= costThreshold && return 0.0
-
-    # Saving previous bins and removing bundle 
-    oldBins = save_previous_bins(
-        solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
-    )
-    costRemoved = update_solution!(
-        solution, instance, twoNodeBundles, oldPaths; remove=true
-    )
-
-    # If the cost removed only amouts to the linear part of the cost, improvements are too small compared to the computational cost
-    pathsLinearCost = sum(
-        bundle_path_linear_cost(bundle, path, TTGraph) for
-        (bundle, path) in zip(twoNodeBundles, oldPaths)
-    )
-    if costRemoved + pathsLinearCost >= -EPS
-        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
-        @assert is_feasible(instance, solution)
-        return 0.0
-    end
-
-    # Creating a unique bundle for all the bundles concerned
-    # Putting one order for each delivery date to fuse them together
-    newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
-    for bundle in twoNodeBundles
-        # Fusing all orders
-        for order in bundle.orders
-            append!(newOrders[order.deliveryDate].content, order.content)
-        end
-    end
-    filter!(o -> length(o.content) > 0, newOrders)
-    for order in newOrders
-        sort!(order.content)
-    end
-    newOrders = [
-        add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
-    ]
-    bunIdx = twoNodeBundleIdxs[1]
-    commonBundle = Bundle(
-        twoNodeBundles[1].supplier,
-        twoNodeBundles[1].customer,
-        newOrders,
-        bunIdx,
-        UInt(0),
-        0,
-        0,
-    )
-
-    # Inserting it back
-    newPath, pathCost = greedy_insertion(
-        solution,
-        TTGraph,
-        TSGraph,
-        commonBundle,
-        src,
-        dst,
-        CAPACITIES;
-        sorted=true,
-        findSources=false,
-    )
-    commonPaths = [newPath for _ in 1:length(twoNodeBundles)]
-    update_solution!(solution, instance, twoNodeBundles, commonPaths; sorted=true)
-
-    # Some new path parts can render the whole bundle path non-admissible
-    # for bundle in twoNodeBundles
-    #     if !is_path_admissible(TTGraph, solution.bundlePaths[bundle.idx])
-    #         revert_solution!(
-    #             solution, instance, twoNodeBundles, oldPaths, oldBins, commonPaths
-    #         )
-    #         @assert is_feasible(instance, solution)
-    #         return 0.0
-    #     end
-    # end
-
-    # Updating path if it improves the cost (accounting for EPS cost on arcs)
-    if pathCost + costRemoved < -1e-3
-        # Adding to solution
-        @assert is_feasible(instance, solution)
-        return pathCost + costRemoved
-    else
-        revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
-        @assert is_feasible(instance, solution)
-        return 0.0
     end
 end
 
