@@ -2,11 +2,7 @@
 
 # TODO : change name to delivery graph to avoid confusion with arc travel times ?
 
-# TODO : question the usage of sparse matrices because thay have slower getting times but uses less memory
-# For that may be create a new branch for testing 
-# From what I could gather, It will need a test to see if full matrices have slower computation time
-
-# TODO : overload all graphs function used to not have to do TTGraph.graph ?
+# TODO : with the new bundleArcs field, there is a question around the usage of bundleSrc, bundleDst and commonNodes
 
 # Travel Time Graph
 struct TravelTimeGraph
@@ -21,6 +17,7 @@ struct TravelTimeGraph
     bundleSrc::Vector{Int} # start nodes for bundles
     bundleDst::Vector{Int} # end nodes for bundles
     hashToIdx::Dict{UInt,Int} # dict to easily recover nodes from time space to travel time
+    bundleArcs::Vector{Vector{Tuple{Int,Int}}} # arcs usable for each bundle to ease looping through them
 end
 
 function TravelTimeGraph()
@@ -34,6 +31,7 @@ function TravelTimeGraph()
         Int[],
         Int[],
         Dict{UInt,Int}(),
+        Vector{Tuple{Int,Int}}[],
     )
 end
 
@@ -48,6 +46,7 @@ function TravelTimeGraph(bundles::Vector{Bundle})
         fill(-1, length(bundles)),
         fill(-1, length(bundles)),
         Dict{UInt,Int}(),
+        [Tuple{Int,Int}[] for _ in bundles],
     )
 end
 
@@ -68,6 +67,7 @@ function TravelTimeGraph(
         travelTimeGraph.bundleSrc,
         travelTimeGraph.bundleDst,
         travelTimeGraph.hashToIdx,
+        travelTimeGraph.bundleArcs,
     )
 end
 
@@ -189,6 +189,24 @@ function add_arc_to_vectors!(
     return append!(costs, fill(EPS, length(srcs)))
 end
 
+function add_bundle_arcs!(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
+    bunArcs = Tuple{Int,Int}[]
+    # Discovering all nodes reachable from the bundle source 
+    reachableNodes = bfs_parents(
+        travelTimeGraph.graph, travelTimeGraph.bundleSrc[bundle.idx]
+    )
+    # If a node cannot be reached, it as 0 as parent
+    filter!(n -> n != 0, reachableNodes)
+    # Constrcuting bundle arcs by adding all outgoing arcs of all reachable nodes
+    for arcSrc in reachableNodes
+        # Adding all outgoing arcs
+        outSrcArcs = outneighbors(travelTimeGraph.graph, arcSrc)
+        append!(bunArcs, [(arcSrc, arcDst) for arcDst in outSrcArcs])
+    end
+    # Adding the complete list to the Travel Time Graph
+    return travelTimeGraph.bundleArcs[bundle.idx] = bunArcs
+end
+
 function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
     # Computing for each node which bundles starts and which bundles end at this node 
     bundlesOnNodes = get_bundle_on_nodes(bundles)
@@ -207,6 +225,10 @@ function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
         arcData = network.graph[srcHash, dstHash]
         srcs, dsts = add_network_arc!(travelTimeGraph, srcData, dstData, arcData)
         add_arc_to_vectors!((I, J, arcs, costs), srcs, dsts, arcData)
+    end
+    # Computing bundle arcs
+    for bundle in bundles
+        add_bundle_arcs!(travelTimeGraph, bundle)
     end
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
@@ -237,7 +259,9 @@ function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
     return (firstNode - 1) * EPS
 end
 
-# TODO : see the actual use for this function after thorough anaysis of algorithms
+# TODO : Copy the implementation of Dijkstra but make it so the objects created inside are shared among the different calls 
+# to minimize the memory footprint of all shortest path computation
+
 # Shortcut for computing shortest paths
 function shortest_path(travelTimeGraph::TravelTimeGraph, src::Int, dst::Int)
     dijkstraState = dijkstra_shortest_paths(

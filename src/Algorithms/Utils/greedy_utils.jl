@@ -197,3 +197,52 @@ function path_cost(path::Vector{Int}, costMatrix::SparseMatrixCSC{Float64,Int})
     end
     return cost
 end
+
+######################################################
+###           Parallel Implementation              ###
+######################################################
+
+# TODO : have a common channel of CAPACITIES for eahc call to parallel_update_cost_matrix! ?
+
+# TODO : unused arguments like opening factor are removed, put them back if necessary one day 
+
+# TODO : if the garbage collecting of bundleArcCosts and / or the time used to actually update the matrix is significant 
+# compared to the parallel computation time, by having bundleArcs directly as a sparse matrix, we could use tmap!
+
+function parallel_update_cost_matrix!(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    sorted::Bool=true,
+    use_bins::Bool=true,
+    findSources::Bool=true,
+)
+    # Creating channel of CAPACITIES to limit memory footprint
+    chnl = Channel{Vector{Int}}(Threads.nthreads())
+    foreach(1:Threads.nthreads()) do _
+        put!(chnl, Vector{Int}(undef, 0))
+    end
+    # Iterating in parallel (thanks to tmap) through the bundle arcs
+    bundleArcCosts = tmap(Float64, TTGraph.bundleArcs) do (src, dst)
+        CAPACITIES = take!(chnl)
+        result = arc_update_cost(
+            solution,
+            TTGraph,
+            TSGraph,
+            bundle,
+            src,
+            dst,
+            CAPACITIES;
+            sorted=sorted,
+            use_bins=use_bins,
+        )
+        put!(chnl, CAPACITIES)
+        result
+    end
+    # Applying those costs to the cost matrix
+    for (arc, arcCost) in zip(TTGraph.bundleArcs, bundleArcCosts)
+        src, dst = arc
+        TTGraph.costMatrix[src, dst] = arcCost
+    end
+end
