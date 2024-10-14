@@ -69,44 +69,51 @@ function parrallel_bin_packing_improvement!(
     computedArcs = Tuple{Int,Int}[
         (src(arc), dst(arc)) for arc in edges(instance.timeSpaceGraph.graph)
     ]
-    computedBins = @task for (arcSrc, arcDst) in computedArcs
-        @set collecting = true
-        # Using task local storage for the commodities retrieved from the arcs
-        @local ALL_COMMODITIES = Commodity[]
+    computable = count(
+        length(solution.bins[aSrc, aDst]) > 0 for (aSrc, aDst) in computedArcs
+    )
+    println("All packings computable (arcs used) : $computable")
+    # Filtering arcs to compute on
+    filter!(
+        (aSrc, aDst) -> is_bin_candidate(
+            solution.bins[aSrc, aDst],
+            instance.timeSpaceGraph.networkArcs[aSrc, aDst];
+            skipLinear=skipLinear,
+        ),
+        computedArcs,
+    )
+    # Creating channel of COMMODITIES to limit memory footprint
+    chnl = Channel{Vector{Int}}(Threads.nthreads())
+    foreach(1:Threads.nthreads()) do _
+        put!(chnl, Vector{Commodity}(undef, 0))
+    end
+    # Computing new bins in parallel
+    computedBins = tmap(Vector{Bin}, computedArcs) do (arcSrc, arcDst)
+        ALL_COMMODITIES = take!(chnl)
         # Gathering all commodities
         allCommodities = get_all_commodities!(
             ALL_COMMODITIES, solution.bins[arcSrc, arcDst]
         )
         # Computing new bins and "returning" them
-        compute_new_bins(arcData, allCommodities; sorted=sorted)
+        result = compute_new_bins(arcData, allCommodities; sorted=sorted)
+        put!(chnl, ALL_COMMODITIES)
+        result
     end
-    costImprov, computedNoImprov, computable = 0.0, 0, 0
-    # Updating counters in parrallel
-    costImprov, computedNoImprov, computable = @tasks for ((arcSrc, arcDst), newBins) in
-                                                          zip(computedArcs, computedBins)
-        # Setting reducer
-        @set reducer = +
-        arcBins = solution.bins[arcSrc, arcDst]
-        arcData = instance.timeSpaceGraph.networkArcs[arcSrc, arcDst]
-        # Computing counters
-        computable = length(arcBins) > 1
-        costImprov, computedNoImprov = 0.0, 0
-        if length(newBins) >= length(arcBins)
-            computedNoImprov += 1
-        elseif !arcData.isLinear
-            costImprov -= arcData.unitCost * (length(arcBins) - length(newBins))
-        end
-        # "Returning" the counters
-        (costImprov, computedNoImprov, computable)
-    end
+    costImprov, computedNoImprov = 0.0, 0
     # Updating bins iteratively to avoid race conditions
     for ((arcSrc, arcDst), newBins) in zip(computedArcs, computedBins)
+        arcBins = solution.bins[src(arc), dst(arc)]
+        arcData = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)]
         # If the number of bins did not change, not updating content
-        length(newBins) >= length(solution.bins[arcSrc, arcDst]) && continue
-        # Updating bins
-        solution.bins[arcSrc, arcDst] = newBins
+        if length(newBins) >= length(arcBins)
+            computedNoImprov += 1
+        else
+            solution.bins[arcSrc, arcDst] = newBins
+            if !arcData.isLinear
+                costImprov -= arcData.unitCost * (length(arcBins) - length(newBins))
+            end
+        end
     end
-    println("All packings computable : $computable")
     println("Computed packings (lower bound not reached) : $(length(computedArcs))")
     println("Computed packings with no improvement : $computedNoImprov")
     return costImprov

@@ -114,20 +114,13 @@ function parrallel_lower_bound!(solution::Solution, instance::Instance)
     sort_order_content!(instance)
 
     # Using tmap() of OhMyThreads to parallelize
-    # - tmap_lb_insertion is an inner function that takes for only argument the bundle
-    # - Tuple{Vector{Int}, Float64} is an output type to store paths and costs for each bundle
     println("Lower Bound computation (parrallel version so no progress bar)")
-
-    # Defining function to use tmap
-    function tmap_lb_insertion(bundle::Bundle)::Tuple{Vector{Int},Float64}
+    pathAndCosts = tmap(Tuple{Vector{Int},Float64}, instance.bundles) do bundle
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
-        return lower_bound_insertion(
-            solution, TTGraph, TSGraph, bundle, suppNode, custNode;
-        )
+        lower_bound_insertion(solution, TTGraph, TSGraph, bundle, suppNode, custNode;)
     end
-    pathAndCosts = tmap(tmap_lb_insertion, Tuple{Vector{Int},Float64}, instance.bundles)
 
     # Computing lower bound
     lowerBound = sum(x -> x[2], pathAndCosts)
@@ -180,15 +173,13 @@ function parrallel_lower_bound_filtering!(solution::Solution, instance::Instance
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
 
-    println("Lower Bound computation (parrallel version so no progress bar)")
-    # Defining function to use tmap
-    function tmap_lb_filtering_path(bundle::Bundle)::Vector{Int}
+    println("Lower Bound Filtering computation (parrallel version so no progress bar)")
+    paths = tmap(Vector{Int}, instance.bundles) do bundle
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
-        return lower_bound_filtering_path(TTGraph, TSGraph, bundle, suppNode, custNode;)
+        lower_bound_filtering_path(TTGraph, TSGraph, bundle, suppNode, custNode)[1]
     end
-    paths = tmap(tmap_lb_filtering_path, Vector{Int}, instance.bundles)
 
     # Updating solution with the paths computed 
     update_solution!(solution, instance, instance.bundles, paths; sorted=true)
