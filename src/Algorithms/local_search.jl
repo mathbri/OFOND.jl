@@ -311,7 +311,6 @@ function two_node_common!(
 
     # Creating a unique bundle for all the bundles concerned
     commonBundle = fuse_bundles(instance, twoNodeBundles)
-
     # Inserting it back
     newPath, pathCost = greedy_insertion(
         solution,
@@ -346,7 +345,8 @@ function two_node_common!(
     #     return improvement, bunCounter
     # end
 
-    feasible = false
+    # Checking feasibility in terms of elementarity remains a question here
+    feasible = true
     # Updating path possible if it improves the cost and the new paths are admissible
     if (pathCost + costRemoved < -1e-3) && feasible
         newPaths = [newPath for _ in 1:length(twoNodeBundles)]
@@ -357,17 +357,13 @@ function two_node_common!(
         return updateCost + costRemoved, length(twoNodeBundles)
     else
         revert_solution!(solution, instance, twoNodeBundles, oldPaths, oldBins)
-        feasible ? print("X") : print("o")
+        feasible ? print("x") : print("X")
         return 0.0, 0
     end
 end
 
-# TODO : use fuse_bundles function
-
-# TODO : to be optimized to the fullest because works better than classical local search 
-
-# TODO : rename two_node_pertub_than_introduce
-
+# Remove bundles flowing from src to dst, insert them back forcefully on the same path 
+# then use bundle_reintroduction on each bundle in hope to improve the cost
 function two_node_common_incremental!(
     solution::Solution,
     instance::Instance,
@@ -381,45 +377,21 @@ function two_node_common_incremental!(
     twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
     # If there is no bundles concerned, returning
     length(twoNodeBundles) == 0 && return 0.0, 0
-    oldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
+    fullOldPaths = solution.bundlePaths[twoNodeBundleIdxs]
+    commonOldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
 
     # Saving previous bins and removing bundle 
-    # TODO : time lost here, storing just the bins needed will help a lot
-
-    # In the worst case, you modify all paths of the bundles involved, which means you only need to store the old bins on the intersection of the old paths
-
-    prevSol = solution_deepcopy(solution, instance)
+    # In the worst case, you modify all paths of the bundles involved, 
+    # which means you only need to store the old bins on the intersection of the old paths
+    oldBins = save_previous_bins(
+        solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, fullOldPaths)
+    )
     costRemoved = update_solution!(
-        solution, instance, twoNodeBundles, oldPaths; remove=true
+        solution, instance, twoNodeBundles, commonOldPaths; remove=true
     )
 
     # Creating a unique bundle for all the bundles concerned
-    # Putting one order for each delivery date to fuse them together
-    newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
-    for bundle in twoNodeBundles
-        # Fusing all orders
-        for order in bundle.orders
-            append!(newOrders[order.deliveryDate].content, order.content)
-        end
-    end
-    filter!(o -> length(o.content) > 0, newOrders)
-    for order in newOrders
-        sort!(order.content)
-    end
-    newOrders = [
-        add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
-    ]
-    bunIdx = twoNodeBundleIdxs[1]
-    commonBundle = Bundle(
-        twoNodeBundles[1].supplier,
-        twoNodeBundles[1].customer,
-        newOrders,
-        bunIdx,
-        UInt(0),
-        0,
-        0,
-    )
-
+    commonBundle = fuse_bundles(instance, twoNodeBundles)
     # Inserting it back
     newPath, pathCost = greedy_insertion(
         solution,
@@ -442,8 +414,7 @@ function two_node_common_incremental!(
     # Inserting back concerned bundles
     for (i, bIdx) in enumerate(twoNodeBundleIdxs)
         bundle = instance.bundles[bIdx]
-        # TODO : time also lost here, to see how we can optimize this further
-        # Still need to only accept improving updates so as is seems fine
+        # Time lost here, but still need to only accept improving updates so as is seems fine
         improvement += bundle_reintroduction!(
             solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=1.0
         )
@@ -453,31 +424,13 @@ function two_node_common_incremental!(
 
     # If no improvement at the end, reverting solution to its first state
     if improvement > 1e2
-        # TODO : little bit of time lost here
-        newPaths = deepcopy(solution.bundlePaths)
+        # Slicing makes a copy implicitly
+        newPaths = solution.bundlePaths[twoNodeBundleIdxs]
         revert_solution!(
-            solution,
-            instance,
-            instance.bundles,
-            prevSol.bundlePaths,
-            prevSol.bins,
-            newPaths,
+            solution, instance, twoNodeBundles, fullOldPaths, oldBins, newPaths
         )
         print("x")
         return 0.0, 0
-        # TODO : quite some time lost by feasibility checks
-        # elseif !is_feasible(instance, solution)
-        #     newPaths = deepcopy(solution.bundlePaths)
-        #     revert_solution!(
-        #         solution,
-        #         instance,
-        #         instance.bundles,
-        #         prevSol.bundlePaths,
-        #         prevSol.bins,
-        #         newPaths,
-        #     )
-        #     print("X")
-        #     return 0.0, 0
     else
         print("o")
         return improvement, bunCounter
