@@ -72,3 +72,46 @@ function remove_orders_outside_horizon(bundle::Bundle, timeHorizon::Int)
         bundle.maxDelTime,
     )
 end
+
+function remove_orders_outside_frame(bundle::Bundle, timeStart::Int, timeEnd::Int)
+    newOrders = filter(order -> timeStart <= order.deliveryDate <= timeEnd, bundle.orders)
+    return Bundle(
+        bundle.supplier,
+        bundle.customer,
+        newOrders,
+        bundle.idx,
+        bundle.hash,
+        bundle.maxPackSize,
+        bundle.maxDelTime,
+    )
+end
+
+# Split the bundle according to part numbers 
+# The properties are not recomputed here, no its needs recomputation
+function split_bundle(bundle::Bundle, startIdx::Int)
+    # Gather al part numbers in the bundle
+    partNums = Set{UInt}()
+    for order in bundle.orders
+        partNums = union(partNums, map(com -> com.partNumHash, order.content))
+    end
+    # Creating one bundle per part number
+    newBundles = Bundle[]
+    for (i, partNum) in enumerate(partNums)
+        newHash = hash(bundle.supplier, hash(bundle.customer, partNum))
+        newOrders = Order[]
+        # Creating orders only composed of the partNum 
+        for order in bundle.orders
+            if count(isequal(partNum), order.content) > 0
+                newContent = filter(isequal(partNum), order.content)
+                newBunOrder = Order(order.hash, order.deliveryDate, newContent)
+                push!(newOrders, newBunOrder)
+            end
+        end
+        newIdx = startIdx + i - 1
+        newBundle = Bundle(
+            bundle.supplier, bundle.customer, newOrders, newIdx, newHash, 0, 0
+        )
+        push!(newBundles, newBundle)
+    end
+    return newBundles
+end

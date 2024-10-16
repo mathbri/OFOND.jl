@@ -155,3 +155,68 @@ function extract_sub_instance2(
         instance.partNumbers,
     )
 end
+
+# For instances that are bigger than 3 months
+# - create an empty solution for the full problem
+# - separate into multiple instances that have a 12 week horizon
+# - solve on each instance 
+# (can be done in parallel but more in terms of distributed computing rather than multi-threading because already multi-threaded inside)
+# - merge all solutions with the same function used now 
+
+# This is not an exact decomposition because there could be deliveries from the last time step of an instance to the first of the next one 
+# but it should be an efficient heuristic in terms of coding time and performance trade-off
+
+# Split the instance into multiple instances based on the common time horizon given, 12 weeks by default
+function split_instance(instance::Instance, newHorizon::Int=12)
+    nFullInstances = div(instance.timeHorizon, newHorizon)
+    network = instance.networkGraph
+    splitInstances = Instance[]
+    for i in 1:nFullInstances
+        # Computing the corresponding time frame
+        timeStart = (i - 1) * newHorizon + 1
+        timeEnd = i * newHorizon
+        # Computing the new bundles involved
+        newBundles = [
+            remove_orders_outside_frame(bundle, timeStart, timeEnd) for
+            bundle in instance.bundles
+        ]
+        filter!(bun -> length(bun.orders) > 0, newBundles)
+        newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
+        # Creating the corresponding instance
+        newInstance = Instance(
+            network,
+            TravelTimeGraph(network, newBundles),
+            TimeSpaceGraph(network, newHorizon),
+            newBundles,
+            newHorizon,
+            instance.dates[timeStart:timeEnd],
+            instance.partNumbers,
+        )
+        push!(splitInstances, newInstance)
+    end
+    # Doing the same for the last instance (if there is one)
+    if nFullInstances * newHorizon < instance.timeHorizon
+        # Computing the corresponding time frame
+        timeStart = nFullInstances * newHorizon + 1
+        timeEnd = instance.newHorizon
+        # Computing the new bundles involved
+        newBundles = [
+            remove_orders_outside_frame(bundle, timeStart, timeEnd) for
+            bundle in instance.bundles
+        ]
+        filter!(bun -> length(bun.orders) > 0, newBundles)
+        newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
+        # Creating the corresponding instance
+        newInstance = Instance(
+            network,
+            TravelTimeGraph(network, newBundles),
+            TimeSpaceGraph(network, newHorizon),
+            newBundles,
+            newHorizon,
+            instance.dates[timeStart:timeEnd],
+            instance.partNumbers,
+        )
+        push!(splitInstances, newInstance)
+    end
+    return splitInstances
+end
