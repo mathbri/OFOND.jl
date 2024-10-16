@@ -4,7 +4,7 @@
 using ProfileView
 using JLD2
 
-function julia_main()::Cint
+function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     # Read files based on ARGS
     println("Launching OFO Network Design")
     println("Arguments : ", ARGS)
@@ -187,6 +187,18 @@ function julia_main_test()
     allTransCost = sum(a -> netGraph[a[1], a[2]].unitCost, edge_labels(netGraph))
     allCarbCost = sum(a -> netGraph[a[1], a[2]].carbonCost, edge_labels(netGraph))
     println("Share of transportation cost $(allTransCost / (allTransCost + allCarbCost))")
+
+    # printing bundle arcs to see difference
+    println(
+        "Min bundle arcs : $(minimum(x -> length(x), instance.travelTimeGraph.bundleArcs))"
+    )
+    println(
+        "Mean bundle arcs : $(mean(x -> length(x), instance.travelTimeGraph.bundleArcs))"
+    )
+    println(
+        "Max bundle arcs : $(maximum(x -> length(x), instance.travelTimeGraph.bundleArcs))"
+    )
+
     # return 0
 
     # println("Loading instance")

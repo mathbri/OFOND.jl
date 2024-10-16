@@ -208,6 +208,7 @@ end
 
 # TODO : if the garbage collecting of bundleArcCosts and / or the time used to actually update the matrix is significant 
 # compared to the parallel computation time, by having bundleArcs directly as a sparse matrix, we could use tmap!
+# To test
 
 function parallel_update_cost_matrix!(
     solution::Solution,
@@ -216,7 +217,6 @@ function parallel_update_cost_matrix!(
     bundle::Bundle,
     sorted::Bool=true,
     use_bins::Bool=true,
-    findSources::Bool=true,
 )
     # Creating channel of CAPACITIES to limit memory footprint
     chnl = Channel{Vector{Int}}(Threads.nthreads())
