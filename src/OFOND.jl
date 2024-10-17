@@ -9,7 +9,8 @@ using CSV
 using IterTools
 using Random
 using JuMP
-using HiGHS, CPLEX, Gurobi
+# using HiGHS, CPLEX, Gurobi
+using HiGHS
 using SparseArrays
 using Flux
 using InferOpt

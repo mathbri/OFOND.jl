@@ -1,9 +1,5 @@
 # Commodity structure to store corresponding metadata
 
-# This contruction makes the commodity mutable, which may impede performance
-# Maybe an option is to hash directly the partNumber and keep a dictionnary for the reverse function at writing time 
-# TODO : to test
-
 # The idea to mutualize the partNumber, size and stock cost was not a good idea because result in x2 space taken because of new object layer 
 
 struct Commodity

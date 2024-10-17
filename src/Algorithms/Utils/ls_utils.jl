@@ -301,7 +301,7 @@ function my_deepcopy(solution::Solution, instance::Instance)
     )
 end
 
-function fuse_bundles(instance::Instance, bundles::vector{Bundle})
+function fuse_bundles(instance::Instance, bundles::Vector{Bundle})
     # Putting one order for each delivery date to fuse them together
     newOrders = [Order(UInt(0), i) for i in 1:(instance.timeHorizon)]
     for bundle in bundles

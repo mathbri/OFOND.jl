@@ -2,8 +2,6 @@
 
 # TODO : Changing form mutable to immutable could be a way to improve efficiency
 
-# TODO : If you store sizes and costs in separate common vectors, the bin content could be a vector of indexes or a sparse vector storing (idx,quantity) 
-
 mutable struct Bin
     idx::Int                    # index for output purposes
     capacity::Int               # space left in the bin
@@ -31,7 +29,7 @@ function Base.:(==)(bin1::Bin, bin2::Bin)
 end
 
 function Base.show(io::IO, bin::Bin)
-    return print(io, "Bin($(bin.capacity), $(bin.load), $(bin.content))")
+    return print(io, "Bin($(bin.capacity), $(bin.load), [$(join(bin.content, ", "))])")
 end
 
 function add!(bin::Bin, commodity::Commodity)
@@ -71,31 +69,10 @@ function remove!(bin::Bin, commodities::Vector{Commodity})
     return hasRemoved
 end
 
-# TODO : same remark as capacities (but less important in profiling)
-# Vector to be used when calling the get all commodities function
-# Used mainly for garbage collection avoidance 
-global ALL_COMMODITIES = Commodity[]
-
-function get_all_commodities(bins::Vector{Bin})
+# Gather all commodities in the bins into the vector ALL_COMMODITIES
+# Returning a view for convenience to iterate over 
+function get_all_commodities(bins::Vector{Bin}, ALL_COMMODITIES::Vector{Commodity})
     filter!(bin -> length(bin.content) > 0, bins)
-    # verify the global vector is long enough 
-    nCom = sum(length(bin.content) for bin in bins; init=0)
-    if nCom > length(ALL_COMMODITIES)
-        append!(ALL_COMMODITIES, zeros(Commodity, nCom - length(ALL_COMMODITIES)))
-    end
-    # put all commodities in the global vector
-    idx = 1
-    for bin in bins
-        for com in bin.content
-            ALL_COMMODITIES[idx] = com
-            idx += 1
-        end
-    end
-    return view(ALL_COMMODITIES, 1:nCom)
-end
-
-function get_all_commodities!(ALL_COMMODITIES::Vector{Commodity}, bins::Vector{Bin})
-    bins = filter(bin -> length(bin.content) > 0, bins)
     # verify the global vector is long enough 
     nCom = sum(length(bin.content) for bin in bins; init=0)
     if nCom > length(ALL_COMMODITIES)
@@ -108,20 +85,19 @@ function get_all_commodities!(ALL_COMMODITIES::Vector{Commodity}, bins::Vector{B
         ALL_COMMODITIES[idx:(idx + nBinCom - 1)] = bin.content
         idx += nBinCom
     end
+    return view(ALL_COMMODITIES, 1:nCom)
 end
 
 function stock_cost(bin::Bin)::Float64
     return sum(com.stockCost for com in bin.content; init=0.0)
 end
 
-# Defining zero of a vector of bins / loads for sparse matrices usage
-
 function Base.zero(::Type{Vector{Bin}})
     return Bin[]
 end
 
-# TODO
 # No more runtime dispatch but still quite a lot of garbage collecting 
+# Maybe impossible to get rid of it as the purpose is to actually copy data
 function my_deepcopy(bins::Vector{Bin})
     newBins = [Bin(bin.capacity + bin.load) for bin in bins]
     for (idx, bin) in enumerate(bins)
