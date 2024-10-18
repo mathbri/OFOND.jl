@@ -37,16 +37,16 @@ bundles = [bundle1, bundle2, bundle3]
 end
 # Time Space 
 @testset "TimeSpace" begin
-    # include("test_time_space.jl")
+    include("test_time_space.jl")
 end
 # Projectors
 @testset "Projectors" begin
-    # include("test_projectors.jl")
+    include("test_projectors.jl")
 end
 
 # Struct utils
 @testset "Struct utils" begin
-    # include("test_struct_utils.jl")
+    include("test_struct_utils.jl")
 end
 # Instance
 @testset "Instance" begin

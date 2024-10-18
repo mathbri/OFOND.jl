@@ -1,7 +1,5 @@
 # Time Space Graph structure for solution representation 
 
-# TODO : those common arcs are only used for milp construction so maybe only store tuples (src, dst)
-
 # Time Space Graph
 struct TimeSpaceGraph
     # Core fields
