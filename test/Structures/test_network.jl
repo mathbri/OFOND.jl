@@ -9,9 +9,9 @@ network = OFOND.NetworkGraph()
 @test !ismutable(arc)
 @test !ismutable(network)
 
-# Unit tests for Network structure and methods
+# Testing constructor
 @testset "Constructors" begin
-    # Testing Node
+    # Node
     @test node.account == "account"
     @test node.type == :supplier
     @test node.country == "country"
@@ -19,19 +19,34 @@ network = OFOND.NetworkGraph()
     @test node.isCommon == false
     @test node.volumeCost == 1.0
     @test node.hash == hash("account", hash(:supplier))
-
-    # Testing equality
-    @test node == OFOND.NetworkNode("account", :supplier, "c", "c", true, 1.1)
-    @test node != node2
-
-    # Testing Network
+    # Arc
+    @test arc.type == :direct
+    @test arc.distance == 1.0
+    @test arc.travelTime == 1
+    @test arc.isCommon == false
+    @test arc.unitCost == 1.0
+    @test arc.isLinear == true
+    @test arc.carbonCost == 1.0
+    @test arc.capacity == 50
+    # Shortcut 
+    @test OFOND.SHORTCUT == OFOND.NetworkArc(
+        :shortcut, OFOND.EPS, 1, false, OFOND.EPS, false, OFOND.EPS, 1_000_000
+    )
+    # Network
     @test isa(network.graph, MetaGraph)
     @test isa(network.graph.graph, DiGraph)
 end
 
+# Testing hash and equality 
+@testset "Hash and Equality" begin
+    @test node == OFOND.NetworkNode("account", :supplier, "c", "c", true, 1.1)
+    @test node != OFOND.NetworkNode("account2", :supplier, "c", "c", true, 1.1)
+    @test node != OFOND.NetworkNode("account", :supplier2, "c", "c", true, 1.1)
+end
+
+# Testing changing node type
 newNode = OFOND.change_node_type(node, :pod)
 @testset "change_node_type" begin
-    # Testing changing node type
     @test newNode.account == "account"
     @test newNode.type == :pod
     @test newNode.country == "country"
@@ -41,71 +56,101 @@ newNode = OFOND.change_node_type(node, :pod)
     @test newNode.hash == hash("account", hash(:pod))
 end
 
+# Testing add_node!
 newNode2 = OFOND.change_node_type(node, :iln)
-@testset "add_node" begin
-    # Testing add_node! method
-    OFOND.add_node!(network, node)
+@testset "add_node!" begin
+    # Adding supplier
+    added, ignore_type = OFOND.add_node!(network, node)
+    @test added
+    @test ignore_type == :all_good
     @test haskey(network.graph, node.hash)
     @test network.graph[node.hash] === node
     @test network.graph[node.hash, node.hash] == OFOND.NetworkArc(
         :shortcut, OFOND.EPS, 1, false, OFOND.EPS, false, OFOND.EPS, 1_000_000
     )
-
-    # Testing add_node! method with changed node type
-    OFOND.add_node!(network, newNode)
+    # Adding other node
+    added, ignore_type = OFOND.add_node!(network, newNode)
+    @test added
+    @test ignore_type == :all_good
     @test haskey(network.graph, node.hash)
     @test haskey(network.graph, newNode.hash)
-
-    # Testing add_node! method with supplier
-    OFOND.add_node!(network, newNode2)
-    @test haskey(network.graph, newNode2.hash)
-    @test !haskey(network.graph, newNode2.hash, newNode2.hash)
-
-    # Testing add_node! method with warnings
+    @test !haskey(network.graph, newNode.hash, newNode.hash)
+    # Adding same node 
     warnNode = OFOND.NetworkNode("account", :supplier, "c", "c", true, 1.1)
-    @test_warn "Same node already in the network" OFOND.add_node!(network, warnNode)
+    added, ignore_type = @test_warn "Same node already in the network" OFOND.add_node!(
+        network, warnNode; verbose=true
+    )
+    @test !added
+    @test ignore_type == :same_node
+    # Adding node not in Node Types
     warnNode = OFOND.NetworkNode("account12", :type, "c", "c", true, 1.1)
-    @test_warn "Node type not in NodeTypes" OFOND.add_node!(network, warnNode)
+    added, ignore_type = @test_warn "Node type not in NodeTypes" OFOND.add_node!(
+        network, warnNode; verbose=true
+    )
+    @test !added
+    @test ignore_type == :unknown_type
 end
 
+# Testing add_arc!
+a, b = OFOND.add_node!(network, newNode2)
 @testset "add_arc" begin
-    # Testing add_arc! method
+    # Adding an arc
     @test !haskey(network.graph, node.hash, newNode.hash)
-    OFOND.add_arc!(network, node, newNode, arc)
+    added, ignore_type = OFOND.add_arc!(network, node, newNode, arc)
+    @test added
+    @test ignore_type == :all_good
     @test haskey(network.graph, node.hash, newNode.hash)
     @test network.graph[node.hash, newNode.hash] === arc
-
-    # Testing add_arc! method with warnings
-    node3 = OFOND.NetworkNode("account3", :type3, "c", "c", false, 1.0)
+    # Adding an arc already here
     arc2 = OFOND.NetworkArc(:type2, 1.0, 1, false, 1.0, true, 1.0, 50)
-    @test_warn "Source and destination already have arc data" OFOND.add_arc!(
+    added, ignore_type = @test_warn "Source and destination already have arc data" OFOND.add_arc!(
         network, node, newNode, arc2
     )
+    @test !added
+    @test ignore_type == :same_arc
     @test network.graph[node.hash, newNode.hash] === arc
-
-    @test_warn "Source unknown in the network" OFOND.add_arc!(network, node3, newNode, arc)
-    # OFOND.add_arc!(network, node3, newNode, arc)
+    # Adding an arc with unknown source 
+    node3 = OFOND.NetworkNode("account3", :type3, "c", "c", false, 1.0)
+    added, ignore_type = @test_warn "Source unknown in the network" OFOND.add_arc!(
+        network, node3, newNode, arc
+    )
+    @test !added
+    @test ignore_type == :unknown_source
     @test !haskey(network.graph, node3.hash)
     @test !haskey(network.graph, node3.hash, newNode.hash)
-
-    @test_warn "Destination unknown in the network" OFOND.add_arc!(
+    # Adding an arc with unknown destination
+    added, ignore_type = @test_warn "Destination unknown in the network" OFOND.add_arc!(
         network, node, node3, arc
     )
-    # OFOND.add_arc!(network, node, node3, arc)
+    @test !added
+    @test ignore_type == :unknown_dest
     @test !haskey(network.graph, node3.hash)
     @test !haskey(network.graph, node.hash, node3.hash)
-
-    OFOND.add_arc!(network, node, newNode2, arc)
-    @test_warn "Source and destination already have arc data" OFOND.add_arc!(
+    # Adding an arc with unknown type
+    added, ignore_type = @test_warn "Arc type not in ArcTypes" OFOND.add_arc!(
         network, node, newNode2, arc2
     )
+    @test !added
+    @test ignore_type == :unknown_type
+    @test !haskey(network.graph, node.hash, newNode2.hash)
 end
 
-@testset "Testing zero" begin
+# Testing zero
+@testset "Zero" begin
+    @test OFOND.zero(OFOND.NetworkNode) == OFOND.NetworkNode("0", :zero, "", "", false, 0.0)
     @test OFOND.zero(OFOND.NetworkArc) ==
         OFOND.NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end
 
+# Testing show
+@testset "Show" begin
+    io = IOBuffer()
+    show(io, node)
+    content = String(take!(io))
+    @test contains(content, "Node(account, supplier)")
+end
+
+# Testing is_node_in_ ... 
 @testset "Node in contry / continent" begin
     @test !OFOND.is_node_in_country(network, 1, "Fra")
     @test OFOND.is_node_in_country(network, 1, "country")

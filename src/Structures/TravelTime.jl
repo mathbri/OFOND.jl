@@ -196,11 +196,19 @@ function add_bundle_arcs!(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
         travelTimeGraph.graph, travelTimeGraph.bundleSrc[bundle.idx]
     )
     # If a node cannot be reached, it as 0 as parent
-    filter!(n -> n != 0, reachableNodes)
+    reachableNodes = [i for (i, n) in enumerate(reachableNodes) if n != 0]
     # Constrcuting bundle arcs by adding all outgoing arcs of all reachable nodes
+    bunDst = travelTimeGraph.bundleDst[bundle.idx]
     for arcSrc in reachableNodes
-        # Adding all outgoing arcs
-        outSrcArcs = outneighbors(travelTimeGraph.graph, arcSrc)
+        # If the source cannot reach the plant, I don't need it in the bundle arcs 
+        if !has_path(travelTimeGraph.graph, arcSrc, bunDst)
+            continue
+        end
+        # Adding all outgoing arcs that can lead to the plant
+        outSrcArcs = filter(
+            arcDst -> has_path(travelTimeGraph.graph, arcDst, bunDst),
+            outneighbors(travelTimeGraph.graph, arcSrc),
+        )
         append!(bunArcs, [(arcSrc, arcDst) for arcDst in outSrcArcs])
     end
     # Adding the complete list to the Travel Time Graph
@@ -258,9 +266,6 @@ function remove_shortcuts!(path::Vector{Int}, travelTimeGraph::TravelTimeGraph)
     deleteat!(path, 1:(firstNode - 1))
     return (firstNode - 1) * EPS
 end
-
-# TODO : Copy the implementation of Dijkstra but make it so the objects created inside are shared among the different calls 
-# to minimize the memory footprint of all shortest path computation
 
 # Shortcut for computing shortest paths
 function shortest_path(travelTimeGraph::TravelTimeGraph, src::Int, dst::Int)

@@ -16,15 +16,24 @@ end
     include("test_bin.jl")
 end
 
-# TODO : put instance creation here so its common to all following files (easier to maintain)
-
 # Network
 @testset "Network" begin
-    # include("test_network.jl")
+    include("test_network.jl")
 end
+
+# Define nodes, arcs and network
+supplier1, supplier2, supplier3, xdock, port_l, plant = get_nodes()
+supp1_to_plat, supp2_to_plat, supp3_to_plat, supp1_to_plant, supp2_to_plant, supp3_to_plant, plat_to_plant, xdock_to_port, port_to_plant = get_arcs()
+network = get_network()
+# Define commodities, orders and bundles
+commodity1, commodity2 = get_commodities()
+order1, order2, order3, order4 = get_order()
+bundle1, bundle2, bundle3 = get_bundles()
+bundles = [bundle1, bundle2, bundle3]
+
 # Travel Time
 @testset "TravelTime" begin
-    # include("test_travel_time.jl")
+    include("test_travel_time.jl")
 end
 # Time Space 
 @testset "TimeSpace" begin

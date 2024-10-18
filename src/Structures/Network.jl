@@ -56,6 +56,18 @@ struct NetworkGraph
     graph::MetaGraph
 end
 
+# Initializing empty network graph
+function NetworkGraph()
+    network = MetaGraph(
+        DiGraph();
+        label_type=UInt,
+        vertex_data_type=NetworkNode,
+        edge_data_type=NetworkArc,
+        graph_data=nothing,
+    )
+    return NetworkGraph(network)
+end
+
 function Base.:(==)(node1::NetworkNode, node2::NetworkNode)
     return (node1.account == node2.account) && (node1.type == node2.type)
 end
@@ -69,18 +81,6 @@ function change_node_type(node::NetworkNode, newType::Symbol)
     return NetworkNode(
         node.account, newType, node.country, node.continent, node.isCommon, node.volumeCost
     )
-end
-
-# Initializing empty network graph
-function NetworkGraph()
-    network = MetaGraph(
-        DiGraph();
-        label_type=UInt,
-        vertex_data_type=NetworkNode,
-        edge_data_type=NetworkArc,
-        graph_data=nothing,
-    )
-    return NetworkGraph(network)
 end
 
 # Adding a node to the network
@@ -117,6 +117,7 @@ function add_arc!(
         verbose &&
             @warn "Source and destination already have arc data" :srcInGraph = network.graph[src] :dstInGraph = network.graph[dst] :srcToAdd =
                 src :dstToAdd = dst
+        println("warn printed")
         ignore_type = :same_arc
     elseif !haskey(network.graph, src)
         verbose && @warn "Source unknown in the network" :source = src
@@ -143,27 +144,30 @@ function add_arc!(
     network::NetworkGraph, src::NetworkNode, dst::NetworkNode, arc::NetworkArc
 )
     # redifining warnings to give more information
+    ignore_type = :all_good
     if haskey(network.graph, src.hash, dst.hash)
         @warn "Source and destination already have arc data" :srcInGraph = network.graph[src.hash] :dstInGraph = network.graph[dst.hash] :srcToAdd =
             src :dstToAdd = dst
+        ignore_type = :same_arc
     elseif !haskey(network.graph, src.hash)
         @warn "Source unknown in the network" :source = src
+        ignore_type = :unknown_source
     elseif !haskey(network.graph, dst.hash)
         @warn "Destination unknown in the network" :destination = dst
+        ignore_type = :unknown_dest
+    elseif !(arc.type in ARC_TYPES)
+        @warn "Arc type not in ArcTypes" :arc = arc :arcTypes = join(ARC_TYPES, ", ")
+        ignore_type = :unknown_type
     else
         return add_arc!(network, src.hash, dst.hash, arc)
     end
+    return false, ignore_type
 end
-
-# TODO : add a function to change arc or node data if needed
-
-# TODO : change zero function to return a constant value to optimize garbage collecting ?
 
 function Base.zero(::Type{NetworkNode})
     return NetworkNode("0", :zero, "", "", false, 0.0)
 end
 
-# TODO : change from this to throw error ?
 function Base.zero(::Type{NetworkArc})
     return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
 end
