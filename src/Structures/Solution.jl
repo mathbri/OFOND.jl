@@ -2,8 +2,6 @@
 
 # Updating bins and loads in bin packing file
 
-# TODO : change bundlesOnNode to Int because of garbage collecting
-
 struct Solution
     # Paths used for delivery
     bundlePaths::Vector{Vector{Int}}
@@ -66,12 +64,7 @@ function update_bundle_on_nodes!(
         bundleVector = get(solution.bundlesOnNode, node, Int[])
         if remove
             # Quick fix for non-admissibility path part removal
-            # fullPath = get(solution.bundlePaths, bundle.idx, Int[])
             if partial && node in solution.bundlePaths[bundle.idx]
-                # println("Trying to remove node that is also elsewhere in the path")
-                # println("Node : $node")
-                # println("Path : $fullPath")
-                # println("Old part : $path")
                 continue
             end
             filter!(bunIdx -> bunIdx != bundle.idx, bundleVector)
@@ -96,13 +89,6 @@ function remove_path!(solution::Solution, bundle::Bundle; src::Int=-1, dst::Int=
     oldPart = update_bundle_path!(solution, bundle, [src, dst]; partial=partial)
     update_bundle_on_nodes!(solution, bundle, oldPart; partial=partial, remove=true)
     return oldPart
-end
-
-# Plot some of the paths on a map ?
-# Compute some import statistics ? (the ones in solution indicators for ex)
-function analyze_solution()
-    # direct paths ? and cost / m3 / number of commodities resulting ?
-    # mean delivery distance ? 
 end
 
 # Checking the number of paths
@@ -142,17 +128,11 @@ function check_path_continuity(instance::Instance, path::Vector{Int}; verbose::B
     for (src, dst) in partition(path, 2, 1)
         if !has_edge(instance.travelTimeGraph.graph, src, dst)
             if verbose
-                @warn "Infeasible solution : edge $src-$dst doesn't exist"
+                @warn "Infeasible solution : edge $src-$dst doesn't exist in path $path"
             end
             return false
         end
     end
-    # if !is_path_admissible(instance.travelTimeGraph, path)
-    #     if verbose
-    #         @warn "Infeasible solution : path $path is not admissible"
-    #     end
-    #     return false
-    # end
     return true
 end
 
@@ -213,19 +193,17 @@ function check_quantities(
             timedPlantIdx = findfirst(
                 i -> hash(allSteps[i], allNodes[i].hash) == timedPlant, plantIdxs
             )
-            println(
-                "timedPlant = $(allNodes[plantIdxs[timedPlantIdx]]) on time step $(allSteps[plantIdxs[timedPlantIdx]])",
-            )
-            diff = mergewith(-, quantities, routedQuantities[timedPlant])
-            filter!(x -> x[2] > 0, diff)
-            println("diff = $diff")
+            if verbose
+                @warn "Infeasible solution : quantities mismatch between demand and routing"
+                println(
+                    "timedPlant = $(allNodes[plantIdxs[timedPlantIdx]]) on time step $(allSteps[plantIdxs[timedPlantIdx]])",
+                )
+                diff = mergewith(-, quantities, routedQuantities[timedPlant])
+                filter!(x -> x[2] > 0, diff)
+                println("diff = $diff")
+            end
             return false
         end
-    end
-    if askedQuantities != routedQuantities
-        verbose &&
-            @warn "Infeasible solution : quantities mismatch between demand and routing"
-        return false
     end
     return true
 end
@@ -247,25 +225,6 @@ function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false
     # Getting routed quantities to plants
     update_routed_quantities!(routedQuantities, instance, solution)
     return check_quantities(instance, askedQuantities, routedQuantities; verbose=verbose)
-end
-
-# Detect all infeasibility in a solution
-
-function detect_infeasibility(instance::Instance, solution::Solution)
-    # check_enough_paths(instance, solution; verbose=true)
-    # # All commodities are delivered : start from supplier with right quantities, and arrives at customer, with right quantities
-    # for bundle in instance.bundles
-    #     bundlePath = solution.bundlePaths[bundle.idx]
-    #     pathSrc, pathDst = bundlePath[1], bundlePath[end]
-    #     check_supplier(instance, bundle, pathSrc; verbose=true)
-    #     check_customer(instance, bundle, pathDst; verbose=true)
-    #     # Checking that the right quantities are associated
-    #     for order in bundle.orders
-    #         pathOutSrc, pathInDst = bundlePath[2], bundlePath[end - 1]
-    #         check_quantities(instance, solution, pathSrc, pathOutSrc, order; verbose=true)
-    #         check_quantities(instance, solution, pathInDst, pathDst, order; verbose=true)
-    #     end
-    # end
 end
 
 # Compute arc cost with respect to the bins on it

@@ -9,8 +9,6 @@ using HiGHS
 
 println("Testing OFO Network Design Package")
 
-# TODO : add functions to create the test instance (easier to maintain)
-
 function get_nodes()
     # Define suppliers, platforms, and plant
     supplier1 = OFOND.NetworkNode("001", :supplier, "FR", "EU", false, 0.0)
@@ -94,6 +92,42 @@ function get_bundles()
     bundle2 = OFOND.Bundle(supplier2, plant, [order2], 2, bunH2, 15, 1)
     bunH3 = hash(supplier3, hash(plant))
     bundle3 = OFOND.Bundle(supplier3, plant, [order3, order4], 3, bunH3, 10, 3)
+    return bundle1, bundle2, bundle3
+end
+
+function get_order_with_prop()
+    commodity1, commodity2 = get_commodities()
+    supplier1, supplier2, supplier3, xdock, port_l, plant = get_nodes()
+    bpDict = Dict(
+        :direct => 2, :cross_plat => 2, :delivery => 2, :oversea => 2, :port_transport => 2
+    )
+    bunH1 = hash(supplier1, hash(plant))
+    order11 = OFOND.Order(
+        bunH1, 1, [commodity1, commodity1], hash(1, bunH1), 20, bpDict, 10, 5.0
+    )
+    bunH2 = hash(supplier2, hash(plant))
+    order22 = OFOND.Order(
+        bunH2, 1, [commodity2, commodity2], hash(1, bunH2), 30, bpDict, 15, 7.0
+    )
+    bunH3 = hash(supplier3, hash(plant))
+    order33 = OFOND.Order(
+        bunH3, 1, [commodity2, commodity1], hash(1, bunH3), 25, bpDict, 10, 6.0
+    )
+    order44 = OFOND.Order(
+        bunH3, 2, [commodity2, commodity1], hash(2, bunH3), 25, bpDict, 10, 6.0
+    )
+    return order11, order22, order33, order44
+end
+
+function get_bundles_with_prop()
+    supplier1, supplier2, supplier3, xdock, port_l, plant = get_nodes()
+    order11, order22, order33, order44 = get_order_with_prop()
+    bunH1 = hash(supplier1, hash(plant))
+    bundle1 = OFOND.Bundle(supplier1, plant, [order11], 1, bunH1, 10, 3)
+    bunH2 = hash(supplier2, hash(plant))
+    bundle2 = OFOND.Bundle(supplier2, plant, [order22], 2, bunH2, 15, 2)
+    bunH3 = hash(supplier3, hash(plant))
+    bundle3 = OFOND.Bundle(supplier3, plant, [order33, order44], 3, bunH3, 10, 3)
     return bundle1, bundle2, bundle3
 end
 

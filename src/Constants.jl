@@ -6,9 +6,7 @@ const COMMON_NODE_TYPES = [:xdock, :iln, :pol, :pod]
 const ARC_TYPES = [
     :direct, :outsource, :cross_plat, :delivery, :oversea, :port_transport, :shortcut
 ]
-const BP_ARC_TYPES = [
-    :direct, :outsource, :cross_plat, :delivery, :oversea, :port_transport
-]
+const BP_ARC_TYPES = [:direct, :cross_plat, :delivery, :oversea, :port_transport]
 const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea, :port_transport]
 
 const EPS = 1e-5

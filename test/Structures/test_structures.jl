@@ -48,15 +48,26 @@ end
 @testset "Struct utils" begin
     include("test_struct_utils.jl")
 end
+
+# Redefining order3 to reove changes made over it 
+bunH3 = hash(supplier3, hash(plant))
+order3 = OFOND.Order(bunH3, 1, [commodity1, commodity2])
+
+# Adding orders with properties
+order11, order22, order33, order44 = get_order_with_prop()
+bundle11, bundle22, bundle33 = get_bundles_with_prop()
+bundles = [bundle11, bundle22, bundle33]
+bundlesNP = [bundle1, bundle2, bundle3]
+
 # Instance
 @testset "Instance" begin
-    # include("test_instance.jl")
+    include("test_instance.jl")
 end
 # Solution
 @testset "Solution" begin
-    # include("test_solution.jl")
+    include("test_solution.jl")
 end
 # Relaxed Solution
 @testset "Relaxed Solution" begin
-    # include("test_relaxed_solution.jl")
+    include("test_relaxed_solution.jl")
 end

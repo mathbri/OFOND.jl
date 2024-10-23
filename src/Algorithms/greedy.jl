@@ -123,10 +123,14 @@ function greedy_insertion(
             if !is_path_admissible(TTGraph, shortestPath)
                 println("\nAll tentative path were non admissible")
                 println("Bundle $bundle")
-                println("Bundle src and dst : $(TTGraph.bundleSrc[bundle.idx])-$(TTGraph.bundleDst[bundle.idx])")
+                println(
+                    "Bundle src and dst : $(TTGraph.bundleSrc[bundle.idx])-$(TTGraph.bundleDst[bundle.idx])",
+                )
                 println("Path src and dst : $src-$dst")
                 println("Path nodes : $shortestPath")
-                println("Path info : $(join(string.(map(n -> TTGraph.networkNodes[n], shortestPath)), ", "))")
+                println(
+                    "Path info : $(join(string.(map(n -> TTGraph.networkNodes[n], shortestPath)), ", "))",
+                )
                 # shortestPath = [src, dst]
                 # @assert is_path_admissible(TTGraph, shortestPath)
                 # direct arc between two random nodes may not exist
@@ -167,4 +171,16 @@ function greedy!(solution::Solution, instance::Instance)
     end
     println()
     return totalCost
+end
+
+function enforce_strict_admissibility!(solution::Solution, instance::Instance)
+    # TODO : like clean_bins but for strict admissibility of paths, to be used at the end of the optimization, just before extraction
+    # For all paths that are not strictly admissible, recomputing a greedy path 
+
+    # if !is_path_admissible(instance.travelTimeGraph, path)
+    #     if verbose
+    #         @warn "Infeasible solution : path $path is not admissible"
+    #     end
+    #     return false
+    # end
 end
