@@ -13,16 +13,27 @@ bundles = [bundle1, bundle2, bundle3]
     include("test_read_instance.jl")
 end
 
+order11, order22, order33, order44 = get_order_with_prop()
+bundle11, bundle22, bundle33 = get_bundles_with_prop()
+bundles = [bundle11, bundle22, bundle33]
+bundlesNP = [bundle1, bundle2, bundle3]
+
 TTGraph = OFOND.TravelTimeGraph(network, bundles)
 TSGraph = OFOND.TimeSpaceGraph(network, 4)
 dates = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]
 partNumbers = Dict(hash("A123") => "A123", hash("B456") => "B456")
 instance = OFOND.Instance(network, TTGraph, TSGraph, bundles, 4, dates, partNumbers)
 
+supp1FromDel3 = TTGraph.hashToIdx[hash(3, supplier1.hash)]
+xdockFromDel2 = TTGraph.hashToIdx[hash(2, xdock.hash)]
+portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
+plantFromDel0 = TTGraph.hashToIdx[hash(0, plant.hash)]
+TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
+
 @testset "Read solution" begin
-    # include("test_read_solution.jl")
+    include("test_read_solution.jl")
 end
 
 @testset "Write solution" begin
-    # include("test_write_solution.jl")
+    include("test_write_solution.jl")
 end

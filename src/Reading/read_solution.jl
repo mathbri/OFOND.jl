@@ -35,7 +35,8 @@ end
 function check_paths(paths::Vector{Vector{NetworkNode}})
     emptyPaths = findall(x -> length(x) == 0, paths)
     if length(emptyPaths) > 0
-        @warn "Found $(length(emptyPaths)) empty paths for bundles $(emptyPaths)"
+        emptyPathBundles = join(emptyPaths, ", ")
+        @warn "Found $(length(emptyPaths)) empty paths for bundles $(emptyPathBundles)"
     end
     missingPointPaths = findall(
         x -> findfirst(y -> y == zero(NetworkNode), x) !== nothing, paths
@@ -56,8 +57,8 @@ end
 
 # Detect whether the path already has an error or not
 function is_path_projectable(path::Vector{NetworkNode})
-    missingPoints = findall(x -> x == zero(NetworkNode), path)
-    return (length(path) > 0) && (length(missingPoints) == 0)
+    missingPoints = count(x -> x == zero(NetworkNode), path)
+    return (length(path) > 0) && (missingPoints == 0)
 end
 
 # Find the next node in the projected path if it exists
