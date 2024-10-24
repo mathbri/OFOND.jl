@@ -142,7 +142,7 @@ end
     end
     # Reading and Writing
     @testset "Reading-Writing" begin
-        # include("ReadingWriting/test_read_write.jl")
+        include("ReadingWriting/test_read_write.jl")
     end
     # Algorithms
     @testset "Algorithms" begin

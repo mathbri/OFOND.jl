@@ -16,7 +16,7 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     )
 end
 
-function read_and_add_nodes!(network::NetworkGraph, node_file::String)
+function read_and_add_nodes!(network::NetworkGraph, node_file::String; verbose::Bool=false)
     counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     # Reading .csv file
     csv_reader = CSV.File(
@@ -26,7 +26,7 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String)
     ignored = Dict(:same_node => 0, :unknown_type => 0)
     for row in csv_reader
         node = read_node!(counts, row)
-        added, ignore_type = add_node!(network, node)
+        added, ignore_type = add_node!(network, node; verbose=verbose)
         added || (ignored[ignore_type] += 1)
         if node.volumeCost < EPS && node.type in [:xdock, :iln]
             # println(row)
@@ -45,8 +45,9 @@ function src_dst_hash(row::CSV.Row)
 end
 
 function is_common_arc(row::CSV.Row)
-    return Symbol(row.src_type) in COMMON_NODE_TYPES &&
-           Symbol(row.dst_type) in COMMON_NODE_TYPES
+    # return Symbol(row.src_type) in COMMON_NODE_TYPES &&
+    #        Symbol(row.dst_type) in COMMON_NODE_TYPES
+    return Symbol(row.leg_type) in COMMON_ARC_TYPES
 end
 
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
@@ -70,12 +71,12 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         row.shipment_cost,
         row.is_linear,
         # false,
-        row.carbon_cost / 10,
+        row.carbon_cost,
         row.capacity * VOLUME_FACTOR,
     )
 end
 
-function read_and_add_legs!(network::NetworkGraph, leg_file::String)
+function read_and_add_legs!(network::NetworkGraph, leg_file::String; verbose::Bool=false)
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
@@ -86,21 +87,17 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String)
     )
     for row in csv_reader
         src, dst = src_dst_hash(row)
-        if src == dst
-            sameSrcDst += 1
-            continue
-        end
         arc = read_leg!(counts, row, is_common_arc(row))
-        added, ignore_type = add_arc!(network, src, dst, arc)
+        added, ignore_type = add_arc!(network, src, dst, arc; verbose=verbose)
         added || (ignored[ignore_type] += 1)
-        if arc.carbonCost < EPS
-            # println(row)
-            # println(network.graph[src])
-            # println(network.graph[dst])
-            # println(arc)
-            # @error "No carbon cost on this arc"
-            # throw(ErrorException("No carbon cost on this arc"))
-        end
+        # if arc.carbonCost < EPS
+        # println(row)
+        # println(network.graph[src])
+        # println(network.graph[dst])
+        # println(arc)
+        # @error "No carbon cost on this arc"
+        # throw(ErrorException("No carbon cost on this arc"))
+        # end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
@@ -185,7 +182,8 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         partNumHash = hash(row.part_number)
         partNums[partNumHash] = row.part_number
         commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
-        rowQuantity = round(Int, row.quantity * 1.5)
+        # rowQuantity = round(Int, row.quantity * 1.5)
+        rowQuantity = round(Int, row.quantity)
         append!(order.content, [commodity for _ in 1:(rowQuantity)])
         comCount += rowQuantity
         comUnique += 1

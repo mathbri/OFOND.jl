@@ -117,7 +117,6 @@ function add_arc!(
         verbose &&
             @warn "Source and destination already have arc data" :srcInGraph = network.graph[src] :dstInGraph = network.graph[dst] :srcToAdd =
                 src :dstToAdd = dst
-        println("warn printed")
         ignore_type = :same_arc
     elseif !haskey(network.graph, src)
         verbose && @warn "Source unknown in the network" :source = src

@@ -3,6 +3,7 @@
 001,supplier,Supp11,2,1,FR,EU,1.5
 002,supplier,Supp2,0,1,FR,EU,0
 003,other,Other1,0,0,FR,EU,0
+003,supplier,Supp3,1,1,GE,EU,0
 004,xdock,XDock1,2,1,FR,EU,1
 005,pol,PortL1,3,3,FR,EU,0
-003,plant,Plant1,4,4,FR,EU,0
+006,plant,Plant1,4,4,FR,EU,0

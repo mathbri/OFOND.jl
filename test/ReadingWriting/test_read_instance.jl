@@ -30,24 +30,29 @@
     )
 end
 
+networkRead = OFOND.NetworkGraph()
+
 @testset "Read and add nodes" begin
     # read file and add nodes
     @test_warn ["Same node already in the network", "Node type not in NodeTypes"] OFOND.read_and_add_nodes!(
-        network, joinpath(@__DIR__, "dummy_nodes.csv")
+        networkRead, joinpath(@__DIR__, "dummy_nodes.csv"); verbose=true
     )
     # the network should be the one in all other tests
-    @test nv(network.graph) == 5
-    @test ne(network.graph) == 2
-    node1 = network.graph[hash("001", hash(:supplier))]
-    @test node1 == supplier1
-    @test node1.country == supplier1.country
-    @test node1.continent == supplier1.continent
-    @test node1.isCommon == supplier1.isCommon
-    @test node1.volumeCost == supplier1.volumeCost
-    @test network.graph[hash("002", hash(:supplier))] == supplier2
-    @test network.graph[hash("004", hash(:xdock))] == xdock
-    @test network.graph[hash("005", hash(:pol))] == port_l
-    @test network.graph[hash("003", hash(:plant))] == plant
+    @test nv(networkRead.graph) == 6
+    @test ne(networkRead.graph) == 3
+    # Testing each field of every node 
+    fieldsToTest = (:country, :continent, :isCommon, :volumeCost)
+    accounts = ["001", "002", "003", "004", "005", "006"]
+    types = [:supplier, :supplier, :supplier, :xdock, :pol, :plant]
+    @testset "Nodes equality" for (account, type, tester) in
+                                  zip(accounts, types, networkNodes)
+        node = networkRead.graph[hash(account, hash(type))]
+        @test node == tester
+        @test node.country == tester.country
+        @test node.continent == tester.continent
+        @test node.isCommon == tester.isCommon
+        @test node.volumeCost == tester.volumeCost
+    end
 end
 
 @testset "Leg readers" begin
@@ -78,15 +83,15 @@ end
     # Row readers
     @test OFOND.src_dst_hash(rows[1]) ==
         (hash("001", hash(Symbol("supplier"))), hash("004", hash(Symbol("xdock"))))
-    @test OFOND.src_dst_hash(rows[6]) ==
-        (hash("002", hash(Symbol("supplier"))), hash("003", hash(Symbol("plant"))))
-    @test OFOND.is_common_arc(rows[8])
-    @test !OFOND.is_common_arc(rows[6])
+    @test OFOND.src_dst_hash(rows[7]) ==
+        (hash("002", hash(Symbol("supplier"))), hash("006", hash(Symbol("plant"))))
+    @test OFOND.is_common_arc(rows[10])
+    @test !OFOND.is_common_arc(rows[8])
 
     # Read arc
     row2, row3 = rows[2:3]
     leg = OFOND.read_leg!(counts, row3, OFOND.is_common_arc(row3))
-    @test leg == supp_to_plat
+    @test leg == supp1_to_plat
     @test counts == Dict{Symbol,Int}(
         :direct => 0,
         :outsource => 1,
@@ -97,7 +102,7 @@ end
         :shortcut => 0,
     )
     leg = OFOND.read_leg!(counts, row2, OFOND.is_common_arc(row2))
-    @test leg == OFOND.NetworkArc(:other, 1.0, 1, false, 4.0, true, 0.0, 50)
+    @test leg == OFOND.NetworkArc(:other, 1.0, 1, false, 4.0, true, 0.0, 51)
     @test counts == Dict{Symbol,Int}(
         :direct => 0,
         :outsource => 1,
@@ -115,13 +120,17 @@ end
         "Source and destination already have arc data",
         "Source unknown in the network",
         "Arc type not in ArcTypes",
-    ] OFOND.read_and_add_legs!(network, joinpath(@__DIR__, "dummy_legs.csv"))
+    ] OFOND.read_and_add_legs!(
+        networkRead, joinpath(@__DIR__, "dummy_legs.csv"); verbose=true
+    )
     # the network should be the one in all other tests
-    @test ne(network.graph) == 2 + 7
-    @test network.graph[supplier1.hash, xdock.hash] == supp_to_plat
-    @test network.graph[supplier2.hash, xdock.hash] == supp_to_plat
+    @test ne(network.graph) == 3 + 9
+    @test network.graph[supplier1.hash, xdock.hash] == supp1_to_plat
+    @test network.graph[supplier2.hash, xdock.hash] == supp2_to_plat
+    @test network.graph[supplier3.hash, xdock.hash] == supp3_to_plat
     @test network.graph[supplier1.hash, plant.hash] == supp1_to_plant
     @test network.graph[supplier2.hash, plant.hash] == supp2_to_plant
+    @test network.graph[supplier3.hash, xdock.hash] == supp3_to_plat
     @test network.graph[xdock.hash, plant.hash] == plat_to_plant
     @test network.graph[xdock.hash, port_l.hash] == xdock_to_port
     @test network.graph[port_l.hash, plant.hash] == port_to_plant
@@ -134,15 +143,15 @@ end
             types=Dict("supplier_account" => String, "customer_account" => String),
         )
     ]
-    row1, row2, row3 = rows[1:3]
+    row1, row2, row3 = rows[2:4]
     # Bundle hash
-    @test OFOND.bundle_hash(row1) == hash("002", hash("003"))
-    @test OFOND.bundle_hash(row2) == hash("008", hash("003"))
+    @test OFOND.bundle_hash(row1) == hash("002", hash("006"))
+    @test OFOND.bundle_hash(row2) == hash("008", hash("006"))
     # Order hash
-    @test OFOND.order_hash(row1) == hash(1, hash("002", hash("003")))
-    @test OFOND.order_hash(row2) == hash(1, hash("008", hash("003")))
+    @test OFOND.order_hash(row1) == hash(1, hash("002", hash("006")))
+    @test OFOND.order_hash(row2) == hash(1, hash("008", hash("006")))
     # Commodity size
-    @test OFOND.com_size(row1) == 1500
+    @test OFOND.com_size(row1) == 15
     @test OFOND.com_size(row2) == 354
     @test OFOND.com_size(row3) == 1
 end
@@ -151,15 +160,19 @@ end
     rows = [
         row for row in CSV.File(
             joinpath(@__DIR__, "dummy_commodities.csv");
-            types=Dict("supplier_account" => String, "customer_account" => String),
+            types=Dict(
+                "supplier_account" => String,
+                "customer_account" => String,
+                "delivery_date" => String,
+            ),
         )
     ]
-    row1, row2, row3 = rows[1:3]
+    row1, row2, row3 = rows[2:4]
     # Get bundle 
     bundles = Dict{UInt,OFOND.Bundle}()
     b1 = OFOND.get_bundle!(bundles, row1, network)
     @test b1 == OFOND.Bundle(supplier2, plant, 1)
-    @test bundles == Dict(hash("002", hash("003")) => OFOND.Bundle(supplier2, plant, 1))
+    @test bundles == Dict(hash("002", hash("006")) => OFOND.Bundle(supplier2, plant, 1))
     b11 = OFOND.get_bundle!(bundles, row1, network)
     @test b11 === b1
     b12 = @test_warn "Supplier unknown in the network" OFOND.get_bundle!(
@@ -174,40 +187,71 @@ end
     orders = Dict{UInt,OFOND.Order}()
     o1 = OFOND.get_order!(orders, row1, b1)
     @test o1 == OFOND.Order(b1, 1)
-    @test orders == Dict(hash(1, hash("002", hash("003"))) => OFOND.Order(b1, 1))
+    @test orders == Dict(hash(1, hash("002", hash("006"))) => OFOND.Order(b1, 1))
     o11 = OFOND.get_order!(orders, row2, b1)
     @test o11 == OFOND.Order(b1, 1)
     @test orders == Dict(
-        hash(1, hash("002", hash("003"))) => OFOND.Order(b1, 1),
-        hash(1, hash("008", hash("003"))) => OFOND.Order(b1, 1),
+        hash(1, hash("002", hash("006"))) => OFOND.Order(b1, 1),
+        hash(1, hash("008", hash("006"))) => OFOND.Order(b1, 1),
     )
+    # Add date
+    dates = String[]
+    row7 = rows[7]
+    OFOND.add_date!(dates, row7)
+    @test dates == ["", "2024-01-08"]
+    OFOND.add_date!(dates, row1)
+    @test dates == ["2024-01-01", "2024-01-08"]
 end
 
-bundle11 = OFOND.Bundle(supplier2, plant, [order1], 1, bunH1, 0, 0)
-bundle22 = OFOND.Bundle(supplier1, plant, [order2, order3], 2, bunH2, 0, 0)
+# bundle11 = OFOND.Bundle(supplier2, plant, [order1], 1, bunH1, 0, 0)
+# bundle22 = OFOND.Bundle(supplier1, plant, [order2, order3], 2, bunH2, 0, 0)
+
+# Defining bundles without properties 
+bunH1 = hash(supplier1, hash(plant))
+bundle1 = OFOND.Bundle(supplier1, plant, [order1], 1, bunH1, 0, 0)
+
+bunH2 = hash(supplier2, hash(plant))
+bundle2 = OFOND.Bundle(supplier2, plant, [order2], 2, bunH2, 0, 0)
+
+bunH3 = hash(supplier3, hash(plant))
+bundle3 = OFOND.Bundle(supplier3, plant, [order3, order4], 3, bunH3, 0, 0)
+
+bundles = [bundle1, bundle2, bundle3]
 
 @testset "Read commodities" begin
     # read file and add commodities
-    bundles, dates, partNums = @test_warn [
+    bundlesRead, dates, partNums = @test_warn [
         "Supplier unknown in the network", "Customer unknown in the network"
     ] OFOND.read_commodities(network, joinpath(@__DIR__, "dummy_commodities.csv");)
     # the bundles should be the one in all other tests
-    @test bundles == [bundle11, bundle22]
-    bundlesTest = [bundle11, bundle22]
-    @testset "All fields equal bundle $(idx)" for idx in [1, 2]
+    @test bundlesRead == bundles
+    @testset "Bundle $(idx) equality" for idx in [1, 2, 3]
         @testset "Field $(field)" for field in fieldnames(OFOND.Bundle)
-            @test getfield(bundlesTest[idx], field) == getfield(bundles[idx], field)
+            @test getfield(bundlesRead[idx], field) == getfield(bundles[idx], field)
         end
     end
     # the orders should be equal
-    @testset "All fields equal order $(idxB).$(idxO)" for (idxB, idxO) in
-                                                          zip([1, 2, 2], [1, 1, 2])
-        ordersTest = [[order1], [order2, order3]]
+    @testset "Order $(idxB).$(idxO) equality" for (idxB, idxO) in
+                                                  zip([1, 2, 3, 3], [1, 1, 1, 2])
         @testset "Field $(field)" for field in fieldnames(OFOND.Order)
-            @test getfield(ordersTest[idxB][idxO], field) ==
-                getfield(bundles[idxB].orders[idxO], field)
+            if field == :content
+                # commodities order hash are read correctly but i set it to 0 and 1 to identify better the commodities in testing 
+                content = getfield(bundles[idxB].orders[idxO], field)
+                contentRead = getfield(bundlesRead[idxB].orders[idxO], field)
+                @test map(com -> com.partNumHash, content) ==
+                    map(com -> com.partNumHash, contentRead)
+                @test map(com -> com.size, content) == map(com -> com.size, contentRead)
+                @test map(com -> com.stockCost, content) ==
+                    map(com -> com.stockCost, contentRead)
+            else
+                @test getfield(bundlesRead[idxB].orders[idxO], field) ==
+                    getfield(bundles[idxB].orders[idxO], field)
+            end
         end
     end
+    # the dates should be equal 
+    @test dates == ["2024-01-01", "2024-01-08"]
+    @test partNums == Dict{UInt,String}(hash("A123") => "A123", hash("B456") => "B456")
 end
 
 @testset "Read instance" begin
@@ -217,8 +261,12 @@ end
         joinpath(@__DIR__, "dummy_legs.csv"),
         joinpath(@__DIR__, "dummy_commodities.csv"),
     )
-    @test instance.networkGraph.graph == network.graph
-    @test instance.bundles == [bundle1, bundle2]
+    @test instance.networkGraph.graph.graph == network.graph.graph
+    labelsRead = edge_labels(instance.networkGraph.graph)
+    labels = edge_labels(network.graph)
+    @test map(l -> instance.networkGraph.graph[l[1], l[2]], labelsRead) ==
+        map(l -> network.graph[l[1], l[2]], labels)
+    @test instance.bundles == [bundle1, bundle2, bundle3]
     @test instance.dates == ["2024-01-01", "2024-01-08"]
     @test instance.partNumbers == Dict(hash("A123") => "A123", hash("B456") => "B456")
     @test instance.travelTimeGraph.graph == OFOND.TravelTimeGraph().graph
