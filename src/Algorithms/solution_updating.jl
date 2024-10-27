@@ -1,6 +1,5 @@
 # Updating functions for the solution
 
-# TODO : could be merged with add_path function
 function is_path_partial(TTGraph::TravelTimeGraph, bundle::Bundle, path::Vector{Int};)
     bundle.supplier != TTGraph.networkNodes[path[1]] && return true
     bundle.customer != TTGraph.networkNodes[path[end]] && return true
@@ -26,7 +25,12 @@ function add_bundle!(
     return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
 end
 
-# TODO : consider BitArray as it contains only boolean values
+# TODO : one way to avoid garbage collecting in here would be to have a shared bins_updated matrix
+# Previous values would be changed to false at the beginning
+# Then use dropzeros!(bins_updated)
+# Then fill it like usual
+# This is to be tested if this garbage collecting is significant for the performance
+
 # Combine all bundles paths in arguments into a sparse matrix indicating the arcs to work with
 function get_bins_updated(
     TSGraph::TimeSpaceGraph,
@@ -44,32 +48,32 @@ function get_bins_updated(
             append!(J, timedPath[2:end])
         end
     end
-    # TODO : garbage colecting in here
+    # Garbage colecting is here
     V = ones(Bool, length(I))
     # Combine function for bools is | by default
     return sparse(I, J, V)
 end
 
-function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
+function refill_bins!(
+    bins::Vector{Bin}, fullCapacity::Int, ALL_COMMODITIES::Vector{Commodity}
+)
     # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
     length(bins) == 0 && return 0
     ceil(sum(bin.load for bin in bins) / fullCapacity) == length(bins) && return 0
-    # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
     binsBefore = length(bins)
-    allCommodities = get_all_commodities(bins)
+    allCommodities = get_all_commodities(bins, ALL_COMMODITIES)
     empty!(bins)
     # Filling it back again
     first_fit_decreasing!(bins, fullCapacity, allCommodities; sorted=false)
     return length(bins) - binsBefore
 end
 
-# TODO : if the shortcut possible for direct arcs really useful ? It only avoids the initialization of an empty vector
 # Refill bins on the working arcs, to be used after bundle removal
 function refill_bins!(
     solution::Solution,
     TSGraph::TimeSpaceGraph,
-    workingArcs::SparseMatrixCSC{Bool,Int};
-    current_cost::Bool=false,
+    workingArcs::SparseMatrixCSC{Bool,Int},
+    ALL_COMMODITIES::Vector{Commodity},
 )
     costAdded = 0.0
     # Efficient iteration over sparse matrices
@@ -87,8 +91,10 @@ function refill_bins!(
                 continue
             end
             # Adding new bins cost
-            costAdded +=
-                refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
+            addedBins = refill_bins!(
+                solution.bins[tSrc, tDst], arcData.capacity, ALL_COMMODITIES
+            )
+            costAdded += addedBins * arcData.unitCost
         end
     end
     return costAdded
@@ -149,7 +155,8 @@ function update_solution!(
     solution::Solution,
     instance::Instance,
     bundles::Vector{Bundle},
-    paths::Vector{Vector{Int}}=[Int[] for _ in 1:length(bundles)];
+    paths::Vector{Vector{Int}}=[Int[] for _ in 1:length(bundles)],
+    ALL_COMMODITIES::Vector{Commodity}=Commodity[];
     remove::Bool=false,
     sorted::Bool=false,
     skipRefill::Bool=false,
@@ -176,7 +183,9 @@ function update_solution!(
         binsUpdated = get_bins_updated(
             instance.timeSpaceGraph, instance.travelTimeGraph, bundles, pathsToUpdate
         )
-        costAdded += refill_bins!(solution, instance.timeSpaceGraph, binsUpdated)
+        costAdded += refill_bins!(
+            solution, instance.timeSpaceGraph, binsUpdated, ALL_COMMODITIES
+        )
     end
     return costAdded
 end

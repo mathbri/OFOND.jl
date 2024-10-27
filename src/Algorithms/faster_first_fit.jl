@@ -1,5 +1,16 @@
 # FasterFirstFit node structure for the search tree and bin serach function for a custome faster first fit implementation
 
+# FFD and BFD have potentially faster implementations using binary trees 
+# Need to see if bin packing remains a bottleneck by number of problems to solve or time per problem
+# see Faster First Fit for algorithm
+# see AVL Tree in DataStructures.jl for implementation
+# see sorted containers and serach_sorted_first function for Fatser BFD
+# maybe those implementations are not suited for this purpose and there is a need for a custom tree implem (or search)
+# ex : a new struture with one field being actual bins and the other being the tree used for search 
+
+# This would require to add this tree component for searching bins inside a Bins structure to not recompute it each time
+# but only updating it
+
 # The FasterFirstFit node structure is a wrapper around :
 # - index of the bin 
 # - capacity of the bin

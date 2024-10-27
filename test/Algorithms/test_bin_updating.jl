@@ -7,7 +7,7 @@
     @test OFOND.compute_new_cost(port_to_plant, port_l, 1, [commodity1]) ≈ 4 + 0.002 + 2.5
     @test OFOND.compute_new_cost(port_to_plant, xdock, 2, [commodity1, commodity2]) ≈
         8 + 0.005 + 0.005 + 6.0
-    @test OFOND.compute_new_cost(supp_to_plat, xdock, 2, [commodity1, commodity2]) ≈
+    @test OFOND.compute_new_cost(supp1_to_plat, xdock, 2, [commodity1, commodity2]) ≈
         2 + 0 + 0.005 + 6.0
 end
 
@@ -37,7 +37,7 @@ sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test costAdded ≈ 24.608
 
     OFOND.add_order!(sol, TSGraph, TSPath2, order2)
-    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
+    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(21, 30, [commodity2, commodity2])]
     @test sol.bins[xdockStep3, portStep4] ==
         [OFOND.Bin(0, 50, [commodity1, commodity1, commodity2, commodity2])]
     @test sol.bins[portStep4, plantStep1] ==
@@ -50,7 +50,7 @@ end
     costRemoved = OFOND.remove_order!(sol, TSGraph, TSPath, order1)
     # Testing only the second remains
     @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(50)]
-    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
+    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(21, 30, [commodity2, commodity2])]
     @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     # Testing cost added
@@ -58,7 +58,7 @@ end
 
     OFOND.remove_order!(sol, TSGraph, TSPath2, order2)
     @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(50)]
-    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(50)]
+    @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(51)]
     @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(50)]
     @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(50)]
 end
@@ -79,6 +79,17 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     @test sol.bins[supp1Step3, xdockStep4] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     @test sol.bins[xdockStep4, portStep1] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     @test sol.bins[portStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
-
+    # Bins were already there for order 3 (so missing 8 of added cost)
     @test costAdded ≈ 48.02
+
+    # Test that removal removes all
+    costAdded = OFOND.update_bins!(sol, TSGraph, TTGraph, bundle3, TTPath; remove=true)
+    @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(50)]
+    @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(50)]
+    @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(50)]
+    @test sol.bins[supp1Step3, xdockStep4] == [OFOND.Bin(50)]
+    @test sol.bins[xdockStep4, portStep1] == [OFOND.Bin(50)]
+    @test sol.bins[portStep1, plantStep2] == [OFOND.Bin(50)]
+    # Content is gone but not the bins so the bin cost hasn't been removed yet
+    @test costAdded ≈ -40.02
 end

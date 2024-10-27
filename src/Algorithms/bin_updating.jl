@@ -1,6 +1,5 @@
 # Updating functions for the bins
 
-# TODO : add current_cost option for this all all other functions
 # TODO : harmonize arc cost computation
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}

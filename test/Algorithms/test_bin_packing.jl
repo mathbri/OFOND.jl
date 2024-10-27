@@ -1,3 +1,16 @@
+# Creating bin packing instances to test functions
+capa = 10
+sizes1 = [2, 2, 2, 3, 5, 6]
+sizes2 = [2, 2, 2, 3, 5, 6, 6, 3, 3, 2, 2, 1, 3]
+
+# Cretaing commodities related to it
+commodities1 = [
+    OFOND.Commodity(i, hash("A$(i)"), size, 1.0) for (i, size) in enumerate(sizes1)
+]
+commodities2 = [
+    OFOND.Commodity(i, hash("A$(i)"), size, 1.0) for (i, size) in enumerate(sizes2)
+]
+
 # Unit tests for first fit decreasing
 @testset "First Fit Decreasing" begin
     bins = OFOND.Bin[]
@@ -19,30 +32,53 @@
         OFOND.Bin(10, 10, [commodity1]),
     ]
 
-    bins = [OFOND.Bin(7, 10, [commodity1])]
-    newBins = OFOND.first_fit_decreasing!(bins, 20, [commodity1, commodity2, commodity3])
+    bins = [OFOND.Bin(10, 0, OFOND.Commodity[])]
+    newBins = OFOND.first_fit_decreasing!(bins, 10, commodities1)
     @test length(bins) == 3
     @test newBins == 2
     @test bins == [
-        OFOND.Bin(2, 15, [commodity1, commodity3]),
-        OFOND.Bin(5, 15, [commodity2]),
-        OFOND.Bin(10, 10, [commodity1]),
+        OFOND.Bin(1, 9, commodities1[[6, 4]]),
+        OFOND.Bin(1, 9, commodities1[[5, 1, 2]]),
+        OFOND.Bin(8, 2, commodities1[[3]]),
     ]
 
-    bins = [OFOND.Bin(7, 10, [commodity1])]
-    newBins = OFOND.first_fit_decreasing!(
-        bins, 20, [commodity1, commodity2, commodity3]; sorted=true
-    )
+    bins = OFOND.Bin[]
+    newBins = OFOND.first_fit_decreasing!(bins, 10, commodities1; sorted=true)
     @test length(bins) == 3
-    @test newBins == 2
+    @test newBins == 3
     @test bins == [
-        OFOND.Bin(2, 15, [commodity1, commodity3]),
-        OFOND.Bin(10, 10, [commodity1]),
-        OFOND.Bin(5, 15, [commodity2]),
+        OFOND.Bin(1, 9, commodities1[1:4]),
+        OFOND.Bin(5, 5, commodities1[[5]]),
+        OFOND.Bin(4, 6, commodities1[[6]]),
+    ]
+
+    bins = [OFOND.Bin(10, 0, OFOND.Commodity[])]
+    newBins = OFOND.first_fit_decreasing!(bins, 10, commodities2)
+    @test length(bins) == 5
+    @test newBins == 4
+    @test bins == [
+        OFOND.Bin(0, 10, commodities2[[6, 4, 12]]),
+        OFOND.Bin(1, 9, commodities2[[7, 8]]),
+        OFOND.Bin(0, 10, commodities2[[5, 9, 1]]),
+        OFOND.Bin(1, 9, commodities2[[13, 2, 3, 10]]),
+        OFOND.Bin(8, 2, commodities2[[11]]),
     ]
 end
 
+commodity3 = OFOND.Commodity(2, hash("C789"), 5, 0.5)
+
 @testset "First Fit Decreasing (others)" begin
+    # SubArray specialized function
+    bins = OFOND.Bin[]
+    newBins = OFOND.first_fit_decreasing!(bins, 10, view(commodities2, 1:6))
+    @test length(bins) == 3
+    @test newBins == 3
+    @test bins == [
+        OFOND.Bin(1, 9, commodities1[[6, 4]]),
+        OFOND.Bin(1, 9, commodities1[[5, 1, 2]]),
+        OFOND.Bin(8, 2, commodities1[[3]]),
+    ]
+
     # Returns a copy instead of modifying
     bins = OFOND.Bin[]
     newBins = OFOND.first_fit_decreasing(bins, 10, [commodity1, commodity1, commodity1])
@@ -68,23 +104,29 @@ end
     @test newBins1 == newBins2 == 1
     @test bins == [
         OFOND.Bin(5, 45, [commodity2, commodity2, commodity2]),
-        OFOND.Bin(40, 10, [commodity1]),
+        OFOND.Bin(41, 10, [commodity1]),
     ]
 end
 
 @testset "Tentative FFD" begin
     CAPACITIES = Int[]
-
+    # Adding capacities from an empty vector
     bins = [OFOND.Bin(7, 10, [commodity1]), OFOND.Bin(2), OFOND.Bin(15)]
     @test OFOND.get_capacities(bins, CAPACITIES) == (3, 3)
     @test CAPACITIES == [7, 2, 15]
-
+    # Adding a new capacity
     OFOND.add_capacity(CAPACITIES, 4, 5)
     @test CAPACITIES == [7, 2, 15, 5]
+    # Finding the first bin (size = 8 and max idx = 4 for example)
+    @test OFOND.findfirstbin(CAPACITIES, 8, 4) == 3
+    @test OFOND.findfirstbin(CAPACITIES, 8, 2) == -1
+    @test OFOND.findfirstbin(CAPACITIES, 16, 4) == -1
 
+    # Adding capacities from a non-empty vector
     bins = [OFOND.Bin(7, 10, [commodity1])]
     @test OFOND.get_capacities(bins, CAPACITIES) == (1, 1)
     @test CAPACITIES == [7, -1, -1, -1]
+
     # Same tests as base FFD but also check that the bins are not modified
     newBins = OFOND.tentative_first_fit(
         bins, 20, [commodity1, commodity2, commodity3], CAPACITIES
@@ -92,9 +134,67 @@ end
     @test newBins == 2
     @test bins == [OFOND.Bin(7, 10, [commodity1])]
 
-    newBins1 = OFOND.tentative_first_fit(bins, supp1_to_plant, order2, CAPACITIES)
-    @test newBins1 == 1
+    newBins = OFOND.tentative_first_fit(bins, supp1_to_plant, order2, CAPACITIES)
+    @test newBins == 1
     @test bins == [OFOND.Bin(7, 10, [commodity1])]
+
+    bins = OFOND.Bin[]
+    newBins = OFOND.tentative_first_fit(bins, 10, commodities1, CAPACITIES)
+    @test newBins == 3
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [1, 1, 8, -1]
+    newBins = OFOND.tentative_first_fit(bins, 10, commodities2, CAPACITIES)
+    @test newBins == 5
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [0, 1, 0, 1, 8]
+end
+
+@testset "Tentative FFD 2" begin
+    CAPACITIES = [7, 2, 15, 5]
+    # Finding the first bin (size = 5, cap = 0, start idx = 1, max idx = 4)
+    @test OFOND.findfirstbin2(CAPACITIES, 5, 0, 1, 4) == (1, 0)
+    # (size = 8, cap = 0, start idx = 1, max idx = 4)
+    @test OFOND.findfirstbin2(CAPACITIES, 8, 0, 1, 4) == (3, 7)
+    CAPACITIES = [7, 2, 7, 5, 8, 9]
+    # (size = 8, cap = 7, start idx = 3, max idx = 4)
+    @test OFOND.findfirstbin2(CAPACITIES, 8, 7, 2, 4) == (-1, 7)
+    @test OFOND.findfirstbin2(CAPACITIES, 8, 7, 3, 6) == (5, 7)
+
+    # Checking computations
+    bins = OFOND.Bin[]
+    newBins = OFOND.tentative_first_fit2(bins, 10, OFOND.Commodity[], CAPACITIES)
+    @test newBins == 0
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [-1, -1, -1, -1, -1, -1]
+
+    newBins = OFOND.tentative_first_fit2(
+        bins, 10, [commodity1, commodity1, commodity1], CAPACITIES
+    )
+    @test newBins == 3
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [0, 0, 0, -1, -1, -1]
+
+    newBins = OFOND.tentative_first_fit2(
+        bins, 20, [commodity1, commodity1, commodity1], CAPACITIES
+    )
+    @test newBins == 2
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [0, 10, -1, -1, -1, -1]
+
+    newBins = OFOND.tentative_first_fit2(bins, 10, commodities1, CAPACITIES)
+    @test newBins == 3
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [1, 1, 8, -1, -1, -1]
+
+    newBins = OFOND.tentative_first_fit2(bins, 10, commodities1, CAPACITIES; sorted=true)
+    @test newBins == 3
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [1, 5, 4, -1, -1, -1]
+
+    newBins = OFOND.tentative_first_fit2(bins, 10, commodities2, CAPACITIES)
+    @test newBins == 5
+    @test bins == OFOND.Bin[]
+    @test CAPACITIES == [0, 1, 0, 1, 8, -1]
 end
 
 @testset "Best Fit Decreasing" begin
