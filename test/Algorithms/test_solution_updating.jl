@@ -26,7 +26,7 @@ sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     sol2 = OFOND.Solution(TTGraph, TSGraph, bundles)
     path2 = [supp1FromDel2, plantFromDel0]
     costAdded2 = OFOND.add_bundle!(sol2, instance, bundle1, path2)
-    @test costAdded1 ≈ costAdded2 ≈ 20.004
+    @test costAdded1 ≈ costAdded2 ≈ 20.4
     @test sol.bundlePaths == sol2.bundlePaths
     @test sol.bundlesOnNode == sol2.bundlesOnNode
     @test sol.bins == sol2.bins
@@ -162,7 +162,7 @@ end
     costAdded3, oldPart3 = OFOND.remove_bundle!(sol3, instance, bundle3, TTPath3)
     # test that commodities are not in the bins but the bins are still there
     emptySol = OFOND.Solution(TTGraph, TSGraph, bundles)
-    @test costAdded2 ≈ costAdded3 ≈ -39.86576923076923
+    @test costAdded2 ≈ costAdded3 ≈ -41.34615384615385
     @test oldPart2 == oldPart3 == TTPath3
     @test sol2.bundlePaths == sol3.bundlePaths == emptySol.bundlePaths
     @test sol2.bundlesOnNode == sol3.bundlesOnNode == emptySol.bundlesOnNode
@@ -182,7 +182,7 @@ end
     costAdded4, oldPart4 = OFOND.remove_bundle!(
         sol4, instance, bundle3, [supp3FromDel3, xdockFromDel2, portFromDel1]
     )
-    @test costAdded4 ≈ -27.85576923076923
+    @test costAdded4 ≈ -28.346153846153847
     @test oldPart4 == [supp3FromDel3, xdockFromDel2, portFromDel1]
     @test sol4.bundlePaths ==
         [[-1, -1], [-1, -1], [supp3FromDel3, portFromDel1, plantFromDel0]]

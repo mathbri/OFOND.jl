@@ -8,8 +8,8 @@ function compute_new_cost(
     leadTimeCost = sum(com.stockCost for com in commodities)
     # Node cost 
     cost =
-        (dstData.volumeCost + arcData.carbonCost) * volume /
-        (VOLUME_FACTOR * arcData.capacity)
+        dstData.volumeCost * volume / VOLUME_FACTOR +
+        arcData.carbonCost * volume / arcData.capacity
     # Transport cost 
     addedBins = arcData.isLinear ? (volume / arcData.capacity) : newBins
     cost += addedBins * arcData.unitCost

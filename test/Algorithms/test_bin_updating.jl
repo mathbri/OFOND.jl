@@ -1,14 +1,15 @@
 @testset "Compute new cost" begin
-    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1]) ≈ 10 + 0.002 + 5
-    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 2, [commodity1]) ≈ 20 + 0.002 + 5
+    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1]) ≈ 10 + 0.2 + 5
+    @test OFOND.compute_new_cost(supp1_to_plant, port_l, 2, [commodity1]) ≈ 20 + 0.2 + 5
     @test OFOND.compute_new_cost(supp1_to_plant, port_l, 1, [commodity1, commodity2]) ≈
-        10 + 0.005 + 12
-    @test OFOND.compute_new_cost(supp1_to_plant, xdock, 1, [commodity1]) ≈ 10 + 0.004 + 5
-    @test OFOND.compute_new_cost(port_to_plant, port_l, 1, [commodity1]) ≈ 4 + 0.002 + 2.5
+        10 + 0.5 + 12
+    @test OFOND.compute_new_cost(supp1_to_plant, xdock, 1, [commodity1]) ≈
+        10 + 0.2 + 0.1 + 5
+    @test OFOND.compute_new_cost(port_to_plant, port_l, 1, [commodity1]) ≈ 4 + 0.2 + 2.5
     @test OFOND.compute_new_cost(port_to_plant, xdock, 2, [commodity1, commodity2]) ≈
-        8 + 0.005 + 0.005 + 6.0
+        8 + 0.5 + 0.25 + 6
     @test OFOND.compute_new_cost(supp1_to_plat, xdock, 2, [commodity1, commodity2]) ≈
-        2 + 0 + 0.005 + 6.0
+        2 + 0 + 0.25 + 6.0
 end
 
 supp1FromDel3 = TTGraph.hashToIdx[hash(3, supplier1.hash)]
@@ -34,7 +35,7 @@ sol = OFOND.Solution(TTGraph, TSGraph, bundles)
     @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
     @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(30, 20, [commodity1, commodity1])]
     # Testing cost added
-    @test costAdded ≈ 24.608
+    @test costAdded ≈ 25.2
 
     OFOND.add_order!(sol, TSGraph, TSPath2, order2)
     @test sol.bins[supp2Step2, xdockStep3] == [OFOND.Bin(21, 30, [commodity2, commodity2])]
@@ -42,7 +43,7 @@ sol = OFOND.Solution(TTGraph, TSGraph, bundles)
         [OFOND.Bin(0, 50, [commodity1, commodity1, commodity2, commodity2])]
     @test sol.bins[portStep4, plantStep1] ==
         [OFOND.Bin(0, 50, [commodity1, commodity1, commodity2, commodity2])]
-    @test costAdded ≈ 24.608
+    @test costAdded ≈ 25.2
 end
 
 @testset "Remove order" begin
@@ -54,7 +55,7 @@ end
     @test sol.bins[xdockStep3, portStep4] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     @test sol.bins[portStep4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     # Testing cost added
-    @test costRemoved ≈ -16.608
+    @test costRemoved ≈ -17.2
 
     OFOND.remove_order!(sol, TSGraph, TSPath2, order2)
     @test sol.bins[supp1Step2, xdockStep3] == [OFOND.Bin(50)]
@@ -80,7 +81,7 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     @test sol.bins[xdockStep4, portStep1] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     @test sol.bins[portStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     # Bins were already there for order 3 (so missing 8 of added cost)
-    @test costAdded ≈ 48.02
+    @test costAdded ≈ 49.5
 
     # Test that removal removes all
     costAdded = OFOND.update_bins!(sol, TSGraph, TTGraph, bundle3, TTPath; remove=true)
@@ -91,5 +92,5 @@ plantStep2 = TSGraph.hashToIdx[hash(2, plant.hash)]
     @test sol.bins[xdockStep4, portStep1] == [OFOND.Bin(50)]
     @test sol.bins[portStep1, plantStep2] == [OFOND.Bin(50)]
     # Content is gone but not the bins so the bin cost hasn't been removed yet
-    @test costAdded ≈ -40.02
+    @test costAdded ≈ -41.5
 end

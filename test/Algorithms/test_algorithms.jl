@@ -65,17 +65,17 @@ end
 # Benchmarks 
 
 @testset "Benchmarks" begin
-    # include("test_benchmarks.jl")
+    include("test_benchmarks.jl")
 end
 
 # Greedy 
 
 @testset "Greedy Utils" begin
-    # include("test_greedy_utils.jl")
+    include("test_greedy_utils.jl")
 end
 
 @testset "Greedy" begin
-    # include("test_greedy.jl")
+    include("test_greedy.jl")
 end
 
 # Lower Bound 

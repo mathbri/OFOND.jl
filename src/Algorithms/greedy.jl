@@ -38,6 +38,8 @@ function greedy_path(
     current_cost::Bool=false,
     findSources::Bool=true,
 )
+    # TODO : uncomment for tests with real instances
+    # startTime = time()
     update_cost_matrix!(
         solution,
         TTGraph,
@@ -50,11 +52,33 @@ function greedy_path(
         current_cost=current_cost,
         findSources=findSources,
     )
+    # computeTime = time() - startTime
     # TODO : garbage collecting in here, need to recode dijkstra_shortest_paths ?
     dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
     removedCost = remove_shortcuts!(shortestPath, TTGraph)
     pathCost = dijkstraState.dists[dst]
+
+    # ARC_COSTS = fill(EPS, length(TTGraph.bundleArcs[bundle.idx]))
+    # CHANNEL = create_channel(Vector{Int})
+    # # Filling channel vectors with the content they could have (removing the allocation time from the benchmark)
+    # for i in 1:Threads.nthreads() 
+    #     buffer = take!(CHANNEL)
+    #     append!(buffer, CAPACITIES)
+    #     put!(CHANNEL, buffer)
+    # end
+    # startTime = time()
+    # parallel_update_cost_matrix!(solution, TTGraph, TSGraph, bundle, CHANNEL, ARC_COSTS)
+    # computeTime2 = time() - startTime
+    # dijkstraState2 = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
+    # shortestPath2 = enumerate_paths(dijkstraState2, dst)
+    # removedCost2 = remove_shortcuts!(shortestPath2, TTGraph)
+    # pathCost2 = dijkstraState2.dists[dst]
+
+    # @assert shortestPath == shortestPath2
+    # @assert pathCost ≈ pathCost2
+    # computeTime2 < computeTime ? print("O") : print("X")
+
     return shortestPath, pathCost - removedCost
 end
 
@@ -164,10 +188,10 @@ function greedy!(solution::Solution, instance::Instance)
         # Adding to solution
         updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # verification
-        @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle ($suppNode - $custNode) \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost
         i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(sortedBundleIdxs)))% ")
+        i % percentIdx == 0 && print(" $(round(Int, i * percentIdx))% ")
     end
     println()
     return totalCost

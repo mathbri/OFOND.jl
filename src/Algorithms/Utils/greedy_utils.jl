@@ -25,8 +25,9 @@ end
 function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
     dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
     # Node volume cost + Arc carbon cost + Commodity stock cost
-    return (dstData.volumeCost + arcData.carbonCost) * order.volume /
-           (VOLUME_FACTOR * arcData.capacity) + arcData.distance * order.stockCost
+    return dstData.volumeCost * order.volume / VOLUME_FACTOR +
+           arcData.carbonCost * order.volume / arcData.capacity +
+           arcData.distance * order.stockCost
 end
 
 # Computes transport units for an order
@@ -48,21 +49,21 @@ function transport_units(
         bins = solution.bins[timedSrc, timedDst]
         # If the arc is not empty, computing a tentative first fit 
         if length(bins) > 0
+            # TODO : uncomment for tests with real instances
+            # startTime = time()
             orderTrucks = tentative_first_fit(
                 bins, arcData, order, CAPACITIES; sorted=sorted
             )
+            # computeTime = time() - startTime
+            # startTime = time()
+            # orderTrucks2 = tentative_first_fit2(
+            #     bins, arcData, order, CAPACITIES; sorted=sorted
+            # )
+            # computeTime2 = time() - startTime
+            # @assert orderTrucks == orderTrucks2
+            # computeTime2 < computeTime ? print("O") : print("X")
         end
     end
-    # if orderTrucks == 0
-    #     println("\nArc data $arcData")
-    #     println("Timed src $timedSrc and dst $timedDst")
-    #     println(
-    #         "Node info : $(TSGraph.networkNodes[timedSrc]) and $(TSGraph.networkNodes[timedDst])",
-    #     )
-    #     println("Order $order")
-    #     println("Use bins $use_bins and linear arc $(arcData.isLinear)")
-    #     println("Length timed bins $(length(solution.bins[timedSrc, timedDst]))")
-    # end
     return orderTrucks
 end
 
@@ -202,46 +203,63 @@ end
 ###           Parallel Implementation              ###
 ######################################################
 
-# TODO : have a common channel of CAPACITIES for eahc call to parallel_update_cost_matrix! ?
-
 # TODO : unused arguments like opening factor are removed, put them back if necessary one day 
 
-# TODO : if the garbage collecting of bundleArcCosts and / or the time used to actually update the matrix is significant 
-# compared to the parallel computation time, by having bundleArcs directly as a sparse matrix, we could use tmap!
-# To test
+# Another possibility to avid ARC_COSTS is to directly modify the matrix thanks to tmap! and CartesianIndices
 
+# Creating channel of CAPACITIES to limit memory footprint
+function create_channel(::Type{Vector{Int}}; n::Int=Threads.nthreads())
+    chnl = Channel{Vector{Int}}(n)
+    foreach(1:n) do _
+        put!(chnl, Vector{Int}(undef, 0))
+    end
+    return chnl
+end
+
+# TODO : benchmark the time saved 
 function parallel_update_cost_matrix!(
     solution::Solution,
     TTGraph::TravelTimeGraph,
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
+    CHANNEL::Channel{Vector{Int}},
+    ARC_COSTS::Vector{Float64},
     sorted::Bool=true,
     use_bins::Bool=true,
 )
-    # Creating channel of CAPACITIES to limit memory footprint
-    chnl = Channel{Vector{Int}}(Threads.nthreads())
-    foreach(1:Threads.nthreads()) do _
-        put!(chnl, Vector{Int}(undef, 0))
+    # Checking CHANNEL capacity
+    if Base.n_avail(CHANNEL) < Threads.nthreads()
+        @warn "Channel length needs modifying (+ $(Threads.nthreads() - Base.n_avail(CHANNEL)))"
     end
-    # Iterating in parallel (thanks to tmap) through the bundle arcs
-    bundleArcCosts = tmap(Float64, TTGraph.bundleArcs) do (src, dst)
-        CAPACITIES = take!(chnl)
-        result = arc_update_cost(
-            solution,
-            TTGraph,
-            TSGraph,
-            bundle,
-            src,
-            dst,
-            CAPACITIES;
-            sorted=sorted,
-            use_bins=use_bins,
-        )
-        put!(chnl, CAPACITIES)
+    # Checking ARC_COSTS capacity
+    nBunArcs = length(TTGraph.bundleArcs[bundle.idx])
+    if length(ARC_COSTS) < nBunArcs
+        append!(ARC_COSTS, fill(EPS, nBunArcs - length(ARC_COSTS)))
+    end
+    # Iterating in parallel (thanks to tmap!) through the bundle arcs
+    tmap!(view(ARC_COSTS, 1:nBunArcs), TTGraph.bundleArcs[bundle.idx]) do (src, dst)
+        CAPACITIES = take!(CHANNEL)
+        result = if is_update_candidate(TTGraph, src, dst, bundle)
+            arc_update_cost(
+                solution,
+                TTGraph,
+                TSGraph,
+                bundle,
+                src,
+                dst,
+                CAPACITIES;
+                sorted=sorted,
+                use_bins=use_bins,
+            )
+        else
+            EPS
+        end
+        put!(CHANNEL, CAPACITIES)
         result
     end
     # Applying those costs to the cost matrix
-    for (arc, arcCost) in zip(TTGraph.bundleArcs, bundleArcCosts)
+    # Does not matter that ARC_COSTS and bundleArcs don't have the same length because zip stops at the shortest
+    for (arc, arcCost) in zip(TTGraph.bundleArcs[bundle.idx], ARC_COSTS)
         src, dst = arc
         TTGraph.costMatrix[src, dst] = arcCost
     end

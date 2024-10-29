@@ -185,3 +185,5 @@ function parrallel_lower_bound_filtering!(solution::Solution, instance::Instance
     update_solution!(solution, instance, instance.bundles, paths; sorted=true)
     return println()
 end
+
+# TODO : add milp lower bound

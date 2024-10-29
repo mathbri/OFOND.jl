@@ -362,6 +362,13 @@ function two_node_common!(
     end
 end
 
+# Improvement possible for two node common incremental
+# In the common path computation :
+# - update only arcs that can be in a path from src to dst
+#     - these don't change during execution so they can be pre-computed   
+# - use the current costs to diversify the paths / solutions obtained
+#     - can be made more efficient by having a second cost matrix for TTGraph to compute at the same cost the base cost and current cost
+
 # Remove bundles flowing from src to dst, insert them back forcefully on the same path 
 # then use bundle_reintroduction on each bundle in hope to improve the cost
 function two_node_common_incremental!(

@@ -20,6 +20,11 @@ function compute_new_bins(
     return newBins
 end
 
+# Other packing computation that could be useful :
+# - shuffle items and use first fit / best fit (without the decreasing part)
+# - other heuristic / meta-heuristic found in third-party packages ?
+# - learned sorting operator based on the commodities properties (for the future)
+
 function compute_new_bins(
     arcData::NetworkArc,
     allCommodities::SubArray{

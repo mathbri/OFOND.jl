@@ -297,6 +297,8 @@ function LNS!(
         end
         totalImprovement += improvement
 
+        # TODO : add a small local search (bundle reintro + bin packing) after each perturbation as option and test whether it helps
+
         # # Try a local search and if solution better, store with best sol
         # revertBunIdxs = deepcopy(pertBundleIdxs)
         # # TODO : two node incremental makes cost go up, sometimes by a lot, need to investigate
