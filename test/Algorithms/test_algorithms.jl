@@ -81,11 +81,11 @@ end
 # Lower Bound 
 
 @testset "Lower Bound Utils" begin
-    # include("test_lb_utils.jl")
+    include("test_lb_utils.jl")
 end
 
 @testset "Lower Bound" begin
-    # include("test_lower_bound.jl")
+    include("test_lower_bound.jl")
 end
 
 # Local Search

@@ -102,24 +102,37 @@ function lower_bound!(solution::Solution, instance::Instance)
         # Adding to solution
         update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
         i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(instance.bundles)))% ")
+        i % percentIdx == 0 && print(" $(round(Int, i / percentIdx))% ")
     end
     println("\nLower Bound Computed : $lowerBound")
     return lowerBound
 end
 
-function parrallel_lower_bound!(solution::Solution, instance::Instance)
+function parallel_lower_bound!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
+    # Creating a chennel to not write on the same matrix for each bundle treated in parallel
+    CHANNEL = Channel{TravelTimeGraph}(Threads.nthreads())
+    I, J, costs = findnz(TTGraph.costMatrix)
+    _, _, Arcs = findnz(TTGraph.networkArcs)
+    for _ in 1:Threads.nthreads()
+        # Creating a travel time graph that only have independant cost matrix
+        put!(CHANNEL, TravelTimeGraph(TTGraph, I, J, Arcs, costs))
+    end
 
     # Using tmap() of OhMyThreads to parallelize
     println("Lower Bound computation (parrallel version so no progress bar)")
     pathAndCosts = tmap(Tuple{Vector{Int},Float64}, instance.bundles) do bundle
+        TTGRAPH = take!(CHANNEL)
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
-        lower_bound_insertion(solution, TTGraph, TSGraph, bundle, suppNode, custNode;)
+        result = lower_bound_insertion(
+            solution, TTGraph, TSGraph, bundle, suppNode, custNode;
+        )
+        put!(CHANNEL, TTGRAPH)
+        result
     end
 
     # Computing lower bound
@@ -139,9 +152,8 @@ function lower_bound_filtering_path(
     update_lb_filtering_cost_matrix!(TTGraph, TSGraph, bundle)
     dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
-    removedCost = remove_shortcuts!(shortestPath, TTGraph)
-    pathCost = dijkstraState.dists[dst]
-    return shortestPath, pathCost - removedCost
+    remove_shortcuts!(shortestPath, TTGraph)
+    return shortestPath
 end
 
 # Compute the solution for the filtering procedure
@@ -157,33 +169,44 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
-        shortestPath, pathCost = lower_bound_filtering_path(
+        shortestPath = lower_bound_filtering_path(
             TTGraph, TSGraph, bundle, suppNode, custNode;
         )
         # Adding to solution
         update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(instance.bundles)))% ")
+        i % percentIdx == 0 && print(" $(round(Int, i / percentIdx))% ")
     end
     return println()
 end
 
-function parrallel_lower_bound_filtering!(solution::Solution, instance::Instance)
+# If there is too much garbage collecting associated with graph creation, make specialized version of the functions just for the cost matrix
+
+function parallel_lower_bound_filtering!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
+    # Creating a chennel to not write on the same matrix for each bundle treated in parallel
+    CHANNEL = Channel{TravelTimeGraph}(Threads.nthreads())
+    I, J, costs = findnz(TTGraph.costMatrix)
+    _, _, Arcs = findnz(TTGraph.networkArcs)
+    for _ in 1:Threads.nthreads()
+        # Creating a travel time graph that only have independant cost matrix
+        put!(CHANNEL, TravelTimeGraph(TTGraph, I, J, Arcs, costs))
+    end
 
     println("Lower Bound Filtering computation (parrallel version so no progress bar)")
     paths = tmap(Vector{Int}, instance.bundles) do bundle
+        TTGRAPH = take!(CHANNEL)
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
-        lower_bound_filtering_path(TTGraph, TSGraph, bundle, suppNode, custNode)[1]
+        result = lower_bound_filtering_path(TTGraph, TSGraph, bundle, suppNode, custNode)
+        put!(CHANNEL, TTGRAPH)
+        result
     end
 
     # Updating solution with the paths computed 
     update_solution!(solution, instance, instance.bundles, paths; sorted=true)
     return println()
 end
-
-# TODO : add milp lower bound

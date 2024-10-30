@@ -78,7 +78,6 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates, part
     J = [xdock2Step4, xdockStep3, xdockStep4, plantStep1]
     for (i, j) in zip(I, J)
         TSGraph2.currentCost[i, j] *= 1e-7
-        # push!(sol2.bins[i, j], OFOND.Bin(50))
     end
     xdockStep4 = TSGraph2.hashToIdx[hash(4, xdock.hash)]
     xdockStep1 = TSGraph2.hashToIdx[hash(1, xdock.hash)]
@@ -89,7 +88,6 @@ instance2 = OFOND.Instance(network2, TTGraph2, TSGraph2, bundles, 4, dates, part
     J = [xdock2Step1, xdockStep4, xdockStep1, plantStep2]
     for (i, j) in zip(I, J)
         TSGraph2.currentCost[i, j] *= 1e-7
-        # push!(sol2.bins[i, j], OFOND.Bin(50))
     end
     # path2 should not be admissible
     path2, cost2 = OFOND.greedy_path(

@@ -123,15 +123,12 @@ function update_lb_filtering_cost_matrix!(
     travelTimeGraph::TravelTimeGraph, timeSpaceGraph::TimeSpaceGraph, bundle::Bundle
 )
     # Iterating through outneighbors of the start nodes and common nodes
-    for src in
-        vcat(get_all_start_nodes(travelTimeGraph, bundle), travelTimeGraph.commonNodes)
-        for dst in outneighbors(travelTimeGraph.graph, src)
-            # If the arc doesn't need an update, skipping
-            is_update_candidate(travelTimeGraph, src, dst, bundle) || continue
-            # Otherwise, computing the new cost
-            travelTimeGraph.costMatrix[src, dst] = arc_lb_filtering_update_cost(
-                travelTimeGraph, timeSpaceGraph, bundle, src, dst
-            )
-        end
+    for (src, dst) in travelTimeGraph.bundleArcs[bundle.idx]
+        # If the arc doesn't need an update, skipping
+        is_update_candidate(travelTimeGraph, src, dst, bundle) || continue
+        # Otherwise, computing the new cost
+        travelTimeGraph.costMatrix[src, dst] = arc_lb_filtering_update_cost(
+            travelTimeGraph, timeSpaceGraph, bundle, src, dst
+        )
     end
 end
