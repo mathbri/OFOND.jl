@@ -84,7 +84,7 @@ end
 
 # Split the bundle according to part numbers 
 # The properties are not recomputed here, no its needs recomputation
-function split_bundle(bundle::Bundle, startIdx::Int)
+function split_bundle_by_part(bundle::Bundle, startIdx::Int)
     # Gather al part numbers in the bundle
     partNums = Set{UInt}()
     for order in bundle.orders
@@ -93,7 +93,7 @@ function split_bundle(bundle::Bundle, startIdx::Int)
     # Creating one bundle per part number
     newBundles = Bundle[]
     for (i, partNum) in enumerate(partNums)
-        newHash = hash(bundle.supplier, hash(bundle.customer, partNum))
+        newHash = hash(partNum, bundle.hash)
         newOrders = Order[]
         # Creating orders only composed of the partNum 
         for order in bundle.orders
@@ -108,6 +108,35 @@ function split_bundle(bundle::Bundle, startIdx::Int)
             bundle.supplier, bundle.customer, newOrders, newIdx, newHash, 0, 0
         )
         push!(newBundles, newBundle)
+    end
+    return newBundles
+end
+
+# Split the bundle according to time frames
+# The properties are not recomputed here, no its needs recomputation
+function split_bundle_by_time(bundle::Bundle, startIdx::Int, newHorizon::Int)
+    maxDelDate = maximum(order -> order.deliveryDate, bundle.orders)
+    nFullHorizon = div(maxDelDate, newHorizon)
+    # Creating one bundle per time frame
+    newBundles = Bundle[]
+    for i in 1:(nFullHorizon + 1)
+        # Computing the corresponding time frame (accounting for the last time frame)
+        tStart, tEnd = if i <= nFullHorizon
+            (i - 1) * newHorizon + 1, i * newHorizon
+        else
+            nFullHorizon * newHorizon + 1, maxDelDate
+        end
+        newHash = hash(i, bundle.hash)
+        # Computing the new orders involved
+        newOrders = filter(order -> tStart <= order.deliveryDate <= tEnd, bundle.orders)
+        # If there is orders, adding it to the new bundles
+        if length(newOrders) > 0
+            newIdx = startIdx + i - 1
+            newBundle = Bundle(
+                bundle.supplier, bundle.customer, newOrders, newIdx, newHash, 0, 0
+            )
+            push!(newBundles, newBundle)
+        end
     end
     return newBundles
 end

@@ -435,3 +435,46 @@ end
     )
     close(chnl)
 end
+
+@testset "Cost matrix parallel update 2" begin
+    # Creating channel again because you can't iterate over it twice but use take! and put! indefinitely
+    chnl = OFOND.create_channel(Vector{Int})
+    # println("after channel creation again")
+    sol = OFOND.Solution(TTGraph, TSGraph, bundles)
+    newTTGraph = OFOND.TravelTimeGraph(network, bundles)
+    # add things on some arcs
+    push!(sol.bins[xdockStep4, plantStep1], OFOND.Bin(30, 20, [commodity1, commodity1]))
+    push!(sol.bins[xdockStep4, plantStep1], OFOND.Bin(30, 20, [commodity1, commodity1]))
+    OFOND.parallel_update_cost_matrix2!(sol, newTTGraph, TSGraph, bundle11, chnl)
+    V[1:end] = fill(1e-5, 24)
+    # Outsource cost (just for bundle 1 on its two first time steps, bundle 2 and 2 are not concerned)
+    V[9:16] .+= [6.8, 6.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # Direct costs (just for bundle 1)
+    V[17:19] .+= [30.4, 0.0, 0.0]
+    # Xdock-port costs (forbidden arcs)
+    V[20:22] .+= [0.0, 1e9, 0.0]
+    # Delivery costs
+    V[23:24] .+= [5.4, 1.0e9]
+    costs = sparse(I, J, V)
+    @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
+        @test newTTGraph.costMatrix[i, j] ≈ costs[i, j]
+    end
+
+    # Testing computation in series using the same channel
+    OFOND.parallel_update_cost_matrix2!(sol, newTTGraph, TSGraph, bundle22, chnl)
+    V[1:end] .= 1e-5
+    # Outsource cost (just for bundle 1 on its two first time steps, bundle 2 on its first and 2 are not concerned)
+    V[9:16] .+= [6.8, 6.8, 0.0, 7 + 30 * (4 / 51 + 1 / 100), 0.0, 0.0, 0.0, 0.0]
+    # Direct costs (just for bundle 1 and 2)
+    V[17:19] .+= [30.4, 20 + 14 + 30 / 51, 0.0]
+    # Xdock-port costs (forbidden arcs)
+    V[20:22] .+= [0.0, 1e9, 0.0]
+    # Delivery costs for bundle 2 changed in comparison to bundle 1
+    V[23:24] .+= [7.6, 1.0e9]
+    costs = sparse(I, J, V)
+    @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
+        @test newTTGraph.costMatrix[i, j] ≈ costs[i, j]
+    end
+
+    close(chnl)
+end

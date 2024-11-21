@@ -1,5 +1,10 @@
 # Updating functions for the bins
 
+# TODO : solution updating is also a major spot to parallelize
+# Would need to create an arcAndOrder vector to parallelize on it 
+# Is it efficient in terms of memory ?
+# Recheck with profiling !
+
 # TODO : harmonize arc cost computation
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}

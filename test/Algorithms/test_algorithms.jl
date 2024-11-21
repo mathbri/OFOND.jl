@@ -91,11 +91,11 @@ end
 # Local Search
 
 @testset "Local Search Utils" begin
-    # include("test_ls_utils.jl")
+    include("test_ls_utils.jl")
 end
 
 @testset "Local Search" begin
-    # include("test_local_search.jl")
+    include("test_local_search.jl")
 end
 
 # Large Neighborhood Search 

@@ -106,8 +106,8 @@ function refill_bins!(
     TTGraph::TravelTimeGraph,
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
-    path::Vector{Int};
-    current_cost::Bool=false,
+    path::Vector{Int},
+    ALL_COMMODITIES::Vector{Commodity},
 )
     costAdded = 0.0
     # Projecting path for every order
@@ -127,8 +127,10 @@ function refill_bins!(
             # No need to refill bins on linear arcs
             arcData.isLinear && continue
             # Adding new bins cost
-            costAdded +=
-                refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
+            addedBins = refill_bins!(
+                solution.bins[tSrc, tDst], arcData.capacity, ALL_COMMODITIES
+            )
+            costAdded += addedBins * arcData.unitCost
         end
     end
     return costAdded
@@ -196,7 +198,8 @@ function update_solution!(
     solution::Solution,
     instance::Instance,
     bundle::Bundle,
-    path::Vector{Int}=Int[];
+    path::Vector{Int}=Int[],
+    ALL_COMMODITIES::Vector{Commodity}=Commodity[];
     remove::Bool=false,
     sorted::Bool=false,
     skipRefill::Bool=false,
@@ -211,7 +214,9 @@ function update_solution!(
     skipRefill && return costRemoved
     # Than refilling the bins
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    costRemoved += refill_bins!(solution, TTGraph, TSGraph, bundle, oldPart)
+    costRemoved += refill_bins!(
+        solution, TTGraph, TSGraph, bundle, oldPart, ALL_COMMODITIES
+    )
     return costRemoved
 end
 

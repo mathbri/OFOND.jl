@@ -264,3 +264,34 @@ function parallel_update_cost_matrix!(
         TTGraph.costMatrix[src, dst] = arcCost
     end
 end
+
+function parallel_update_cost_matrix2!(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    CHANNEL::Channel{Vector{Int}},
+    sorted::Bool=true,
+    use_bins::Bool=true,
+)
+    # Iterating in parallel (thanks to @tasks) through the bundle arcs
+    @tasks for (src, dst) in TTGraph.bundleArcs[bundle.idx]
+        CAPACITIES = take!(CHANNEL)
+        TTGraph.costMatrix[src, dst] = if is_update_candidate(TTGraph, src, dst, bundle)
+            arc_update_cost(
+                solution,
+                TTGraph,
+                TSGraph,
+                bundle,
+                src,
+                dst,
+                CAPACITIES;
+                sorted=sorted,
+                use_bins=use_bins,
+            )
+        else
+            EPS
+        end
+        put!(CHANNEL, CAPACITIES)
+    end
+end

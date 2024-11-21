@@ -167,16 +167,20 @@ function split_instance(instance::Instance, newHorizon::Int=12)
     nFullInstances = div(instance.timeHorizon, newHorizon)
     network = instance.networkGraph
     splitInstances = Instance[]
-    for i in 1:nFullInstances
+    for i in 1:(nFullInstances + 1)
         # Computing the corresponding time frame
-        timeStart = (i - 1) * newHorizon + 1
-        timeEnd = i * newHorizon
+        tStart, tEnd = if i <= nFullInstances
+            (i - 1) * newHorizon + 1, i * newHorizon
+        else
+            nFullInstances * newHorizon + 1, instance.timeHorizon
+        end
         # Computing the new bundles involved
         newBundles = [
-            remove_orders_outside_frame(bundle, timeStart, timeEnd) for
-            bundle in instance.bundles
+            remove_orders_outside_frame(bundle, tStart, tEnd) for bundle in instance.bundles
         ]
         filter!(bun -> length(bun.orders) > 0, newBundles)
+        # If there is no bundle left, skipping
+        length(newBundles) == 0 && continue
         newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
         # Creating the corresponding instance
         newInstance = Instance(
@@ -185,31 +189,7 @@ function split_instance(instance::Instance, newHorizon::Int=12)
             TimeSpaceGraph(network, newHorizon),
             newBundles,
             newHorizon,
-            instance.dates[timeStart:timeEnd],
-            instance.partNumbers,
-        )
-        push!(splitInstances, newInstance)
-    end
-    # Doing the same for the last instance (if there is one)
-    if nFullInstances * newHorizon < instance.timeHorizon
-        # Computing the corresponding time frame
-        timeStart = nFullInstances * newHorizon + 1
-        timeEnd = instance.newHorizon
-        # Computing the new bundles involved
-        newBundles = [
-            remove_orders_outside_frame(bundle, timeStart, timeEnd) for
-            bundle in instance.bundles
-        ]
-        filter!(bun -> length(bun.orders) > 0, newBundles)
-        newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
-        # Creating the corresponding instance
-        newInstance = Instance(
-            network,
-            TravelTimeGraph(network, newBundles),
-            TimeSpaceGraph(network, newHorizon),
-            newBundles,
-            newHorizon,
-            instance.dates[timeStart:timeEnd],
+            instance.dates[tStart:tEnd],
             instance.partNumbers,
         )
         push!(splitInstances, newInstance)

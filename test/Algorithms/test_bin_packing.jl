@@ -201,8 +201,8 @@ end
     # get capa left 
     @test OFOND.best_fit_capacity(OFOND.Bin(11, 10, [commodity1]), commodity1) == 1
     @test OFOND.best_fit_capacity(OFOND.Bin(10, 10, [commodity1]), commodity1) == 0
-    @test OFOND.best_fit_capacity(OFOND.Bin(9, 10, [commodity1]), commodity1) ==
-        OFOND.INFINITY
+    @test OFOND.best_fit_capacity(OFOND.Bin(9, 10, [commodity1]), commodity1) == 1_000_000
+
     # packing algorithm
     bins = OFOND.Bin[]
     newBins = OFOND.best_fit_decreasing(bins, 10, [commodity1, commodity1, commodity1])
@@ -224,6 +224,28 @@ end
         OFOND.Bin(2, 15, [commodity2]),
         OFOND.Bin(8, 10, [commodity1]),
     ]
+
+    # Tentative packing algorithm 
+    CAPACITIES = [1, 2, 3, 4]
+    bins = [OFOND.Bin(7, 10, [commodity1]), OFOND.Bin(20), OFOND.Bin(17), OFOND.Bin(18)]
+    newBins = OFOND.tentative_best_fit(
+        bins, 20, view([commodity1, commodity2, commodity3], 1:3), CAPACITIES
+    )
+    @test bins ==
+        [OFOND.Bin(7, 10, [commodity1]), OFOND.Bin(20), OFOND.Bin(17), OFOND.Bin(18)]
+    @test newBins == 0
+    @test CAPACITIES == [2, 20, 2, 8]
+
+    bins = [OFOND.Bin(10)]
+    newBins = OFOND.tentative_best_fit(bins, 10, view(commodities1, 1:6), CAPACITIES)
+    @test newBins == 2
+    @test bins == [OFOND.Bin(10)]
+    @test CAPACITIES == [1, 1, 8, -1]
+
+    newBins = OFOND.tentative_best_fit(bins, 10, view(commodities2, 1:13), CAPACITIES)
+    @test newBins == 4
+    @test bins == [OFOND.Bin(10)]
+    @test CAPACITIES == [0, 1, 0, 1, 8]
 end
 
 # FFD and BFD give three bins with different assignments, MILP gives two

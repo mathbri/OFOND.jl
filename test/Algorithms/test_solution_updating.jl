@@ -138,7 +138,7 @@ ALL_COMMODITIES = OFOND.Commodity[]
     # push it back again
     push!(sol.bins[supp1Step3, plantStep1], OFOND.Bin(20, 30, [commodity2, commodity1]))
     costAdded = OFOND.refill_bins!(
-        sol, TTGraph, TSGraph, bundle1, [supp1FromDel2, plantFromDel0]
+        sol, TTGraph, TSGraph, bundle1, [supp1FromDel2, plantFromDel0], ALL_COMMODITIES
     )
     @test costAdded ≈ -10.0
     # arc emptied

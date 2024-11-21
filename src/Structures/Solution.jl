@@ -1,5 +1,7 @@
 # Solution structure
 
+# TODO : move from SparseMatrixCSC to SparseArrays because lot of getting / setting so dict-of-keys type could be more efficient
+
 # Updating bins and loads in bin packing file
 
 struct Solution

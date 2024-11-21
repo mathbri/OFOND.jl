@@ -99,9 +99,10 @@ end
     @test !OFOND.is_bundle_in_continent(bundle4, "EU")
 end
 
+order5 = OFOND.Order(hash("A123"), 5, [commodity1, commodity1])
+
 # test remove orders outside horizon
 @testset "Remove orders" begin
-    order5 = OFOND.Order(hash("A123"), 5, [commodity1, commodity1])
     push!(bundle.orders, order5)
     @test length(bundle.orders) == 4
     @test OFOND.remove_orders_outside_horizon(bundle, 4).orders == [order1, order2, order3]
@@ -109,8 +110,8 @@ end
 end
 
 # Bundle splitting 
-@testset "Splitting" begin
-    newBundles = OFOND.split_bundle(bundle, 2)
+@testset "Splitting by part" begin
+    newBundles = OFOND.split_bundle_by_part(bundle, 2)
     @test length(newBundles) == 2
     @test OFOND.idx(newBundles) == [2, 3]
     nB1, nB2 = newBundles
@@ -120,7 +121,7 @@ end
     @test length(nB1.orders) == 2
     @test all(order -> all(com -> com === commodity2, order.content), nB1.orders)
     @test nB1.idx == 2
-    @test nB1.hash == hash(supplier, hash(customer, hash("B456")))
+    @test nB1.hash == hash(hash("B456"), hash("A123"))
     @test nB1.maxPackSize == 0
     @test nB1.maxDelTime == 0
     # testing new bundle 2
@@ -129,7 +130,40 @@ end
     @test length(nB2.orders) == 4
     @test all(order -> all(com -> com === commodity1, order.content), nB2.orders)
     @test nB2.idx == 3
-    @test nB2.hash == hash(supplier, hash(customer, hash("A123")))
+    @test nB2.hash == hash(hash("A123"), hash("A123"))
     @test nB2.maxPackSize == 0
     @test nB2.maxDelTime == 0
+end
+
+@testset "Splitting by Time" begin
+    newBundles = OFOND.split_bundle_by_time(bundle, 2, 2)
+    @test length(newBundles) == 3
+    @test OFOND.idx(newBundles) == [2, 3, 4]
+    nB1, nB2, nB3 = newBundles
+    # testing new bundle 1
+    @test nB1.supplier == supplier
+    @test nB1.customer == customer
+    @test length(nB1.orders) == 2
+    @test nB1.orders == [order1, order2]
+    @test nB1.idx == 2
+    @test nB1.hash == hash(1, bunH)
+    @test nB1.maxPackSize == 0
+    @test nB1.maxDelTime == 0
+    # testing new bundle 2
+    @test nB2.supplier == supplier
+    @test nB2.customer == customer
+    @test length(nB2.orders) == 1
+    @test nB2.orders == [order3]
+    @test nB2.idx == 3
+    @test nB2.hash == hash(2, bunH)
+    @test nB2.maxPackSize == 0
+    @test nB2.maxDelTime == 0
+    # testing new bundle 3
+    @test nB3.supplier == supplier
+    @test nB3.customer == customer
+    @test nB3.orders == [order5]
+    @test nB3.idx == 4
+    @test nB3.hash == hash(3, bunH)
+    @test nB3.maxPackSize == 0
+    @test nB3.maxDelTime == 0
 end

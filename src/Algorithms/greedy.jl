@@ -79,6 +79,8 @@ function greedy_path(
     # @assert pathCost ≈ pathCost2
     # computeTime2 < computeTime ? print("O") : print("X")
 
+    # TODO : also compare witht he second version that don't have a buffer for arc costs
+
     return shortestPath, pathCost - removedCost
 end
 

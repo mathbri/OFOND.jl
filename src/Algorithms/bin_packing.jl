@@ -127,6 +127,37 @@ function tentative_first_fit(
     return nBinsAft - nBinsBef
 end
 
+function tentative_first_fit(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    },
+    CAPACITIES::Vector{Int};
+    sorted::Bool=false,
+)
+    # Sorting commodities in decreasing order of size (if not already done)
+    comIdxs = if !sorted
+        sortperm(commodities; rev=true)
+    else
+        eachindex(commodities)
+    end
+    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
+    # Adding commodities on top of others
+    for idxC in comIdxs
+        commodity = commodities[idxC]
+        idxB = findfirstbin(CAPACITIES, commodity.size, nBinsAft)
+        # idxB = findfirst(cap -> cap >= commodity.size, CAPACITIES[1:nBinsAft])
+        if idxB != -1
+            CAPACITIES[idxB] -= commodity.size
+        else
+            nBinsAft += 1
+            add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
+        end
+    end
+    return nBinsAft - nBinsBef
+end
+
 # The idea is the following : 
 # While searching for the first bin to accomodate the current commodity, we gather information on the current state of the bins
 # We can therefore store the biggest capacity encountered throught this search
@@ -211,10 +242,12 @@ function tentative_first_fit2(
     )
 end
 
+const BEST_FIT_INF = 1_000_000
+
 # Only useful for best fit decreasing computation of best bin
-function best_fit_capacity(bin::Bin, commodity::Commodity)
+function best_fit_capacity(bin::Bin, commodity::Commodity)::Int
     capacity_after = bin.capacity - commodity.size
-    capacity_after < 0 && return INFINITY
+    capacity_after < 0 && return BEST_FIT_INF
     return capacity_after
 end
 
@@ -235,7 +268,7 @@ function best_fit_decreasing!(
         # Selecting best bin
         bestCapa, bestBin = findmin(bin -> best_fit_capacity(bin, commodity), bins)
         # If the best bin is full, adding a bin
-        bestCapa == INFINITY && (push!(bins, Bin(fullCapacity, commodity)); continue)
+        bestCapa == BEST_FIT_INF && (push!(bins, Bin(fullCapacity, commodity)); continue)
         # Otherwise, adding it to the best bin
         add!(bins[bestBin], commodity)
     end
@@ -263,7 +296,7 @@ function best_fit_decreasing!(
         # Selecting best bin
         bestCapa, bestBin = findmin(bin -> best_fit_capacity(bin, commodity), bins)
         # If the best bin is full, adding a bin
-        bestCapa == INFINITY && (push!(bins, Bin(fullCapacity, commodity)); continue)
+        bestCapa == BEST_FIT_INF && (push!(bins, Bin(fullCapacity, commodity)); continue)
         # Otherwise, adding it to the best bin
         add!(bins[bestBin], commodity)
     end
@@ -290,6 +323,51 @@ function best_fit_decreasing(
     newBins = deepcopy(bins)
     best_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
     return newBins
+end
+
+# Computes the number of bins that would be added if we add the commodities to the bins
+function tentative_best_fit(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    },
+    CAPACITIES::Vector{Int};
+    sorted::Bool=false,
+)
+    # As findmin doesn't work on empty bin vectors, making one recursive call here 
+    if length(bins) == 0
+        return tentative_best_fit(
+            [Bin(fullCapacity, commodities[1])],
+            fullCapacity,
+            view(commodities, 2:length(commodities)),
+            CAPACITIES;
+            sorted=sorted,
+        ) + 1
+    end
+    # Sorting commodities in decreasing order of size (if not already done)
+    comIdxs = if !sorted
+        sortperm(commodities; rev=true)
+    else
+        eachindex(commodities)
+    end
+    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
+    # Adding commodities on top of others
+    for idxC in comIdxs
+        commodity = commodities[idxC]
+        # Selecting best bin
+        bestCapa, bestBin = findmin(
+            capa -> commodity.size <= capa ? capa - commodity.size : BEST_FIT_INF,
+            CAPACITIES,
+        )
+        if bestCapa < BEST_FIT_INF
+            CAPACITIES[bestBin] -= commodity.size
+        else
+            nBinsAft += 1
+            add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
+        end
+    end
+    return nBinsAft - nBinsBef
 end
 
 # TODO : check whether the MOI BinPacking constraint is more efficient for solving 
