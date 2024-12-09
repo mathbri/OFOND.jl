@@ -17,9 +17,10 @@ const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
 
 const PERTURBATIONS = [
-    :single_plant, :two_shared_node, :attract, :reduce, :random, :suppliers
+    :single_plant, :two_shared_node, :attract_reduce, :random, :suppliers
 ]
-# const PERTURBATION_MODE = [:classic, :all_single_plant]
+const MAX_MILP_VAR = 1_000_000
+const MILP_TIME_LIMIT = 150
 
 const NETWORK_DESIGN_COLUMNS = [
     "route_id",

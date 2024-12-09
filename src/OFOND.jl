@@ -33,7 +33,7 @@ include("Structures/projectors.jl")
 include("Structures/struct_utils.jl")
 include("Structures/Instance.jl")
 include("Structures/Solution.jl")
-include("Structures/RelaxedSolution.jl")
+include("Structures/Perturbation.jl")
 
 # Import and Export of data
 include("Reading/read_instance.jl")
@@ -57,6 +57,7 @@ include("Algorithms/Utils/ls_utils.jl")
 include("Algorithms/local_search.jl")
 # Large Neighborhood Search
 include("Algorithms/LNS/lns_utils.jl")
+include("Algorithms/LNS/lns_milp.jl")
 include("Algorithms/LNS/lns.jl")
 # Smart Greedy
 include("Algorithms/Smart Greedy/smart_greedy_utils.jl")
