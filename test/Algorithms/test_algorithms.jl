@@ -101,7 +101,11 @@ end
 # Large Neighborhood Search 
 
 @testset "LNS Utils" begin
-    # include("test_lns_utils.jl")
+    include("test_lns_utils.jl")
+end
+
+@testset "LNS Milp" begin
+    include("test_lns_milp.jl")
 end
 
 @testset "LNS" begin

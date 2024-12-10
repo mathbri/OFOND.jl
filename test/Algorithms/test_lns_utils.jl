@@ -317,7 +317,7 @@ supp3FromDel3 = TTGraph.hashToIdx[hash(3, supplier3.hash)]
     ]
     # If common arc = xdockFromDel2 -> portFromDel1 or portFromDel1 -> plantFromDel0
     TTPath3 = [supp3FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
-    newPaths2 = [TTPath, [supp2FromDel1, plantFromDel0], TTPath]
+    newPaths2 = [TTPath, [supp2FromDel1, plantFromDel0], TTPath3]
     # If common arc = xdockFromDel1 - plantFromDel0
     newPaths3 = [
         [supp1FromDel2, plantFromDel0],

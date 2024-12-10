@@ -6,6 +6,7 @@ using SparseArrays
 using CSV
 using JuMP
 using HiGHS
+using IterTools
 
 println("Testing OFO Network Design Package")
 

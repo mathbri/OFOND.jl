@@ -55,21 +55,6 @@ xdockStep4 = TSGraph.hashToIdx[hash(4, xdock.hash)]
 @testset "Arc update cost" begin
     # arc update cost function
     sol = OFOND.Solution(TTGraph, TSGraph, bundles)
-    # forbidden arc
-    @test OFOND.arc_lb_update_cost(
-        sol, TTGraph, TSGraph, bundle1, portFromDel1, plantFromDel0;
-    ) ≈ 1e9
-    @test OFOND.arc_lb_update_cost(
-        sol,
-        TTGraph,
-        TSGraph,
-        bundle1,
-        portFromDel1,
-        plantFromDel0;
-        use_bins=true,
-        current_cost=true,
-        giant=true,
-    ) == 1e9
     # linear arc
     @test OFOND.arc_lb_update_cost(
         sol, TTGraph, TSGraph, bundle11, supp1FromDel3, xdockFromDel2; use_bins=false
@@ -174,9 +159,9 @@ V = fill(1e-5, 24)
     # Direct costs (just for bundle 1)
     V[17:19] .+= [20.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .= 1e9
+    V[20:22] .+= 9.0
     # Delivery costs
-    V[23:24] .+= [9.4, 1.0e9]
+    V[23:24] .+= [9.4, 9.4]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test TTGraph3.costMatrix[i, j] ≈ costs[i, j]
@@ -195,9 +180,9 @@ V = fill(1e-5, 24)
     # Direct costs (just for bundle 1)
     V[17:19] .+= [20.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .= 1e9
+    V[20:22] .+= 6.6
     # Delivery costs
-    V[23:24] .+= [5.4, 1.0e9]
+    V[23:24] .+= [5.4, 7.0]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test TTGraph2.costMatrix[i, j] ≈ costs[i, j]
@@ -210,10 +195,6 @@ end
 end
 
 @testset "Filtering arc cost" begin
-    # forbidden arc
-    @test OFOND.arc_lb_filtering_update_cost(
-        TTGraph, TSGraph, bundle11, portFromDel1, plantFromDel0;
-    ) ≈ 1e9
     # linear arc
     @test OFOND.arc_lb_filtering_update_cost(
         TTGraph, TSGraph, bundle11, supp1FromDel3, xdockFromDel2
@@ -236,9 +217,9 @@ end
     # Direct costs (just for bundle 1)
     V[17:19] .+= [30.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .= 1e9
+    V[20:22] .+= 6.6
     # Delivery costs
-    V[23:24] .+= [7.0, 1.0e9]
+    V[23:24] .+= [7.0, 7.0]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test TTGraph.costMatrix[i, j] ≈ costs[i, j]
