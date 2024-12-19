@@ -29,8 +29,8 @@ function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::
     dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
     # Node volume cost + Arc carbon cost + Commodity stock cost
     return dstData.volumeCost * order.volume / VOLUME_FACTOR +
-           arcData.carbonCost * order.volume / arcData.capacity +
-           arcData.distance * order.stockCost
+           arcData.carbonCost * order.volume / arcData.capacity
+    #    arcData.distance * order.stockCost
 end
 
 # Computes transport units for an order
@@ -95,28 +95,6 @@ function arc_update_cost(
 )
     # If the arc is forbidden for the bundle, returning INF
     # is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
-    # arcsToCheck = partition(
-    #     [
-    #         11548,
-    #         8978,
-    #         8966,
-    #         16033,
-    #         16119,
-    #         16382,
-    #         15993,
-    #         16394,
-    #         16105,
-    #         16031,
-    #         16117,
-    #         16152,
-    #         256,
-    #     ],
-    #     2,
-    #     1,
-    # )
-    # if bundle.idx == 6309 && (src, dst) in arcsToCheck
-    #     println("Arc $(src)-$(dst)")
-    # end
     # Otherwise, computing the new cost
     global ARC_COMPUTED += 1
     arcBundleCost = EPS

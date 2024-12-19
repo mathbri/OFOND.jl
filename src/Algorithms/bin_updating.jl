@@ -11,9 +11,9 @@ function compute_new_cost(
         arcData.carbonCost * volume / arcData.capacity
     # Transport cost 
     addedBins = arcData.isLinear ? (volume / arcData.capacity) : newBins
-    cost += addedBins * arcData.unitCost
+    return cost += addedBins * arcData.unitCost
     # Commodity cost
-    return cost += arcData.distance * leadTimeCost
+    # return cost += arcData.distance * leadTimeCost
 end
 
 # Add order content to solution truck loads with packing function
