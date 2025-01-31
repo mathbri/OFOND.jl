@@ -369,20 +369,15 @@ function get_shuffled_common_arcs(instance::Instance)
     )
 end
 
-# TODO : Still useful ?
-# function get_lns_paths_to_update(
-#     neighborhood::Symbol,
-#     solution::Solution,
-#     bundles::Vector{Bundle},
-#     node1::Int,
-#     node2::Int,
-# )::Vector{Vector{Int}}
-#     if neighborhood == :two_shared_node && node1 != -1 && node2 != -1
-#         return get_paths_to_update(solution, bundles, node1, node2)
-#     else
-#         return solution.bundlePaths[idx(bundles)]
-#     end
-# end
+function get_lns_paths_to_update(
+    solution::Solution, bundles::Vector{Bundle}, perturbation::Perturbation
+)
+    if is_two_shared_node(perturbation)
+        return get_paths_to_update(solution, bundles, perturbation.src, perturbation.dst)
+    else
+        return solution.bundlePaths[idx(bundles)]
+    end
+end
 
 #######################################################################################
 # New idea to be tested

@@ -351,25 +351,23 @@ end
     @test OFOND.get_shortcut_part(TTGraph, 3, 8) == [11, 10, 9, 8]
 end
 
-# bundles[3] = bundle3
-# instance.bundles[3] = bundles[3]
-# paths = [
-#     [supp1FromDel2, xdockFromDel1, plantFromDel0],
-#     [supp2FromDel1, plantFromDel0],
-#     [supp1FromDel2, plantFromDel0],
-# ]
-# sol = OFOND.Solution(instance)
-# OFOND.update_solution!(sol, instance, bundles, paths)
-
-# @testset "Paths to update" begin
-#     @test OFOND.get_lns_paths_to_update(:single_plant, sol, [bundle1], -1, -1) ==
-#         [[supp1FromDel2, xdockFromDel1, plantFromDel0]]
-#     @test OFOND.get_lns_paths_to_update(
-#         :two_shared_node, sol, [bundle1], xdockFromDel1, plantFromDel0
-#     ) == [[xdockFromDel1, plantFromDel0]]
-#     @test OFOND.get_lns_paths_to_update(
-#         :attract, sol, [bundle1], xdockFromDel1, plantFromDel0
-#     ) == [[supp1FromDel2, xdockFromDel1, plantFromDel0]]
-#     @test OFOND.get_lns_paths_to_update(:reduce, sol, [bundle2, bundle3], -1, -1) ==
-#         [[supp2FromDel1, plantFromDel0], [supp1FromDel2, plantFromDel0]]
-# end
+@testset "Paths to update" begin
+    paths = [
+        [supp1FromDel2, xdockFromDel1, plantFromDel0],
+        [supp2FromDel1, plantFromDel0],
+        [supp3FromDel2, plantFromDel0],
+    ]
+    sol = OFOND.Solution(instance)
+    OFOND.update_solution!(sol, instance, bundles, paths)
+    plantPert = OFOND.get_perturbation(:single_plant, instance, sol)
+    @test OFOND.get_lns_paths_to_update(sol, [bundle1], plantPert) ==
+        [[supp1FromDel2, xdockFromDel1, plantFromDel0]]
+    twoSharePert = OFOND.two_shared_node_perturbation(
+        instance, sol, xdockFromDel1, plantFromDel0
+    )
+    @test OFOND.get_lns_paths_to_update(sol, [bundle1], twoSharePert) ==
+        [[xdockFromDel1, plantFromDel0]]
+    attractPert = OFOND.get_perturbation(:attract_reduce, instance, sol)
+    @test OFOND.get_lns_paths_to_update(sol, [bundle2, bundle3], attractPert) ==
+        [[supp2FromDel1, plantFromDel0], [supp3FromDel2, plantFromDel0]]
+end
