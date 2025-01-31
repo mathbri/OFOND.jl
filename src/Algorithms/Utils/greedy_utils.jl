@@ -90,7 +90,7 @@ function arc_update_cost(
     current_cost::Bool=false,
 )
     # If the arc is forbidden for the bundle, returning INF
-    is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
+    # is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
     # Otherwise, computing the new cost
     arcBundleCost = EPS
     for order in bundle.orders

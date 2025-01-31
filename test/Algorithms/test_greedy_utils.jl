@@ -134,19 +134,19 @@ TTPath = [supp1FromDel3, xdockFromDel2, portFromDel1, plantFromDel0]
         plantFromDel0,
         CAPACITIES;
         use_bins=false,
-    ) ≈ 1e9
+    ) ≈ 1e-5
     @test OFOND.arc_update_cost(
         sol,
         TTGraph,
         TSGraph,
-        bundle1,
+        bundle11,
         portFromDel1,
         plantFromDel0,
         CAPACITIES;
         sorted=true,
         opening_factor=10.0,
         current_cost=true,
-    ) ≈ 1e9
+    ) ≈ 25.4 + 1e-5
     # linear arc : base + transport + carbon + platform + stock costs
     @test OFOND.arc_update_cost(
         sol,
@@ -309,9 +309,9 @@ V = fill(1e-5, 24)
     # Direct costs (just for bundle 1)
     V[17:19] .+= [210.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .= 1e9
+    V[20:22] .+= 85
     # Delivery costs
-    V[23:24] .+= [85.4, 1.0e9]
+    V[23:24] .+= 85.4
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test TTGraph3.costMatrix[i, j] ≈ costs[i, j]
@@ -330,9 +330,9 @@ V = fill(1e-5, 24)
     # Direct costs (just for bundle 1)
     V[17:19] .+= [30.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .= 1e9
+    V[20:22] .+= 13
     # Delivery costs
-    V[23:24] .+= [5.4, 1.0e9]
+    V[23:24] .+= [5.4, 13.4]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test TTGraph2.costMatrix[i, j] ≈ costs[i, j]
@@ -384,9 +384,9 @@ end
     # Direct costs (just for bundle 1)
     V[17:19] .+= [30.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .+= [0.0, 1e9, 0.0]
+    V[20:22] .+= [0.0, 13, 0.0]
     # Delivery costs
-    V[23:24] .+= [5.4, 1.0e9]
+    V[23:24] .+= [5.4, 13.4]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test newTTGraph.costMatrix[i, j] ≈ costs[i, j]
@@ -401,7 +401,7 @@ end
     #     put!(chnl, buffer)
     # end
     # println(newTTGraph.bundleArcs[1])
-    @test all(arcCosts .≈ (1e-5 .+ [6.8, 30.4, 0.0, 6.8, 5.4, 1.0e9, 1.0e9]))
+    @test all(arcCosts .≈ (1e-5 .+ [6.8, 30.4, 0.0, 6.8, 5.4, 13, 13.4]))
     # println()
 
     # Testing computation in series using the same channel
@@ -412,9 +412,9 @@ end
     # Direct costs (just for bundle 1 and 2)
     V[17:19] .+= [30.4, 20 + 14 + 30 / 51, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .+= [0.0, 1e9, 0.0]
+    V[20:22] .+= [0.0, 13, 0.0]
     # Delivery costs for bundle 2 changed in comparison to bundle 1
-    V[23:24] .+= [7.6, 1.0e9]
+    V[23:24] .+= [7.6, 13.4]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test newTTGraph.costMatrix[i, j] ≈ costs[i, j]
@@ -428,10 +428,8 @@ end
     # First part is like for bundle 2 and last part are reminiscence of bundle 1
     # println(newTTGraph.bundleArcs[2])
     @test all(
-        arcCosts .≈ (
-            1e-5 .+
-            [20 + 14 + 30 / 51, 0.0, 7 + 30 * (4 / 51 + 1 / 100), 7.6, 5.4, 1.0e9, 1.0e9]
-        ),
+        arcCosts .≈
+        (1e-5 .+ [20 + 14 + 30 / 51, 0.0, 7 + 30 * (4 / 51 + 1 / 100), 7.6, 5.4, 13, 13.4]),
     )
     close(chnl)
 end
@@ -452,9 +450,9 @@ end
     # Direct costs (just for bundle 1)
     V[17:19] .+= [30.4, 0.0, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .+= [0.0, 1e9, 0.0]
+    V[20:22] .+= [0.0, 13, 0.0]
     # Delivery costs
-    V[23:24] .+= [5.4, 1.0e9]
+    V[23:24] .+= [5.4, 13.4]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test newTTGraph.costMatrix[i, j] ≈ costs[i, j]
@@ -468,9 +466,9 @@ end
     # Direct costs (just for bundle 1 and 2)
     V[17:19] .+= [30.4, 20 + 14 + 30 / 51, 0.0]
     # Xdock-port costs (forbidden arcs)
-    V[20:22] .+= [0.0, 1e9, 0.0]
+    V[20:22] .+= [0.0, 13, 0.0]
     # Delivery costs for bundle 2 changed in comparison to bundle 1
-    V[23:24] .+= [7.6, 1.0e9]
+    V[23:24] .+= [7.6, 13.4]
     costs = sparse(I, J, V)
     @testset "Cost for arc $i-$j" for (i, j) in zip(I, J)
         @test newTTGraph.costMatrix[i, j] ≈ costs[i, j]
