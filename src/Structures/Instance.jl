@@ -196,3 +196,35 @@ function split_instance(instance::Instance, newHorizon::Int=12)
     end
     return splitInstances
 end
+
+function outsource_arc(arc::NetworkArc, oursourceCost::Float64)
+    # If already outsource or is a direct, returning the arc
+    arc.type in [:outsource, :direct, :shortcut] && return arc
+    # Otherwise, modifying the arc
+    newCost = arc.distance * (LAND_CAPACITY / VOLUME_FACTOR) * oursourceCost
+    D, T, C, cap = arc.distance, arc.travelTime, arc.carbonCost, arc.capacity
+    # Putting isLinear to true
+    return NetworkArc(arc.type, D, T, arc.isCommon, newCost, true, C, cap)
+end
+
+# Construct an instance where all arcs are linear with oursource costs 
+function outsource_instance(instance::Instance)
+    # Getting the outsource km m3 cost thanks to one of the oursource arc 
+    outArcIdx = findfirst(a -> a.type == :outsource, instance.travelTimeGraph.networkArcs)
+    outArc = instance.travelTimeGraph.networkArcs[outArcIdx]
+    oursourceCost = outArc.unitCost / (outArc.distance * (LAND_CAPACITY / VOLUME_FACTOR))
+    # Building the new travel time graph with outsource costs
+    newInstance = deepcopy(instance)
+    I, J, V = findnz(instance.travelTimeGraph.networkArcs)
+    newArcs = map(a -> outsource_arc(a, oursourceCost), V)
+    for (i, j, newArc) in zip(I, J, newArcs)
+        newInstance.travelTimeGraph.networkArcs[i, j] = newArc
+    end
+    # Buidling the new time space graph
+    I, J, V = findnz(instance.timeSpaceGraph.networkArcs)
+    newArcs = map(a -> outsource_arc(a, oursourceCost), V)
+    for (i, j, newArc) in zip(I, J, newArcs)
+        newInstance.timeSpaceGraph.networkArcs[i, j] = newArc
+    end
+    return newInstance
+end

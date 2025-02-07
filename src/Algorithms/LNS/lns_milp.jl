@@ -129,11 +129,13 @@ end
 
 # Valid inequalities found in Crainic et al. to strengthen the milp formulation
 
-# TODO
+# TODO : to test
+function add_cut_set_inequalities!(model::Model, instance::Instance)
+    # Check notes on boox tablet for the implementation
+end
 
-function add_cut_set_inequalities!() end
-
-function add_c_strong_inequalities!() end
+# TODO : as it may be tedious to implement, stong chance that it will never be done
+function add_c_strong_inequalities!(model::Model, instance::Instance) end
 
 ###########################################################################################
 ###########################   Adding elementarity callbacks   #############################

@@ -167,3 +167,19 @@ end
     @test nB3.maxPackSize == 0
     @test nB3.maxDelTime == 0
 end
+
+propOrders = [add_properties(order, (x, y, z, t) -> 1, Int[]) for order in bundle.orders]
+bundle2 = OFOND.Bundle(supplier, customer, propOrders, 1, bunH, maxPackSize, maxDelTime)
+
+@testset "Averaging" begin
+    newBundle = OFOND.average_bundle(bundle2, 5)
+    @test newBundle.supplier == supplier
+    @test newBundle.customer == customer
+    @test length(newBundle.orders) == 1
+    @test newBundle.orders[1].deliveryDate == 1
+    @test newBundle.orders[1].content == [OFOND.Commodity(0, 0, 7, 10.5) for _ in 1:2]
+    @test newBundle.idx == 1
+    @test newBundle.hash == bunH
+    @test newBundle.maxPackSize == 0
+    @test newBundle.maxDelTime == 0
+end

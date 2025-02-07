@@ -140,3 +140,24 @@ function split_bundle_by_time(bundle::Bundle, startIdx::Int, newHorizon::Int)
     end
     return newBundles
 end
+
+# Average the bundle orders on the whole horizon
+function average_bundle(bundle::Bundle, timeHorizon::Int)
+    # Computing totals (volume, nb of com, stock cost) on the time horizon and the commodity mean volume
+    totVolume = sum(order.volume for order in bundle.orders)
+    totCom = sum(length(order.content) for order in bundle.orders)
+    totStockCost = sum(order.stockCost for order in bundle.orders)
+    # Computing news
+    newOrderVolume = totVolume / timeHorizon
+    meanComSize = totVolume / totCom
+    nCom = ceil(newOrderVolume / meanComSize)
+    newComSize = newOrderVolume / nCom
+    newComStockCost = totStockCost / nCom
+    # Creating 1 new order with commodities of the mean volume  
+    newDelDate = bundle.orders[1].deliveryDate
+    newContent = [Commodity(0, 0, newComSize, newComStockCost) for _ in 1:nCom]
+    newOrder = Order(bundle.hash, newDelDate, newContent)
+    return Bundle(
+        bundle.supplier, bundle.customer, [newOrder], bundle.idx, bundle.hash, 0, 0
+    )
+end

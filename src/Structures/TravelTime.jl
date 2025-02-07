@@ -4,6 +4,11 @@
 
 # TODO : with the new bundleArcs field, there is a question around the usage of bundleSrc, bundleDst and commonNodes
 
+# TODO : inverse the construction of the graph to reduce its size a lot 
+# - duplicate plants instead of suppliers 
+# - it will affect the way to handle shortcuts and all 
+# As it will expand the common nodes, this needs to be testted carefully
+
 # Travel Time Graph
 struct TravelTimeGraph
     # Core fields

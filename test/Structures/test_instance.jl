@@ -132,3 +132,33 @@ end
     @test nv(newInstances[2].timeSpaceGraph.graph) == 12
     @test ne(newInstances[2].timeSpaceGraph.graph) == 18
 end
+
+@testset "Outsource instance" begin
+    # Changing arcs
+    @test OFOND.outsource_arc(supp1_to_plat, 10.0) == supp1_to_plat
+    @test OFOND.outsource_arc(supp1_to_plant, 10.0) == supp1_to_plant
+    newArc = OFOND.outsource_arc(plat_to_plant, 10.0)
+    @testset "Arc changing" for field in fieldnames(OFOND.NetworkArc)
+        if field == :unitCost
+            @test getfield(newArc, field) != getfield(plat_to_plant, field)
+            @test getfield(newArc, field) == 700.0
+        elseif field == :isLinear
+            @test getfield(newArc, field) != getfield(plat_to_plant, field)
+            @test getfield(newArc, field) == true
+        else
+            @test getfield(newArc, field) == getfield(plat_to_plant, field)
+        end
+    end
+    # Changing whole instance
+    newInstance = OFOND.outsource_instance(instance)
+    @testset "All arcs changing" for arc in edges(newInstance.travelTimeGraph.graph)
+        oldArc = instance.travelTimeGraph.networkArcs[arc.src, arc.dst]
+        newArc = newInstance.travelTimeGraph.networkArcs[arc.src, arc.dst]
+        if oldArc.type == :outsource || oldArc.type == :direct || oldArc.type == :shortcut
+            @test oldArc == newArc
+        else
+            @test oldArc != newArc
+            @test newArc == OFOND.outsource_arc(oldArc, 4 / 70)
+        end
+    end
+end
