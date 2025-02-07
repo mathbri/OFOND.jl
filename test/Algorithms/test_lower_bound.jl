@@ -114,6 +114,7 @@ supp3FromDel2 = TTGraph.hashToIdx[hash(2, supplier3.hash)]
     instance2.bundles[3].orders[2].bpUnits[:delivery] = 1
 
     lowerBound = OFOND.lower_bound!(sol, instance2)
+    @test lowerBound ≈ 66.79915502262443
     @test sol.bundlePaths == [
         [supp1FromDel2, xdockFromDel1, plantFromDel0],
         [supp2fromDel2, xdockFromDel1, plantFromDel0],
@@ -143,7 +144,7 @@ supp3FromDel2 = TTGraph.hashToIdx[hash(2, supplier3.hash)]
     @test sol.bins[xdockStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     filledArcs = count(x -> length(x) > 0, findnz(sol.bins)[3])
     @test filledArcs == 6
-    @test OFOND.compute_cost(instance2, sol) ≈ 67.838592760181
+    @test OFOND.compute_cost(instance2, sol) ≈ 70.79909502262444
 end
 
 @testset "Parallel Lower bound" begin
@@ -155,6 +156,7 @@ end
     instance2.bundles[3].orders[2].bpUnits[:delivery] = 1
 
     lowerBound = OFOND.parallel_lower_bound!(sol, instance2)
+    @test lowerBound ≈ 66.79915502262443
     @test sol.bundlePaths == [
         [supp1FromDel2, xdockFromDel1, plantFromDel0],
         [supp2fromDel2, xdockFromDel1, plantFromDel0],
@@ -184,7 +186,7 @@ end
     @test sol.bins[xdockStep1, plantStep2] == [OFOND.Bin(25, 25, [commodity2, commodity1])]
     filledArcs = count(x -> length(x) > 0, findnz(sol.bins)[3])
     @test filledArcs == 6
-    @test OFOND.compute_cost(instance2, sol) ≈ 67.838592760181
+    @test OFOND.compute_cost(instance2, sol) ≈ 70.79909502262444
 end
 
 @testset "Lower bound filtering path" begin
@@ -229,7 +231,7 @@ supp2FromDel2 = TTGraph.hashToIdx[hash(2, supplier2.hash)]
     ]
     @test OFOND.is_feasible(instance, sol)
     # Cost went up because we faked the cost decrease at path computation time but not at solution updating time
-    @test OFOND.compute_cost(instance, sol) ≈ 88.01949773755656
+    @test OFOND.compute_cost(instance, sol) ≈ 89.9497737556561
 end
 
 @testset "Parallel Filtering computation" begin
@@ -242,7 +244,7 @@ end
         [supp3FromDel2, plantFromDel0],
     ]
     @test OFOND.is_feasible(instance, sol)
-    @test OFOND.compute_cost(instance, sol) ≈ 88.01949773755656
+    @test OFOND.compute_cost(instance, sol) ≈ 89.9497737556561
 
     # reverting change
     bundle11.orders[1].bpUnits[:direct] = 2
@@ -255,5 +257,5 @@ end
         [supp3FromDel2, xdockFromDel1, plantFromDel0],
     ]
     @test OFOND.is_feasible(instance, sol)
-    @test OFOND.compute_cost(instance, sol) ≈ 67.838592760181
+    @test OFOND.compute_cost(instance, sol) ≈ 70.79909502262444
 end

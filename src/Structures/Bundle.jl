@@ -151,7 +151,8 @@ function average_bundle(bundle::Bundle, timeHorizon::Int)
     newOrderVolume = totVolume / timeHorizon
     meanComSize = totVolume / totCom
     nCom = ceil(newOrderVolume / meanComSize)
-    newComSize = newOrderVolume / nCom
+    # Rounding won't have puch impact as we are with m3 / 100
+    newComSize = round(newOrderVolume / nCom)
     newComStockCost = totStockCost / nCom
     # Creating 1 new order with commodities of the mean volume  
     newDelDate = bundle.orders[1].deliveryDate

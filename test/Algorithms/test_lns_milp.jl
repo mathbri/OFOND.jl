@@ -207,7 +207,7 @@ portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
     @test OFOND.milp_arc_cost(instance, 1, supp1FromDel2, xdockFromDel1) ≈ 5.200004
     @test OFOND.milp_arc_cost(instance, 1, xdockFromDel2, portFromDel1) ≈ 5.0
     @test OFOND.milp_arc_cost(instance, 1, xdockFromDel1, plantFromDel0) ≈ 5.4
-    @test OFOND.milp_arc_cost(instance, 1, supp1FromDel2, plantFromDel0) ≈ 10.40001
+    @test OFOND.milp_arc_cost(instance, 1, supp1FromDel2, plantFromDel0) ≈ 10.401
     @test OFOND.milp_arc_cost(instance, 2, xdockFromDel2, portFromDel1) ≈ 7.0
     @test OFOND.milp_arc_cost(instance, 3, xdockFromDel2, portFromDel1) ≈ 12.0
 
@@ -236,8 +236,8 @@ portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
     # println(objExpr)
     bundleCoefs = [
         [5.2, 10.4, 1e-5, 5.2, 5.4, 5.0, 5.4],
-        [14.588, 1e-5, 7.3, 7.6],
-        [12.5, 24.961, 1e-5, 12.5, 13.0, 12.0, 13.0],
+        [14.589, 1e-5, 7.3, 7.6],
+        [12.5, 24.963, 1e-5, 12.5, 13.0, 12.0, 13.0],
     ]
     @testset "Bundle $b" for b in 1:3
         @testset "x $b $arc" for (idx, arc) in enumerate(TTGraph.bundleArcs[b])
@@ -262,11 +262,11 @@ portFromDel1 = TTGraph.hashToIdx[hash(1, port_l.hash)]
     end
     # println("Path flow objective")
     # println(objExpr)
-    bundleCoefs = [-0.2, 0.312, -0.538]
+    bundleCoefs = [-0.2, 0.311, -0.537]
     @testset "Bundle $b" for b in 1:3
         @test isapprox(coefficient(objExpr, z[b]), bundleCoefs[b]; atol=1e-3)
     end
-    @test isapprox(constant(objExpr), 50.688; atol=1e-3)
+    @test isapprox(constant(objExpr), 50.689; atol=1e-3)
 end
 
 supp2FromDel2 = TTGraph.hashToIdx[hash(2, supplier2.hash)]

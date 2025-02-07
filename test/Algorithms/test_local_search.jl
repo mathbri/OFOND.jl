@@ -677,7 +677,7 @@ end
     costImprov = OFOND.large_local_search!(sol, instance2)
     # new path is TTPath113 thanks to full reintroduction
     # TODO : sum of improvements is not the total improvement, why .
-    @test isapprox(-costImprov, 27.766904977375567; atol=1e-3)
+    @test isapprox(-costImprov, 26.05067873303166; atol=1e-3)
     xdock1FromDel1 = TTGraph2.hashToIdx[hash(1, xdock.hash)]
     xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
     supp2fromDel2 = TTGraph2.hashToIdx[hash(2, supplier2.hash)]

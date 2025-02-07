@@ -329,19 +329,19 @@ commodity3 = OFOND.Commodity(1, hash("B456"), 5, 4.5)
     # volume = 30/VOLUME_FACTOR/capacity, carbonCost = 1, unitCost = 10, stockCost = 10.5, distance = 2
     @test OFOND.compute_arc_cost(
         TSGraph, bins, supp2step4, plantStep1; current_cost=false
-    ) ≈ 30 / 100 / 51 * 1 + 10 + 10.5 * 2
+    ) ≈ 30 / 51 * 1 + 10 + 10.5 * 2
     # volume = 30, stockCost = 10.5, distance = 1, unitCost = 4, carbonCost = 1
     @test OFOND.compute_arc_cost(TSGraph, bins, portStep4, plantStep1; current_cost=false) ≈
-        14.506
+        15.1
     # volume = 30, stockCost = 10.5, distance = 1, unitCost = 4, carbonCost = 0, nodeCost = 1, linear
     # 10.5 + 3/5 * 4 + 30/100*1 = 13.2
     xdockStep1 = TSGraph.hashToIdx[hash(1, xdock.hash)]
     @test OFOND.compute_arc_cost(
         TSGraph, bins, supp2step4, xdockStep1; current_cost=false
-    ) ≈ 30 / 100 / 51 * 1 + 30 / 51 * 4 + 10.5
+    ) ≈ 30 / 51 * 1 + 30 / 51 * 4 + 10.5
     # test on the whole solution
-    @test OFOND.compute_cost(instance, sol; current_cost=false) ≈ 78.01836349924585
-    @test OFOND.compute_cost(instance, sol) ≈ 78.01836349924585
+    @test OFOND.compute_cost(instance, sol; current_cost=false) ≈ 79.83634992458522
+    @test OFOND.compute_cost(instance, sol) ≈ 79.83634992458522
 end
 
 # Removing bundle 2 form the sub instance

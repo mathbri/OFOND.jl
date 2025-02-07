@@ -236,18 +236,16 @@ function compute_arc_cost(
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
     arcVolume = sum(bin.load for bin in bins; init=0)
-    arcLeadTimeCost = sum(stock_cost(bin) for bin in bins; init=0.0)
-    # Node cost 
-    cost =
-        (dstData.volumeCost + arcData.carbonCost) * arcVolume / arcData.capacity /
-        VOLUME_FACTOR
+    stockCost = sum(stock_cost(bin) for bin in bins; init=0.0)
+    # Volume and Stock cost 
+    cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
+    cost += arcData.carbonCost * arcVolume / arcData.capacity
+    cost += arcData.distance * stockCost
     # Transport cost 
-    transportUnits =
-        arcData.isLinear ? (arcVolume / arcData.capacity) : Float64(length(bins))
+    transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : 1.0 * length(bins)
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
     cost += transportUnits * transportCost
-    # Commodity cost
-    return cost += arcData.distance * arcLeadTimeCost
+    return cost
 end
 
 # Compute the cost of a solution : node cost + arc cost + commodity cost
