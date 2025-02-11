@@ -44,8 +44,6 @@ include("Writing/write_solution.jl")
 include("Algorithms/bin_packing.jl")
 include("Algorithms/bin_updating.jl")
 include("Algorithms/solution_updating.jl")
-# Benchmarks heuristics
-include("Algorithms/benchmarks.jl")
 # Greedy heuristic
 include("Algorithms/Utils/greedy_utils.jl")
 include("Algorithms/greedy.jl")
@@ -62,6 +60,8 @@ include("Algorithms/LNS/lns.jl")
 # Smart Greedy
 include("Algorithms/Smart Greedy/smart_greedy_utils.jl")
 include("Algorithms/Smart Greedy/smart_greedy.jl")
+# Miscellaneous heuristics (benchmrks and comparisons)
+include("Algorithms/miscellaneous.jl")
 
 include("run.jl")
 include("Algorithms/Utils/analysis.jl")

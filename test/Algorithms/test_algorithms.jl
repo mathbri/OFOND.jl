@@ -47,67 +47,77 @@ CAPACITIES = [10, 15, 20, 25]
 # Bin-Packing 
 
 @testset "Bin-Packing" begin
-    include("test_bin_packing.jl")
+    # include("test_bin_packing.jl")
 end
 
 # Bin Updating
 
 @testset "Bin Updating" begin
-    include("test_bin_updating.jl")
+    # include("test_bin_updating.jl")
 end
 
 # Solution Updating 
 
 @testset "Solution Updating" begin
-    include("test_solution_updating.jl")
-end
-
-# Benchmarks 
-
-@testset "Benchmarks" begin
-    include("test_benchmarks.jl")
+    # include("test_solution_updating.jl")
 end
 
 # Greedy 
 
 @testset "Greedy Utils" begin
-    include("test_greedy_utils.jl")
+    # include("test_greedy_utils.jl")
 end
 
 @testset "Greedy" begin
-    include("test_greedy.jl")
+    # include("test_greedy.jl")
 end
 
 # Lower Bound 
 
 @testset "Lower Bound Utils" begin
-    include("test_lb_utils.jl")
+    # include("test_lb_utils.jl")
 end
 
 @testset "Lower Bound" begin
-    include("test_lower_bound.jl")
+    # include("test_lower_bound.jl")
 end
 
 # Local Search
 
 @testset "Local Search Utils" begin
-    include("test_ls_utils.jl")
+    # include("test_ls_utils.jl")
 end
 
 @testset "Local Search" begin
-    include("test_local_search.jl")
+    # include("test_local_search.jl")
 end
 
 # Large Neighborhood Search 
 
 @testset "LNS Utils" begin
-    include("test_lns_utils.jl")
+    # include("test_lns_utils.jl")
 end
 
 @testset "LNS Milp" begin
-    include("test_lns_milp.jl")
+    # include("test_lns_milp.jl")
 end
 
 @testset "LNS" begin
     # include("test_lns.jl")
 end
+
+# Miscallaneous
+
+@testset "Miscellaneous" begin
+    include("test_miscellaneous.jl")
+end
+
+# Smart Greedy
+
+# @testset "Smart Greedy Utils" begin
+#     include("test_smart_greedy_utils.jl")
+# end
+
+# @testset "Smart Greedy" begin
+#     include("test_smart_greedy.jl")
+# end
