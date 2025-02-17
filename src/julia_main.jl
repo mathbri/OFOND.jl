@@ -69,6 +69,13 @@ function julia_main(;
     println("Exporting current solution")
     write_solution(solution, instance; suffix="current", directory=exportDir)
 
+    # Reading instance again but ignoring current network
+    instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
+    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+
     # Filtering procedure 
     _, solution_LBF = lower_bound_filtering_heuristic(instance)
     println(

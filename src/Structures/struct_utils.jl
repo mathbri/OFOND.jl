@@ -5,6 +5,7 @@ function Order(bundle::Bundle, deliveryDate::Int)
 end
 
 function add_properties(bundle::Bundle, network::NetworkGraph)
+    supp, cust, i, h = bundle.supplier, bundle.customer, bundle.idx, bundle.hash
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
     netGraph, supp, cust = network.graph, bundle.supplier, bundle.customer
     maxDelTime = if haskey(netGraph, supp.hash, cust.hash)

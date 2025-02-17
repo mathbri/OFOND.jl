@@ -44,6 +44,7 @@ const SHIPMENT_INFO_COLUMNS = [
     "point_end_date",
     "type",
     "volume",
+    "tariff_name",
     "transport_cost",
     "carbon_cost",
     "platform_cost",

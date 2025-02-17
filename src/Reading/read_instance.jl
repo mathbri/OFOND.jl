@@ -45,6 +45,10 @@ end
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
+    if row.shipment_cost > 1e6
+        @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
+            arcType :row = row
+    end
     return NetworkArc(
         arcType,
         row.distance,
@@ -57,7 +61,9 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     )
 end
 
-function read_and_add_legs!(network::NetworkGraph, leg_file::String; verbose::Bool=false)
+function read_and_add_legs!(
+    network::NetworkGraph, leg_file::String; ignoreCurrent::Bool=false
+)
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
@@ -66,14 +72,33 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String; verbose::Bo
     ignored = Dict(
         :same_arc => 0, :unknown_type => 0, :unknown_source => 0, :unknown_dest => 0
     )
+    tariffNames = Dict{UInt,String}()
+    # println(csv_reader[1])
     for row in csv_reader
+        # Checking if we should ignore this arc
+        if ignoreCurrent
+            try
+                if row.type_simu == "e"
+                    continue
+                end
+            catch e
+                # Doing nothing if the column isn't here
+            end
+        end
         src, dst = src_dst_hash(row)
+        # Checking if there is a price name
+        try
+            tariffNames[hash(src, dst)] = row.tariff_name
+        catch e
+            # Doing nothing if the column isn't here
+        end
         arc = read_leg!(counts, row, is_common_arc(row))
         added, ignore_type = add_arc!(network, src, dst, arc; verbose=verbose)
         added || (ignored[ignore_type] += 1)
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
+    return tariffNames
 end
 
 function bundle_hash(row::CSV.Row)
@@ -136,7 +161,10 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     )
     @info "Reading commodity orders from CSV file $(basename(commodities_file)) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
-    for row in csv_reader
+    # println(csv_reader[1])
+    firstWeek = Date(DateTime(csv_reader[1].delivery_date[1:10]))
+    lastWeek = Date(DateTime(csv_reader[1].delivery_date[1:10]))
+    for (i, row) in enumerate(csv_reader)
         # Getting bundle, order and commodity data
         bundle = get_bundle!(bundles, row, networkGraph)
         bundle === nothing && continue
@@ -153,14 +181,27 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         comUnique += 1
         # Is it a new time step ?
         add_date!(dates, row)
+        if Date(DateTime(row.delivery_date[1:10])) < firstWeek
+            firstWeek = Date(DateTime(row.delivery_date[1:10]))
+        elseif Date(DateTime(row.delivery_date[1:10])) > lastWeek
+            lastWeek = Date(DateTime(row.delivery_date[1:10]))
+        end
     end
     # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
     bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
     @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon"
+    timeFrame = lastWeek - firstWeek
+    timeFrameDates = Dates.Day(Dates.Week(length(dates)))
+    if abs(timeFrame - timeFrameDates) > Dates.Day(7)
+        @warn "Time frame computed with dates don't match the number of weeks in the time horizon, this may cause an error" :dates =
+            timeFrameDates :timeFrame = timeFrame
+    end
     return bundleVector, dates, partNums
 end
 
-function read_instance(node_file::String, leg_file::String, commodities_file::String)
+function read_instance(
+    node_file::String, leg_file::String, commodities_file::String; ignoreCurrent::Bool=false
+)
     networkGraph = NetworkGraph()
     read_and_add_nodes!(networkGraph, node_file)
     read_and_add_legs!(networkGraph, leg_file)
@@ -178,6 +219,11 @@ function read_instance(node_file::String, leg_file::String, commodities_file::St
     netGraph[][:meanOverseaTime] = meanOverseaTime
     netGraph[][:maxLeg] = maxLeg
     bundles, dates, partNums = read_commodities(networkGraph, commodities_file)
+    if networkGraph.graph[]["maxLeg"] > length(dates)
+        maxLeg = networkGraph.graph[]["maxLeg"]
+        horizon = length(dates)
+        @error "The longest leg is $(maxLeg) steps long, which is longer than the time horizon ($(horizon) steps), this may cause an error"
+    end
     return Instance(
         networkGraph,
         TravelTimeGraph(),
@@ -186,5 +232,6 @@ function read_instance(node_file::String, leg_file::String, commodities_file::St
         length(dates),
         dates,
         partNums,
+        tariffs,
     )
 end

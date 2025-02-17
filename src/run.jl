@@ -117,9 +117,10 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
         @info "Choosing greedy solution as initial solution"
     end
     # Applying local search at least once
-    improvement, lsLoops = 1.0, 0
-    while (get_elapsed_time(startTime) < timeLimit || lsLoops < 1) && improvement > 1e-3
+    improvement, lsLoops = -1e4, 0
+    while ((get_elapsed_time(startTime) < timeLimit || lsLoops < 1) && improvement < -1e3)
         improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+        lsLoops += 1
     end
     # If local search stops because of time limit, applying bundle reintroduction one last time 
     if get_elapsed_time(startTime) > timeLimit && improvement < -1e3
