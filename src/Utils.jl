@@ -31,3 +31,46 @@ end
 function Base.zero(::Type{Vector{Int}})
     return Int[]
 end
+
+function get_elapsed_time(startTime::Float64)
+    return round((time() - startTime) * 1000) / 1000
+end
+
+function num_binaries(model::Model)
+    return count(is_binary, all_variables(model))
+end
+
+function num_integers(model::Model)
+    return count(is_integer, all_variables(model))
+end
+
+function num_constr(model::Model)
+    return num_constraints(model; count_variable_in_set_constraints=false)
+end
+
+function num_path_constr(model::Model)
+    try
+        n = length(model[:path])
+        return n
+    catch e
+        return 0
+    end
+end
+
+function num_pack_constr(model::Model)
+    try
+        n = length(model[:packing])
+        return n
+    catch e
+        return 0
+    end
+end
+
+function num_cut_constr(model::Model)
+    try
+        n = length(model[:cutSet])
+        return n
+    catch e
+        return 0
+    end
+end

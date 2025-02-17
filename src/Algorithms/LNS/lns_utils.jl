@@ -326,39 +326,13 @@ function get_shortcut_part(TTGraph::TravelTimeGraph, bundleIdx::Int, startNode::
     return collect(TTGraph.bundleSrc[bundleIdx]:-1:startNode)
 end
 
-# Not tested
+# Not tested because not used
 function select_random_plant(instance::Instance)
     TTGraph = instance.travelTimeGraph
     return rand(findall(node -> node.type == :plant, TTGraph.networkNodes))
 end
 
-# TODO : stack bundles associated with plants until the cost threshold is reached ?
-# function select_random_plant(instance::Instance, solution::Solution, costThreshold::Float64)
-#     src, dst, allPertBunIdxs, estimRemCost = -1, -1, Int[], 0.0
-#     TTGraph = instance.travelTimeGraph
-#     plants = findall(node -> node.type == :plant, TTGraph.networkNodes)
-#     # Going through all plants in random order to select one
-#     for plant in shuffle(plants)
-#         pertBunIdxs = get_bundles_to_update(instance, solution, plant)
-#         # If no bundle for this plant, skipping to another directly
-#         length(pertBunIdxs) == 0 && continue
-#         # Computing estimated cost
-#         pertBundles = instance.bundles[pertBunIdxs]
-#         oldPaths = get_lns_paths_to_update(:single_plant, solution, pertBundles, src, dst)
-#         estimRemCost += sum(
-#             bundle_estimated_removal_cost(bundle, oldPath, instance, solution) for
-#             (bundle, oldPath) in zip(pertBundles, oldPaths)
-#         )
-#         # Adding bundles to the list of perturbed bundles
-#         append!(allPertBunIdxs, pertBunIdxs)
-#         # If it is suitable, breaking search and returning
-#         estimRemCost > costThreshold && return src, dst, allPertBunIdxs
-#     end
-#     # If no plant found, returning empty vector
-#     return src, dst, Int[]
-# end
-
-# Not tested
+# Not tested because not used
 function get_shuffled_common_arcs(instance::Instance)
     TTGraph = instance.travelTimeGraph
     return shuffle(
@@ -377,6 +351,70 @@ function get_lns_paths_to_update(
     else
         return solution.bundlePaths[idx(bundles)]
     end
+end
+
+function model_with_optimizer(;
+    MIPGap::Float64=0.02, timeLimit::Float64=150.0, verbose::Bool=false
+)
+    model = Model(HiGHS.Optimizer)
+    gapFlag = "mip_rel_gap"
+    # Trying to assign Gurobi
+    try
+        model = Model(Gurobi.Optimizer)
+        gapFlag = "MIPGap"
+    catch e
+        # Then CPLEX
+        try
+            model = Model(CPLEX.Optimizer)
+            gapFlag = "CPXPARAM_MIP_Tolerances_MIPGap"
+        catch e
+            # Fallback on HiGHS by default
+        end
+    end
+    # Assigning common options
+    set_optimizer_attribute(model, gapFlag, MIPGap)
+    set_time_limit_sec(model, timeLimit)
+    !verbose && set_silent(model)
+    return model
+end
+
+function is_perturbation_empty(perturbation::Perturbation; verbose::Bool=false)
+    if length(perturbation.bundleIdxs) == 0
+        # If no bundles, aborting perturbation
+        verbose && println("No bundles taken, aborting pertubation")
+        return true
+    end
+    return false
+end
+
+function are_new_paths(
+    oldPaths::Vector{Vector{Int}}, newPaths::Vector{Vector{Int}}; verbose::Bool=false
+)
+    if newPaths == oldPaths
+        # If no bundle changed, aborting perturbation
+        verbose && println("No bundle changed, aborting pertubation")
+        return false
+    end
+    return true
+end
+
+function get_new_paths_idx(
+    perturbation::Perturbation, oldPaths::Vector{Vector{Int}}, newPaths::Vector{Vector{Int}}
+)
+    changedIdxs = findall(i -> newPaths[i] != oldPaths[i], eachindex(oldPaths))
+    return perturbation.bundleIdxs[changedIdxs]
+end
+
+function save_previous_bins(
+    instance::Instance,
+    solution::Solution,
+    bundles::Vector{Bundle},
+    oldPaths::Vector{Vector{Int}},
+)
+    TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
+    return save_previous_bins(
+        solution, get_bins_updated(TSGraph, TTGraph, bundles, oldPaths)
+    )
 end
 
 #######################################################################################

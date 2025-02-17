@@ -371,3 +371,65 @@ end
     @test OFOND.get_lns_paths_to_update(sol, [bundle2, bundle3], attractPert) ==
         [[supp2FromDel1, plantFromDel0], [supp3FromDel2, plantFromDel0]]
 end
+
+@testset "Model with optimizer" begin
+    model = OFOND.model_with_optimizer()
+    @test solver_name(model) == "HiGHS"
+    @test get_attribute(model, "mip_rel_gap") ≈ 0.02
+    @test get_attribute(model, MOI.Silent())
+    @test get_attribute(model, MOI.TimeLimitSec()) ≈ 150.0
+
+    model = OFOND.model_with_optimizer(; MIPGap=0.1, timeLimit=60.0, verbose=true)
+    @test solver_name(model) == "HiGHS"
+    @test get_attribute(model, "mip_rel_gap") ≈ 0.1
+    @test !get_attribute(model, MOI.Silent())
+    @test get_attribute(model, MOI.TimeLimitSec()) ≈ 60.0
+end
+
+@testset "Perturbate filtering" begin
+    paths = [
+        [supp1FromDel2, xdockFromDel1, plantFromDel0],
+        [supp2FromDel1, plantFromDel0],
+        [supp3FromDel2, plantFromDel0],
+    ]
+    sol = OFOND.Solution(instance)
+    OFOND.update_solution!(sol, instance, bundles, paths)
+    # Is perturbation empty ?
+    pert = OFOND.arc_flow_perturbation(instance, sol, Int[])
+    @test OFOND.is_perturbation_empty(pert)
+    pert = OFOND.arc_flow_perturbation(instance, sol, [1, 2, 3])
+    @test !OFOND.is_perturbation_empty(pert)
+    # Are paths new ?
+    oldPaths = [[1, 2], [3, 4]]
+    @test !OFOND.are_new_paths(oldPaths, [[1, 2], [3, 4]])
+    @test OFOND.are_new_paths(oldPaths, [[1, 2], [3, 5]])
+    @test OFOND.are_new_paths(oldPaths, [[1, 3], [3, 4]])
+    # Which bundle path changed ?
+    oldPaths = [[1, 2], [3, 4], [3, 4]]
+    @test OFOND.get_new_paths_idx(pert, oldPaths, [[1, 2], [2, 4], [3, 4]]) == [2]
+    @test OFOND.get_new_paths_idx(pert, oldPaths, [[1, 3], [3, 4], [5, 4]]) == [1, 3]
+end
+
+@testset "Save previous bins shortcut" begin
+    paths = [
+        [supp1FromDel2, xdockFromDel1, plantFromDel0],
+        [supp2FromDel1, plantFromDel0],
+        [supp3FromDel2, plantFromDel0],
+    ]
+    sol = OFOND.Solution(instance)
+    OFOND.update_solution!(sol, instance, bundles, paths)
+    TSPath = [supp1Step2, xdockStep3, portStep4, plantStep1]
+    workingArcs = sparse(
+        [supp1Step2, xdockStep3, portStep4],
+        [xdockStep3, portStep4, plantStep1],
+        [true, true, true],
+        nv(TSGraph.graph),
+        nv(TSGraph.graph),
+    )
+    OFOND.add_order!(sol, TSGraph, TSPath, order1)
+    previousBins = OFOND.save_previous_bins(sol, workingArcs)
+    I, J, V = findnz(previousBins)
+    @test I == [supp1Step2, xdockStep3, portStep4]
+    @test J == [xdockStep3, portStep4, plantStep1]
+    @test V == fill([OFOND.Bin(30, 20, [commodity1, commodity1])], 3)
+end

@@ -57,13 +57,6 @@ instanceNP = OFOND.Instance(
     Dict(hash("A123") => "A123", hash("B456") => "B456", hash("C789") => "C789"),
 )
 
-@testset "Elpased time" begin
-    @test time() ≈ OFOND.get_elapsed_time(0.0)
-    startTime = time()
-    sleep(0.5)
-    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.55
-end
-
 # fake function that modify the solution
 function dummy!(solution, instance)
     solution.bundlePaths[1:end] = [[1, 1] for _ in 1:length(instance.bundles)]

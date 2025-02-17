@@ -22,3 +22,41 @@ end
 @testset "Testing zero" begin
     @test OFOND.zero(Vector{Int}) == Int[]
 end
+
+@testset "Elpased time" begin
+    @test time() ≈ OFOND.get_elapsed_time(0.0)
+    startTime = time()
+    sleep(0.5)
+    @test 0.5 <= OFOND.get_elapsed_time(startTime) <= 0.55
+end
+
+@testset "Variable counters" begin
+    model = Model(HiGHS.Optimizer)
+    @test num_variables(model) == 0
+    @test OFOND.num_integers(model) == 0
+    @test OFOND.num_binaries(model) == 0
+
+    @variable(model, x[1:10] >= 0)
+    @variable(model, y[1:11], Int)
+    @variable(model, z[1:12], Bin)
+    @test num_variables(model) == 33
+    @test OFOND.num_integers(model) == 11
+    @test OFOND.num_binaries(model) == 12
+end
+
+@testset "Constraint counters" begin
+    model = Model(HiGHS.Optimizer)
+    @variable(model, x[1:10] >= 0)
+    @test OFOND.num_constr(model) == 0
+    @test OFOND.num_path_constr(model) == 0
+    @test OFOND.num_pack_constr(model) == 0
+    @test OFOND.num_cut_constr(model) == 0
+
+    @constraint(model, path[i in 1:5], x[i] >= 1)
+    @constraint(model, packing[j in 1:6], x[j] >= 1)
+    @constraint(model, cutSet[k in 1:7], x[k] >= 1)
+    @test OFOND.num_constr(model) == 18
+    @test OFOND.num_path_constr(model) == 5
+    @test OFOND.num_pack_constr(model) == 6
+    @test OFOND.num_cut_constr(model) == 7
+end

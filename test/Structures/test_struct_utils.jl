@@ -23,6 +23,18 @@ end
     @test bundle4.orders == [order3]
     @test bundle4.maxPackSize == 15
     @test bundle4.maxDelTime == 3
+    bundle = OFOND.Bundle(
+        OFOND.NetworkNode("S4", :supplier, "Fra", "EU", false, 0.1), plant, 1
+    )
+    push!(bundle.orders, order3)
+    bundle5 = OFOND.add_properties(bundle, network)
+    @test bundle4.supplier == supplier1
+    @test bundle4.customer == plant
+    @test bundle4.idx == 1
+    @test bundle4.hash == hash(supplier1, hash(plant))
+    @test bundle4.orders == [order3]
+    @test bundle4.maxPackSize == 15
+    @test bundle4.maxDelTime == 3
 end
 
 order = OFOND.add_properties(order3, (x, y, z, t) -> 2, Int[])

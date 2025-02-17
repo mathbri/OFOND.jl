@@ -259,6 +259,11 @@ function random_by_random_milp!(solution::Solution, instance::Instance)
     return totCost
 end
 
+# Compute the full MILP formulation of the problem
+function exact_milp!(solution::Solution, instance::Instance)
+    # TODO
+end
+
 ###########################################################################################
 ###########################   Mixing greedy and Lower Bound   #############################
 ###########################################################################################

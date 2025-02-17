@@ -1,9 +1,5 @@
 # Common part of all the heuristic solving process
 
-function get_elapsed_time(startTime::Float64)
-    return round((time() - startTime) * 1000) / 1000
-end
-
 function run_heuristic(
     instance::Instance,
     heuristic::Function;
