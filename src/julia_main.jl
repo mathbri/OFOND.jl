@@ -7,7 +7,7 @@ function julia_main()::Cint
     # Read files based on ARGS
     println("Launching OFO Network Design")
     println("Arguments : ", ARGS)
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_140225")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_170225")
     if length(ARGS) >= 1
         if isdir(ARGS[1])
             directory = ARGS[1]

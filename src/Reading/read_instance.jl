@@ -53,8 +53,8 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
     if row.shipment_cost > 1e6
-        @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
-            arcType :row = row
+        # @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
+        #     arcType :row = row
     end
     return NetworkArc(
         arcType,
@@ -62,7 +62,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         floor(Int, row.travel_time),
         # min(floor(Int, row.travel_time), 7),
         isCommon,
-        row.shipment_cost,
+        min(row.shipment_cost, 1e5),
         row.is_linear,
         row.carbon_cost,
         row.capacity * VOLUME_FACTOR,
@@ -118,7 +118,14 @@ function order_hash(row::CSV.Row)
 end
 
 function com_size(row::CSV.Row)
-    return round(Int, max(1, row.size * 100))
+    return round(Int, max(1, row.size * VOLUME_FACTOR))
+end
+
+function com_weight(row::CSV.Row)
+    if row.weight_per_emb === missing
+        return 1
+    end
+    return round(Int, max(1, row.weight_per_emb * WEIGHT_FACTOR))
 end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
@@ -181,7 +188,9 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         # Creating (and Duplicating) commodity
         partNumHash = hash(row.part_number)
         partNums[partNumHash] = row.part_number
-        commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
+        commodity = Commodity(
+            order.hash, partNumHash, com_size(row), com_weight(row), row.lead_time_cost
+        )
         append!(order.content, [commodity for _ in 1:(row.quantity)])
         comCount += row.quantity
         comUnique += 1

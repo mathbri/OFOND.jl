@@ -270,7 +270,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
         totalCost += compute_arc_cost(
             instance.timeSpaceGraph, arcBins, src(arc), dst(arc); current_cost=current_cost
         )
-        throw(ErrorException("Test"))
+        # throw(ErrorException("Test"))
     end
     return totalCost
 end

@@ -21,6 +21,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
             for com in orderCom
                 quantPartInRoute = length(findall(x -> x === com, order.content))
                 comSize = round(com.size / VOLUME_FACTOR; digits=2)
+                comWeight = round(com.weight / WEIGHT_FACTOR; digits=2)
                 for (idx, node) in enumerate(timedPath)
                     # TODO : all the time is lost in this function, by the findall
                     shipments_ids = get_shipments_ids(solution, timedPath, node, idx, com)
@@ -31,6 +32,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                         print(io, bundle.customer.account, ",") # customer_account
                         print(io, instance.partNumbers[com.partNumHash], ",") # part_number
                         print(io, comSize, ",") # packaging
+                        print(io, comWeight, ",") # weight
                         print(io, quantPartInRoute, ",") # quantity_part_in_route
                         print(io, instance.dates[order.deliveryDate], ",") # delivery_date
                         print(io, TSGraph.networkNodes[node].account, ",") # point_account
@@ -64,7 +66,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, instance.dates[TSGraph.timeStep[dst(arc)]], ",") # point_end_date
             print(io, arcData.type, ",") # type
             print(io, bin.load / VOLUME_FACTOR, ",") # volume
-            # TODO : add weight filling when available
+            print(io, sum(com.weight for com in bin.content) / WEIGHT_FACTOR, ",") # weight
             # Adding price if available
             srcH = TSGraph.networkNodes[src(arc)].hash
             dstH = TSGraph.networkNodes[dst(arc)].hash
@@ -117,7 +119,9 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
                     quantity = length(findall(x -> x === com, bin.content))
                     print(io, quantity, ",") # quantity
                     print(io, com.size / VOLUME_FACTOR, ",") # packaging_size
+                    print(io, com.weight / WEIGHT_FACTOR, ",") # pack_weight
                     println(io, quantity * com.size / VOLUME_FACTOR) # volume
+                    print(io, quantity * com.weight / WEIGHT_FACTOR, ",") # weight
                     contentId += 1
                     nLines += 1
                 end
