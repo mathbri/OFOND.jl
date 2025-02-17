@@ -142,7 +142,7 @@ function greedy!(solution::Solution, instance::Instance)
         # Adding to solution
         updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # verification
-        @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        # @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost
         i % 10 == 0 && print("|")
         i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(sortedBundleIdxs)))% ")

@@ -18,6 +18,7 @@ struct Instance
     # Fields needed for writing the solution
     dates::Vector{String}
     partNumbers::Dict{UInt,String}
+    prices::Dict{UInt,String}
 end
 
 # Methods
@@ -47,6 +48,7 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
         instance.timeHorizon,
         instance.dates,
         instance.partNumbers,
+        instance.prices,
     )
 end
 
@@ -111,5 +113,6 @@ function extract_sub_instance(
         timeHorizon,
         instance.dates[1:timeHorizon],
         instance.partNumbers,
+        instance.prices,
     )
 end

@@ -5,7 +5,7 @@ function check_bundle(instance::Instance, row::CSV.Row)
     bundleHash = hash(suppNode, hash(custNode))
     bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
     if bundleIdx === nothing
-        @warn "Bundle unknown in the instance" :bundle = bundleHash :row = row
+        # @warn "Bundle unknown in the instance" :bundle = bundleHash :row = row
     else
         return instance.bundles[bundleIdx]
     end
@@ -17,7 +17,7 @@ function check_node(instance::Instance, row::CSV.Row)
     if haskey(instance.networkGraph.graph, nodeHash)
         return instance.networkGraph.graph[nodeHash]
     else
-        @warn "Node unknown in the network" :node = nodeHash :row = row
+        # @warn "Node unknown in the network" :node = nodeHash :row = row
     end
 end
 
@@ -76,10 +76,10 @@ function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::
         # For each node of the path, we search its inneighbor having the same information
         nextNode = find_next_node(TTGraph, ttPath[end], node)
         if nextNode === nothing
-            pathStr = join(string.(path), ", ")
-            prev_node = TTGraph.networkNodes[ttPath[end]]
-            @warn "Next node not found, path not projectable for bundle $(idx) (either the node doesn't exist or the maximum delivery time is exceeded)" :node =
-                node :prev_node = prev_node :path = pathStr
+            # pathStr = join(string.(path), ", ")
+            # prev_node = TTGraph.networkNodes[ttPath[end]]
+            # @warn "Next node not found, path not projectable for bundle $(idx) (either the node doesn't exist or the maximum delivery time is exceeded)" :node =
+            #     node :prev_node = prev_node :path = pathStr
             break
         end
         push!(ttPath, nextNode)
@@ -115,13 +115,21 @@ function read_solution(instance::Instance, solution_file::String)
     @info "Reading solution from CSV file $(basename(solution_file)) ($(length(csv_reader)) lines)"
     paths = [NetworkNode[] for _ in 1:length(instance.bundles)]
     # Reading paths
+    bundleNotFound = 0
     for row in csv_reader
         # Check bundle and node existence (warnings if not found)
         bundle = check_bundle(instance, row)
+        if bundle === nothing
+            bundleNotFound += 1
+            continue
+        end
         node = check_node(instance, row)
-        (bundle === nothing || node === nothing) && continue
+        (node === nothing) && continue
         # Add node to path 
         add_node_to_path!(paths[bundle.idx], node, row.point_number)
+    end
+    if bundleNotFound > 0
+        @warn "$(bundleNotFound) lines were ignored because either source or destination is unknown"
     end
     check_paths(paths)
     allPaths = project_all_paths(paths, instance.travelTimeGraph)

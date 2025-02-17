@@ -10,7 +10,7 @@ function compute_new_cost(
     # Node cost 
     cost =
         dstData.volumeCost * volume / VOLUME_FACTOR +
-        arcData.carbonCost * volume / (VOLUME_FACTOR * arcData.capacity)
+        arcData.carbonCost * volume / arcData.capacity
     # Transport cost 
     addedBins = arcData.isLinear ? (volume / arcData.capacity) : newBins
     return cost += addedBins * arcData.unitCost

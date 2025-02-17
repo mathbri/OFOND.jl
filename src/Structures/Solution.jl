@@ -238,16 +238,25 @@ function compute_arc_cost(
     arcVolume = sum(bin.load for bin in bins)
     arcLeadTimeCost = sum(stock_cost(bin) for bin in bins; init=0.0)
     # Node cost 
-    cost =
-        (dstData.volumeCost + arcData.carbonCost) * arcVolume / arcData.capacity /
-        VOLUME_FACTOR
+    # println(arcData)
+    # println("Arc volume : $arcVolume")
+    # println("Number of bins on it : $(length(bins))")
+    cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
+    # println("Node cost : $cost ($(dstData.volumeCost) * $arcVolume / $VOLUME_FACTOR)")
+    cost += arcData.carbonCost * arcVolume / arcData.capacity
+    # println(
+    #     "Carbon cost : $cost ($(arcData.carbonCost) * $arcVolume / $(arcData.capacity))"
+    # )
     # Transport cost 
     transportUnits =
         arcData.isLinear ? (arcVolume / arcData.capacity) : Float64(length(bins))
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
+    # println("Current cost asked ? $current_cost")
     cost += transportUnits * transportCost
+    # println("Transport cost : $cost ($transportUnits * $transportCost)")
     # Commodity cost
-    return cost += arcData.distance * arcLeadTimeCost
+    # cost += arcData.distance * arcLeadTimeCost
+    return cost
 end
 
 # Compute the cost of a solution : node cost + arc cost + commodity cost
@@ -261,6 +270,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
         totalCost += compute_arc_cost(
             instance.timeSpaceGraph, arcBins, src(arc), dst(arc); current_cost=current_cost
         )
+        throw(ErrorException("Test"))
     end
     return totalCost
 end
@@ -356,6 +366,7 @@ function extract_filtered_instance(instance::Instance, solution::Solution)
         instance.timeHorizon,
         instance.dates,
         instance.partNumbers,
+        instance.prices,
     )
 end
 

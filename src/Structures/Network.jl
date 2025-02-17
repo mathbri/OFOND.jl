@@ -78,7 +78,7 @@ function NetworkGraph()
         label_type=UInt,
         vertex_data_type=NetworkNode,
         edge_data_type=NetworkArc,
-        graph_data=nothing,
+        graph_data=Dict{String,Int}(),
     )
     return NetworkGraph(network)
 end
@@ -153,6 +153,23 @@ function add_arc!(
     else
         return add_arc!(network, src.hash, dst.hash, arc)
     end
+end
+
+function add_global_leg_info!(network::NetworkGraph)
+    sumOversea, nOversea, maxLeg = 0, 0, 0
+    for (srcH, dstH) in edge_labels(network.graph)
+        leg = network.graph[srcH, dstH]
+        if leg.travelTime > maxLeg
+            maxLeg = leg.travelTime
+        end
+        if leg.type == :oversea
+            sumOversea += leg.travelTime
+            nOversea += 1
+        end
+    end
+    meanOversea = round(Int, sumOversea / nOversea)
+    network.graph[]["meanOversea"] = meanOversea
+    return network.graph[]["maxLeg"] = maxLeg
 end
 
 # TODO : add a function to change arc or node data if needed

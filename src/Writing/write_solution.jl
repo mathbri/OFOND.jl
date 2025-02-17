@@ -64,6 +64,16 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, instance.dates[TSGraph.timeStep[dst(arc)]], ",") # point_end_date
             print(io, arcData.type, ",") # type
             print(io, bin.load / VOLUME_FACTOR, ",") # volume
+            # TODO : add weight filling when available
+            # Adding price if available
+            srcH = TSGraph.networkNodes[src(arc)].hash
+            dstH = TSGraph.networkNodes[dst(arc)].hash
+            if haskey(instance.prices, hash(srcH, dstH))
+                price = instance.prices[hash(srcH, dstH)]
+                print(io, price, ",")
+            else
+                print(io, ",")
+            end
             print(io, transportCost, ",") # unit_cost
             print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
             println(io, dstData.volumeCost * fillingRate) # platform_cost

@@ -7,17 +7,14 @@ function Order(bundle::Bundle, deliveryDate::Int)
 end
 
 function add_properties(bundle::Bundle, network::NetworkGraph)
+    supp, cust, i, h = bundle.supplier, bundle.customer, bundle.idx, bundle.hash
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
-    maxDelTime = 1 + network.graph[bundle.supplier.hash, bundle.customer.hash].travelTime
-    return Bundle(
-        bundle.supplier,
-        bundle.customer,
-        bundle.orders,
-        bundle.idx,
-        bundle.hash,
-        maxPackSize,
-        maxDelTime,
-    )
+    maxDelTime = if haskey(network.graph, supp.hash, cust.hash)
+        max(network.graph[supp.hash, cust.hash].travelTime, network.graph[]["meanOversea"])
+    else
+        network.graph[]["maxLeg"]
+    end
+    return Bundle(supp, cust, bundle.orders, i, h, maxPackSize, maxDelTime + 1)
 end
 
 function get_lb_transport_units(order::Order, arcData::NetworkArc)

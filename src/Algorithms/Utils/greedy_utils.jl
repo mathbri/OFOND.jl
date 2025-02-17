@@ -30,7 +30,7 @@ function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::
     # return (dstData.volumeCost + arcData.carbonCost) * order.volume /
     #        (VOLUME_FACTOR * arcData.capacity) + arcData.distance * order.stockCost
     return dstData.volumeCost * order.volume / VOLUME_FACTOR +
-           arcData.carbonCost * order.volume / (VOLUME_FACTOR * arcData.capacity)
+           arcData.carbonCost * order.volume / arcData.capacity
 end
 
 # Computes transport units for an order

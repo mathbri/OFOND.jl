@@ -7,7 +7,7 @@ function julia_main()::Cint
     # Read files based on ARGS
     println("Launching OFO Network Design")
     println("Arguments : ", ARGS)
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_test")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_140225")
     if length(ARGS) >= 1
         if isdir(ARGS[1])
             directory = ARGS[1]
@@ -18,7 +18,7 @@ function julia_main()::Cint
     end
     # length(ARGS) >= 1 && isdir(ARGS[1]) && (directory = ARGS[1])
     println("Reading data from $directory")
-    node_file = joinpath(directory, "ND-MD-Geo_V5_preprocessing 1.csv")
+    node_file = joinpath(directory, "ND-MD-Geo_V5_preprocessing.csv")
     if length(ARGS) >= 2
         node_file_given = joinpath(directory, ARGS[2])
         if isfile(node_file_given)
@@ -29,7 +29,7 @@ function julia_main()::Cint
         end
     end
     # length(ARGS) >= 2 && isfile(ARGS[2]) && (node_file = ARGS[2])
-    leg_file = joinpath(directory, "Legs_preprocessed 1.csv")
+    leg_file = joinpath(directory, "Legs_preprocessed.csv")
     if length(ARGS) >= 3
         leg_file_given = joinpath(directory, ARGS[3])
         if isfile(leg_file_given)
@@ -40,7 +40,7 @@ function julia_main()::Cint
         end
     end
     # length(ARGS) >= 3 && isfile(ARGS[3]) && (leg_file = ARGS[3])
-    com_file = joinpath(directory, "Volumes_preprocessed 1.csv")
+    com_file = joinpath(directory, "Volumes_preprocessed.csv")
     if length(ARGS) >= 4
         com_file_given = joinpath(directory, ARGS[4])
         if isfile(com_file_given)
@@ -63,7 +63,7 @@ function julia_main()::Cint
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
 
     # read solution
-    sol_file = joinpath(directory, "route_Preprocessed 1.csv")
+    sol_file = joinpath(directory, "route_Preprocessed.csv")
     if length(ARGS) >= 5
         sol_file_given = joinpath(directory, ARGS[5])
         if isfile(sol_file_given)
@@ -89,6 +89,13 @@ function julia_main()::Cint
 
     println("Exporting current solution to $exportDir")
     write_solution(solution, instance; suffix="current", directory=exportDir)
+
+    # Reading instance again but ignoring current network
+    instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
+    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
 
     # Filtering procedure 
     _, solution_LBF = lower_bound_filtering_heuristic(instance)
