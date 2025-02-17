@@ -12,6 +12,7 @@ const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea, :port_transport]
 const EPS = 1e-5
 const INFINITY = 1e9
 const VOLUME_FACTOR = 100
+const WEIGHT_FACTOR = 1000
 
 const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
@@ -28,6 +29,7 @@ const NETWORK_DESIGN_COLUMNS = [
     "customer_account",
     "part_number",
     "packaging",
+    "package_weight",
     "quantity_part_in_route",
     "delivery_date",
     "point_account",
@@ -44,6 +46,7 @@ const SHIPMENT_INFO_COLUMNS = [
     "point_end_date",
     "type",
     "volume",
+    "weight",
     "tariff_name",
     "transport_cost",
     "carbon_cost",
@@ -58,5 +61,7 @@ const SHIPMENT_CONTENT_COLUMNS = [
     "part_customer_account",
     "quantity",
     "packaging_size",
+    "pack_weight",
     "volume",
+    "weight",
 ]

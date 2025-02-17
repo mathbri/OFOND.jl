@@ -1,9 +1,12 @@
 # Commodity structure to store corresponding metadata
 
+# TODO : maybe switch from m3 / 100 to dm3 (m3 / 1000)
+
 struct Commodity
     orderHash::UInt      # hash of the order the commodity belongs
     partNumHash::UInt    # hashing part number for efficient equality comparison
     size::Int            # size of one package in m3 / 100
+    weight::Int          # weight of one package in kg
     stockCost::Float64   # stock cost of the commodity
 end
 
@@ -22,13 +25,13 @@ function Base.isless(com1::Commodity, com2::Commodity)
     return Base.isless(com1.size, com2.size)
 end
 
-function Base.show(io::IO, commodity::Commodity)
+function Base.show(io::IO, com::Commodity)
     return print(
         io,
-        "Commodity($(commodity.orderHash), $(commodity.partNumHash), $(commodity.size), $(commodity.stockCost))",
+        "Commodity($(com.orderHash), $(com.partNumHash), $(com.size), $(com.weight), $(com.stockCost))",
     )
 end
 
 function Base.zero(::Type{Commodity})
-    return Commodity(UInt(0), UInt(0), 0, 0.0)
+    return Commodity(UInt(0), UInt(0), 0, 0, 0.0)
 end
