@@ -720,7 +720,7 @@ end
     @test sol.bins[xdock1Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     # path to plant step 2
     @test (sol.bins[supp1Step3, xdock1Step4] == OFOND.Bin[]) ||
-        (sol.bins[supp1Step3, xdock1Step4] == [Bin(50)])
+        (sol.bins[supp1Step3, xdock1Step4] == [OFOND.Bin(50)])
     @test sol.bins[supp3Step3, xdock1Step4] == [OFOND.Bin(27, 25, [commodity5, commodity6])]
     xdock3Step1 = TSGraph2.hashToIdx[hash(1, xdock3.hash)]
     @test sol.bins[xdock1Step4, xdock3Step1] ==

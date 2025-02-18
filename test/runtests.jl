@@ -150,7 +150,7 @@ end
         include("Algorithms/test_algorithms.jl")
     end
     # Run file
-    @testset "Run file" begin
-        # include("test_run.jl")
+    @testset "Run" begin
+        include("test_run.jl")
     end
 end

@@ -3,6 +3,7 @@
 # Adding a cycle in the network that won't be one in the time expansion
 network2 = get_network()
 
+commodity1, commodity2 = get_commodities()
 bundle11, bundle22, bundle33 = get_bundles_with_prop()
 bundles = [bundle11, bundle22, bundle33]
 
@@ -210,7 +211,13 @@ end
     sol = OFOND.Solution(instance2)
     OFOND.update_solution!(sol, instance2, bundles, oldPaths)
     OFOND.LNS!(
-        sol, instance2; timeLimit=1, perturbTimeLimit=1, lsTimeLimit=1, lsStepTimeLimit=1
+        sol,
+        instance2;
+        timeLimit=1,
+        perturbTimeLimit=1,
+        lsTimeLimit=1,
+        lsStepTimeLimit=1,
+        verbose=false,
     )
     # Testing optimal solution found
     @test OFOND.compute_cost(instance2, sol) ≈ 63.899095

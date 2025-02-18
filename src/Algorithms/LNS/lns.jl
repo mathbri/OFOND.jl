@@ -121,6 +121,7 @@ function LNS!(
     lsTimeLimit::Int=600,
     lsStepTimeLimit::Int=150,
     resetCost::Bool=false,
+    verbose::Bool=true,
 )
     startCost = compute_cost(instance, solution)
     threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
@@ -139,7 +140,7 @@ function LNS!(
         # Apply perturbation and get correponding solution (1 time for arc flows, multiple time for path flows)
         perturbStartTime, improvement, changed = time(), 0.0, 0
         while time() - perturbStartTime < perturbTimeLimit
-            improv, change = perturbate!(solution, instance, neighborhood; verbose=true)
+            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
             improvement += improv
             changed += change
         end
@@ -148,7 +149,9 @@ function LNS!(
         # If no path changed, trying one more time the perturbation 
         if changed == 0
             @warn "No path changed by $neighborhood perturbation, trying one more time"
-            improv, change .+= perturbate!(solution, instance, neighborhood; verbose=true)
+            improv, change .+= perturbate!(
+                solution, instance, neighborhood; verbose=verbose
+            )
             improvement += improv
             changed += change
             if changed == 0

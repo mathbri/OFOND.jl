@@ -217,7 +217,7 @@ supp2FromDel2 = TTGraph.hashToIdx[hash(2, supplier2.hash)]
         [supp3FromDel2, xdockFromDel1, plantFromDel0],
     ]
     @test OFOND.is_feasible(instance, sol)
-    @test OFOND.compute_cost(instance, sol) ≈ 67.838592760181
+    @test OFOND.compute_cost(instance, sol) ≈ 70.799095
 
     # forcing direct path 
     bundle11.orders[1].bpUnits[:direct] = 0

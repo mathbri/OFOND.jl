@@ -1,3 +1,15 @@
+# Redefining instance to avoid bugs 
+network = get_network()
+commodity1, commodity2 = get_commodities()
+order11, order22, order33, order44 = get_order_with_prop()
+bundle11, bundle22, bundle33 = get_bundles_with_prop()
+bundles = [bundle11, bundle22, bundle33]
+TTGraph = OFOND.TravelTimeGraph(network, bundles)
+TSGraph = OFOND.TimeSpaceGraph(network, 4)
+dates = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]
+partNumbers = Dict(hash("A123") => "A123", hash("B456") => "B456")
+instance = OFOND.Instance(network, TTGraph, TSGraph, bundles, 4, dates, partNumbers)
+
 supp1FromDel2 = TTGraph.hashToIdx[hash(2, supplier1.hash)]
 supp3FromDel2 = TTGraph.hashToIdx[hash(2, supplier3.hash)]
 supp2fromDel1 = TTGraph.hashToIdx[hash(1, supplier2.hash)]
