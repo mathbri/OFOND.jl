@@ -406,6 +406,7 @@ end
     @test OFOND.are_new_paths(oldPaths, [[1, 3], [3, 4]])
     # Which bundle path changed ?
     oldPaths = [[1, 2], [3, 4], [3, 4]]
+    pert = OFOND.Perturbation(:arc_flow, [2, 1, 3], oldPaths, spzeros(Int, (3, 3)))
     @test OFOND.get_new_paths_idx(pert, oldPaths, [[1, 2], [2, 4], [3, 4]]) == [2]
     @test OFOND.get_new_paths_idx(pert, oldPaths, [[1, 3], [3, 4], [5, 4]]) == [1, 3]
 end

@@ -25,8 +25,11 @@ end
 ###########################################################################################
 
 # Add path constraints on the travel time graph to the arc flow model
-# These constraints are implicit in the path model
 function add_path_constraints!(model::Model, instance::Instance, perturbation::Perturbation)
+    # These constraints are implicit in the path model
+    if is_attract_reduce(perturbation)
+        return nothing
+    end
     TTGraph = instance.travelTimeGraph
     bundleIdxs = perturbation.bundleIdxs
     pathConExpr = Dict{Int,Dict{Int,AffExpr}}()
@@ -269,22 +272,21 @@ end
 function get_paths(model::Model, instance::Instance, perturbation::Perturbation)
     TTGraph = instance.travelTimeGraph
     paths = Vector{Vector{Int}}()
-    # println("Getting paths for perturbation $(perturbation.type)")
     for bIdx in perturbation.bundleIdxs
         if is_attract_reduce(perturbation)
             zVal = value(model[:z][bIdx])
             # If the new path is used, returning it, otherwise returning the old path
-            bundlePath =
-                zVal > 1 - EPS ? perturbation.newPaths[bIdx] : perturbation.oldPaths[bIdx]
-            push!(paths, bundlePath)
+            if zVal > 1 - EPS
+                push!(paths, perturbation.newPaths[bIdx])
+            else
+                push!(paths, perturbation.oldPaths[bIdx])
+            end
         else
             # Finding all arcs used
             for (src, dst) in TTGraph.bundleArcs[bIdx]
                 xVal = value(model[:x][bIdx, (src, dst)])
                 # If the arc is used, it is free, otherwise, he is forbidden
                 TTGraph.costMatrix[src, dst] = xVal > 1 - EPS ? EPS : INFINITY
-                # println("Arc $((src, dst)) used ? $(xVal > 1 - EPS)")
-                # println("Arc $((src, dst)) cost $(TTGraph.costMatrix[src, dst])")
             end
             # Computing a shortest path with all arcs used
             bSrc, bDst = if is_two_shared_node(perturbation)
@@ -292,10 +294,12 @@ function get_paths(model::Model, instance::Instance, perturbation::Perturbation)
             else
                 TTGraph.bundleSrc[bIdx], TTGraph.bundleDst[bIdx]
             end
-            # println("Bundle $bIdx from $bSrc to $bDst")
             bundlePath = shortest_path(TTGraph, bSrc, bDst)[1]
-            # println("Bundle path : $bundlePath")
             push!(paths, bundlePath)
+            # Putting the TTGraph back to normal all free
+            for (src, dst) in TTGraph.bundleArcs[bIdx]
+                TTGraph.costMatrix[src, dst] = EPS
+            end
         end
     end
     return paths

@@ -200,8 +200,14 @@ end
 function get_bundles_to_update(
     TTGraph::TravelTimeGraph, solution::Solution, node1::Int, node2::Int=-1
 )
-    node2 == -1 && return solution.bundlesOnNode[node1]
-    # Adaptation for split bundles
+    if node2 == -1
+        if node1 == -1
+            return Int[]
+        else
+            return solution.bundlesOnNode[node1]
+        end
+    end
+    # Adaptation for split bundles (we will want to do a two node neighborhood with all bundles from one supplier to one plant)
     if TTGraph.networkNodes[node1].type == :supplier
         # Keeping only the bundles flowing from one supplier to one plant
         return filter(b -> TTGraph.bundleSrc[b] == node1, solution.bundlesOnNode[node2])

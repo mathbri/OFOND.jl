@@ -29,6 +29,10 @@ function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::So
     end
 end
 
+function slope_scaling_cost_update!(instance::Instance, solution::Solution)
+    return slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
+end
+
 ###########################################################################################
 ##############################   Perturbation creation   ##################################
 ###########################################################################################
@@ -119,6 +123,8 @@ function generate_reduce_path(
 end
 
 function path_flow_perturbation(instance::Instance, solution::Solution, src::Int, dst::Int)
+    bundleIdxs = idx(instance.bundles)
+    oldPaths = solution.bundlePaths
     bundlesOnArc = get_bundles_to_update(instance.travelTimeGraph, solution, src, dst)
     newPaths = Vector{Vector{Int}}(undef, length(solution.bundlePaths))
     # Generating reduce paths for the bundles on arc
@@ -139,9 +145,7 @@ function path_flow_perturbation(instance::Instance, solution::Solution, src::Int
             newPaths[bIdx] = generate_reduce_path(instance, solution, bundle, src, dst)
         end
     end
-    oldPaths = solution.bundlePaths
     loads = map(bins -> 0, solution.bins)
-    bundleIdxs = idx(instance.bundles)
     return Perturbation(:attract_reduce, bundleIdxs, oldPaths, newPaths, loads)
 end
 
@@ -401,8 +405,7 @@ end
 function get_new_paths_idx(
     perturbation::Perturbation, oldPaths::Vector{Vector{Int}}, newPaths::Vector{Vector{Int}}
 )
-    changedIdxs = findall(i -> newPaths[i] != oldPaths[i], eachindex(oldPaths))
-    return perturbation.bundleIdxs[changedIdxs]
+    return findall(i -> newPaths[i] != perturbation.oldPaths[i], eachindex(newPaths))
 end
 
 function save_previous_bins(

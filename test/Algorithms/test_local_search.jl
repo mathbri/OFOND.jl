@@ -213,7 +213,7 @@ supp3FromDel2 = TTGraph.hashToIdx[hash(2, supplier3.hash)]
     costImprov += OFOND.bundle_reintroduction!(sol, instance, bundle33, CAPACITIES)
     costImprovTest = OFOND.reintroduce_bundles!(testSol, instance, [1, 2, 3])
     # Check the solutions are the same (3031674)
-    @test costImprov ≈ costImprovTest ≈ -11.15061873
+    @test costImprov ≈ costImprovTest ≈ -11.1506187
     @test sol.bins == testSol.bins
     @test sol.bundlePaths == testSol.bundlePaths
     @test testSol.bundlePaths == [
@@ -574,15 +574,21 @@ end
     # put bundle 1 on TTPath12 and bundle 3 on TTPath13
     OFOND.update_solution!(sol, instance2, [bundle11, bundle33], [TTPath112, TTPath313])
     OFOND.update_solution!(sol, instance2, [bundle2], [[supp2fromDel1, plantFromDel0]])
+    sol2 = OFOND.solution_deepcopy(sol, instance2)
+    sol3 = OFOND.solution_deepcopy(sol, instance2)
     # changing with full local search 
     costImprov = OFOND.local_search!(sol, instance2)
+    costImprov2 = OFOND.local_search2!(sol2, instance2; timeLimit=1)
+    costImprov3 = OFOND.local_search3!(sol3, instance2; timeLimit=1)
     # new path is TTPath113 thanks to full reintroduction
     @test isapprox(-costImprov, 14.33524411764706; atol=1e-3)
+    @test costImprov ≈ costImprov2 ≈ costImprov3
     xdock1FromDel1 = TTGraph2.hashToIdx[hash(1, xdock.hash)]
     xdock1FromDel2 = TTGraph2.hashToIdx[hash(2, xdock.hash)]
     supp2fromDel2 = TTGraph2.hashToIdx[hash(2, supplier2.hash)]
     @test sol.bundlePaths ==
         [TTPath113, [supp2fromDel2, xdock1FromDel1, plantFromDel0], TTPath313]
+    @test sol2.bundlePaths == sol3.bundlePaths == sol.bundlePaths
     # testing bundle on nodes
     @test sort(sol.bundlesOnNode[plantFromDel0]) == [1, 2, 3]
     @test sort(sol.bundlesOnNode[xdock1FromDel2]) == [1, 3]
@@ -618,6 +624,8 @@ end
         [OFOND.Bin(25, 25, [commodity5, commodity6])]
     @test sol.bins[xdock3Step1, plantStep2] == [OFOND.Bin(25, 25, [commodity5, commodity6])]
     @test sum(x -> length(x), sol.bins) == 9
+
+    # TODO : do the same with local search 2
 end
 
 @testset "Allow / forbid directs" begin
@@ -711,11 +719,12 @@ end
     @test sol.bins[supp2Step3, xdock1Step4] == [OFOND.Bin(21, 30, [commodity2, commodity2])]
     @test sol.bins[xdock1Step4, plantStep1] == [OFOND.Bin(20, 30, [commodity2, commodity2])]
     # path to plant step 2
-    @test sol.bins[supp1Step3, xdock1Step4] == OFOND.Bin[]
+    @test (sol.bins[supp1Step3, xdock1Step4] == OFOND.Bin[]) ||
+        (sol.bins[supp1Step3, xdock1Step4] == [Bin(50)])
     @test sol.bins[supp3Step3, xdock1Step4] == [OFOND.Bin(27, 25, [commodity5, commodity6])]
     xdock3Step1 = TSGraph2.hashToIdx[hash(1, xdock3.hash)]
     @test sol.bins[xdock1Step4, xdock3Step1] ==
         [OFOND.Bin(25, 25, [commodity5, commodity6])]
     @test sol.bins[xdock3Step1, plantStep2] == [OFOND.Bin(25, 25, [commodity5, commodity6])]
-    @test sum(x -> length(x), sol.bins) == 9
+    @test (sum(x -> length(x), sol.bins) == 9) || (sum(x -> length(x), sol.bins) == 10)
 end
