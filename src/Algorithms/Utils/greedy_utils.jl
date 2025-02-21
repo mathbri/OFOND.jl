@@ -29,8 +29,8 @@ function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::
     dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
     # Node volume cost + Arc carbon cost + Commodity stock cost
     return dstData.volumeCost * order.volume / VOLUME_FACTOR +
-           arcData.carbonCost * order.volume / arcData.capacity
-    #    arcData.distance * order.stockCost
+           #    arcData.distance * order.stockCost
+           arcData.carbonCost * order.volume / arcData.volumeCapacity
 end
 
 # Computes transport units for an order

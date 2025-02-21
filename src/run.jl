@@ -93,8 +93,8 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
     startTime = time()
     # Complete Instance object with all properties needed
 
-    CAPACITIES = Int[]
-    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    CAPACITIES_V, CAPACITIES_W = Int[], Int[]
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES_V)
     @info "Pre-solve done" :pre_solve_time = get_elapsed_time(startTime)
 
     # Initialize solution object

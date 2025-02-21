@@ -56,7 +56,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
         arcData = TSGraph.networkArcs[src(arc), dst(arc)]
         dstData = TSGraph.networkNodes[dst(arc)]
         for bin in solution.bins[src(arc), dst(arc)]
-            fillingRate = (bin.load / arcData.capacity)
+            fillingRate = (bin.volumeLoad / arcData.volumeCapacity)
             transportCost = arcData.unitCost
             arcData.isLinear && (transportCost *= fillingRate)
             print(io, bin.idx, ",") # shipment_id
@@ -65,8 +65,8 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, instance.dates[TSGraph.timeStep[src(arc)]], ",") # point_start_date
             print(io, instance.dates[TSGraph.timeStep[dst(arc)]], ",") # point_end_date
             print(io, arcData.type, ",") # type
-            print(io, bin.load / VOLUME_FACTOR, ",") # volume
-            print(io, sum(com.weight for com in bin.content) / WEIGHT_FACTOR, ",") # weight
+            print(io, bin.volumeLoad / VOLUME_FACTOR, ",") # volume
+            print(io, bin.weightLoad / WEIGHT_FACTOR, ",") # weight
             # Adding price if available
             srcH = TSGraph.networkNodes[src(arc)].hash
             dstH = TSGraph.networkNodes[dst(arc)].hash

@@ -54,3 +54,23 @@ function add_properties(order::Order, bin_packing::Function, CAPACITIES::Vector{
         stockCost,
     )
 end
+
+function order_1D(order::Order; mixing::Bool=false)
+    newContent = [commodity_1D(commodity; mixing=mixing) for commodity in order.content]
+    volume = sum(com -> com.size, newContent)
+    for arcType in BP_ARC_TYPES
+        capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
+        order.bpUnits[arcType] = tentative_first_fit(Bin[], capacity, newContent, Int[])
+    end
+    minPackSize = minimum(com -> com.size, newContent)
+    return Order(
+        order.bundleHash,
+        order.deliveryDate,
+        newContent,
+        order.hash,
+        volume,
+        order.bpUnits,
+        minPackSize,
+        order.stockCost,
+    )
+end

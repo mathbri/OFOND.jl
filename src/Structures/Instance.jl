@@ -1,5 +1,9 @@
 # Instance structure to store problem metadata
 
+# TODO : think about the following
+# A lot of metadata of the problem are superfluous to solve the problem (dates, coordinates, ...)
+# The instance could be reduced to only the data needed with the metadata needed for extraction stored somewhere else
+
 struct Instance
     # Network 
     networkGraph::NetworkGraph
@@ -14,6 +18,7 @@ struct Instance
     # Fields needed for writing the solution
     dates::Vector{String}
     partNumbers::Dict{UInt,String}
+    prices::Dict{UInt,String}
 end
 
 # Methods
@@ -24,7 +29,6 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
-    println("Properties added to bundles")
     for bundle in newBundles
         newOrders = [
             add_properties(order, bin_packing, CAPACITIES) for order in bundle.orders
@@ -32,7 +36,6 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
         empty!(bundle.orders)
         append!(bundle.orders, newOrders)
     end
-    println("Properties added to orders")
     newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
     @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
@@ -45,6 +48,7 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
         instance.timeHorizon,
         instance.dates,
         instance.partNumbers,
+        instance.prices,
     )
 end
 
@@ -109,6 +113,7 @@ function extract_sub_instance(
         timeHorizon,
         instance.dates[1:timeHorizon],
         instance.partNumbers,
+        instance.prices,
     )
 end
 
@@ -151,5 +156,21 @@ function extract_sub_instance2(
         timeHorizon,
         instance.dates[1:timeHorizon],
         instance.partNumbers,
+    )
+
+
+function instance_1D(instance::Instance; mixing::Bool=false)
+    # Changing all commodities with a new size 
+    newBundles = [bundle_1D(bundle; mixing=mixing) for bundle in instance.bundles]
+    @info "Changed instance to 1D (mixing = $mixing)"
+    return Instance(
+        instance.networkGraph,
+        TravelTimeGraph(instance.networkGraph, newBundles),
+        instance.timeSpaceGraph,
+        newBundles,
+        instance.timeHorizon,
+        instance.dates,
+        instance.partNumbers,
+        instance.prices,
     )
 end

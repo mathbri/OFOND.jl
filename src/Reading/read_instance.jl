@@ -54,10 +54,11 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         row.distance,
         floor(Int, row.travel_time + 0.5),
         isCommon,
-        min(row.shipment_cost, 1e5),
+        min(row.shipment_cost, 1.5e4),
         row.is_linear,
         row.carbon_cost,
         round(Int, row.capacity * VOLUME_FACTOR),
+        WEIGHT_CAPACITY,
     )
 end
 
@@ -118,7 +119,11 @@ function com_weight(row::CSV.Row)
     if row.weight_per_emb === missing
         return 1
     end
-    return round(Int, max(1, row.weight_per_emb * WEIGHT_FACTOR))
+    weight = row.weight_per_emb * WEIGHT_FACTOR
+    while weight > WEIGHT_CAPACITY
+        weight = weight / WEIGHT_FACTOR
+    end
+    return round(Int, max(1, weight))
 end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)

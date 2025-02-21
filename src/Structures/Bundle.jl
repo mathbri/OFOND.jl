@@ -78,3 +78,15 @@ function average_bundle(bundle::Bundle, timeHorizon::Int)
         bundle.supplier, bundle.customer, [newOrder], bundle.idx, bundle.hash, 0, 0
     )
 end
+
+function bundle_1D(bundle::Bundle; mixing::Bool=false)
+    return Bundle(
+        bundle.supplier,
+        bundle.customer,
+        [order_1D(order; mixing=mixing) for order in bundle.orders],
+        bundle.idx,
+        bundle.hash,
+        bundle.maxPackSize,
+        bundle.maxDelTime,
+    )
+end
