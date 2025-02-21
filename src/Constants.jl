@@ -16,6 +16,8 @@ const WEIGHT_FACTOR = 1000
 
 const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
+const WEIGHT_CAPACITY = 24000
+const SCORE_FACTOR = 7000 / 24000
 
 const PERTURBATIONS = [:single_plant, :two_shared_node, :attract, :reduce]
 

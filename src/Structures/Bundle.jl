@@ -67,3 +67,15 @@ function remove_orders_outside_horizon(bundle::Bundle, timeHorizon::Int)
         bundle.maxDelTime,
     )
 end
+
+function bundle_1D(bundle::Bundle; mixing::Bool=false)
+    return Bundle(
+        bundle.supplier,
+        bundle.customer,
+        [order_1D(order; mixing=mixing) for order in bundle.orders],
+        bundle.idx,
+        bundle.hash,
+        bundle.maxPackSize,
+        bundle.maxDelTime,
+    )
+end

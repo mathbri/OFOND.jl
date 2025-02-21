@@ -56,11 +56,15 @@ function julia_main()::Cint
     # println("Instance dates : $(instance.dates)")
 
     # adding properties to the instance
-    CAPACITIES = Int[]
-    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    CAPACITIES_V, CAPACITIES_W = Int[], Int[]
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES_V)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+    totWei = sum(
+        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance.bundles
+    )
+    println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
 
     # read solution
     sol_file = joinpath(directory, "route_Preprocessed.csv")
@@ -88,34 +92,61 @@ function julia_main()::Cint
     end
 
     println("Exporting current solution to $exportDir")
-    write_solution(solution, instance; suffix="current", directory=exportDir)
+    # write_solution(solution, instance; suffix="current", directory=exportDir)
 
-    # Reading instance again but ignoring current network
-    instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
-    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    # Transform here from 2D to 1D
+    instance1D = instance_1D(instance; mixing=true)
 
-    totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
+    # Computing current solution in 1D to get a reference also
+    solution1D = Solution(instance1D)
+    update_solution!(solution1D, instance1D, instance1D.bundles, solution.bundlePaths)
+    # solution1D = read_solution(instance1D, sol_file)
+    println("Cost of 1D current solution : $(compute_cost(instance1D, solution1D))")
+
+    # # Reading instance again but ignoring current network
+    # instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+
+    # # Transform here from 2D to 1D
+    # instance1D = instance_1D(instance; mixing=false)
+    # instance1D = add_properties(instance, tentative_first_fit, CAPACITIES_V)
+
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
 
+    totWei = sum(
+        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance1D.bundles
+    )
+    println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
+
     # Filtering procedure 
-    _, solution_LBF = lower_bound_filtering_heuristic(instance)
+    _, solution_LBF = lower_bound_filtering_heuristic(instance1D)
     println(
         "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
     )
-    instanceSub = extract_filtered_instance(instance, solution_LBF)
-    instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
+    instanceSub = extract_filtered_instance(instance1D, solution_LBF)
+    instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES_V)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instanceSub.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
+    totWei = sum(
+        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instanceSub.bundles
+    )
+    println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
     println(
         "Common arcs in travel time graph : $(count(x -> x.type in BP_ARC_TYPES, instanceSub.travelTimeGraph.networkArcs))",
     )
 
     # Greedy or Lower Bound than Local Search heuristic
-    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=300)
+    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=100)
 
     # Fusing solutions
-    finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
+    # finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
+    finalSolution1D = solutionSub_GLS
+
+    # Un-transform here from 1D to 2D
+    finalSolution = Solution(instance)
+    update_solution!(finalSolution, instance, instance.bundles, finalSolution1D.bundlePaths)
+    println("Cost of 2D proposed solution : $(compute_cost(instance, finalSolution))")
 
     # Cleaning final solution linears arcs
     @info "Cleaning final solution before extraction"

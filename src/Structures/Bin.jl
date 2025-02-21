@@ -6,49 +6,70 @@
 
 mutable struct Bin
     idx::Int                    # index for output purposes
-    capacity::Int               # space left in the bin
-    load::Int                   # space used in the bin
+    volumeCapacity::Int         # space left in the bin
+    volumeLoad::Int             # space used in the bin
+    weightCapacity::Int         # weight left in the bin
+    weightLoad::Int             # weight used in the bin
     content::Vector{Commodity}  # which commodity is in the bin
 
-    function Bin(capacity::Int, load::Int, content::Vector{Commodity})
-        @assert capacity >= 0 && load >= 0
+    function Bin(capaV::Int, loadV::Int, capaW::Int, loadW::Int, content::Vector{Commodity})
+        @assert capaV >= 0 && loadV >= 0 && capaW >= 0 && loadW >= 0
         binIdx = round(Int, rand() * typemax(Int))
-        return new(binIdx, capacity, load, content)
+        return new(binIdx, capaV, loadV, capaW, loadW, content)
     end
-    Bin(capacity::Int) = new(rand(Int), capacity, 0, Vector{Commodity}())
-    function Bin(fullCapacity::Int, commodity::Commodity)
-        commodity.size > fullCapacity && return Bin(0, fullCapacity, [commodity])
-        return Bin(fullCapacity - commodity.size, commodity.size, [commodity])
+end
+
+function Bin(volumeCapacity::Int, weightCapacity::Int)
+    return Bin(volumeCapacity, 0, weightCapacity, 0, Vector{Commodity}())
+end
+
+function Bin(volumeCapacity::Int, weightCapacity::Int, commodity::Commodity)
+    if commodity.size > volumeCapacity || commodity.weight > weightCapacity
+        return Bin(0, volumeCapacity, 0, weightCapacity, [commodity])
     end
+    capaV = max(0, volumeCapacity - commodity.size)
+    capaW = max(0, weightCapacity - commodity.weight)
+    return Bin(capaV, commodity.size, capaW, commodity.weight, [commodity])
 end
 
 # Methods 
 
 function Base.:(==)(bin1::Bin, bin2::Bin)
-    return bin1.capacity == bin2.capacity &&
-           bin1.load == bin2.load &&
+    return bin1.volumeCapacity == bin2.volumeCapacity &&
+           bin1.volumeLoad == bin2.volumeLoad &&
+           bin1.weightCapacity == bin2.weightCapacity &&
+           bin1.weightLoad == bin2.weightLoad &&
            bin1.content == bin2.content
 end
 
 function Base.show(io::IO, bin::Bin)
-    return print(io, "Bin($(bin.capacity), $(bin.load), $(bin.content))")
+    return print(
+        io,
+        "Bin($(bin.volumeCapacity), $(bin.volumeLoad), $(bin.weightCapacity), $(bin.weightLoad), $(bin.content))",
+    )
 end
 
 function add!(bin::Bin, commodity::Commodity)
-    if bin.capacity >= commodity.size
+    if bin.volumeCapacity >= commodity.size && bin.weightCapacity >= commodity.weight
         push!(bin.content, commodity)
-        bin.capacity -= commodity.size
-        bin.load += commodity.size
+        bin.volumeCapacity -= commodity.size
+        bin.volumeLoad += commodity.size
+        bin.weightCapacity -= commodity.weight
+        bin.weightLoad += commodity.weight
         return true
     end
     return false
 end
 
 function remove!(bin::Bin, commodity::Commodity)
-    fullCapa, contentLength = bin.capacity + bin.load, length(bin.content)
+    fullCapaV = bin.volumeCapacity + bin.volumeLoad
+    fullCapaW = bin.weightCapacity + bin.weightLoad
+    contentLength = length(bin.content)
     filter!(com -> com != commodity, bin.content)
-    bin.load = sum(com -> com.size, bin.content; init=0)
-    bin.capacity = fullCapa - bin.load
+    bin.volumeLoad = sum(com -> com.size, bin.content; init=0)
+    bin.volumeCapacity = fullCapaV - bin.volumeLoad
+    bin.weightLoad = sum(com -> com.weight, bin.content; init=0)
+    bin.weightCapacity = fullCapaW - bin.weightLoad
     return contentLength > length(bin.content)
 end
 

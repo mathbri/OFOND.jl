@@ -235,21 +235,22 @@ function compute_arc_cost(
 )::Float64
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
-    arcVolume = sum(bin.load for bin in bins)
+    arcVolume = sum(bin.volumeLoad for bin in bins)
     arcLeadTimeCost = sum(stock_cost(bin) for bin in bins; init=0.0)
     # Node cost 
     # println(arcData)
     # println("Arc volume : $arcVolume")
     # println("Number of bins on it : $(length(bins))")
+    # println("Bins : $bins")
     cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
     # println("Node cost : $cost ($(dstData.volumeCost) * $arcVolume / $VOLUME_FACTOR)")
-    cost += arcData.carbonCost * arcVolume / arcData.capacity
+    cost += arcData.carbonCost * arcVolume / arcData.volumeCapacity
     # println(
-    #     "Carbon cost : $cost ($(arcData.carbonCost) * $arcVolume / $(arcData.capacity))"
+    #     "Carbon cost : $cost ($(arcData.carbonCost) * $arcVolume / $(arcData.volumeCapacity))",
     # )
     # Transport cost 
     transportUnits =
-        arcData.isLinear ? (arcVolume / arcData.capacity) : Float64(length(bins))
+        arcData.isLinear ? (arcVolume / arcData.volumeCapacity) : Float64(length(bins))
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
     # println("Current cost asked ? $current_cost")
     cost += transportUnits * transportCost
@@ -260,8 +261,11 @@ function compute_arc_cost(
 end
 
 # Compute the cost of a solution : node cost + arc cost + commodity cost
-function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
+function compute_cost(
+    instance::Instance, solution::Solution; current_cost::Bool=false, verbose::Bool=true
+)
     totalCost = 0.0
+    i, j, k = 0, 0, 0
     for arc in edges(instance.timeSpaceGraph.graph)
         arcBins = solution.bins[src(arc), dst(arc)]
         # If there is no bins, skipping arc
@@ -270,8 +274,20 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
         totalCost += compute_arc_cost(
             instance.timeSpaceGraph, arcBins, src(arc), dst(arc); current_cost=current_cost
         )
-        # throw(ErrorException("Test"))
+        TSArcs = instance.timeSpaceGraph.networkArcs
+        i += 1
+        j += length(arcBins)
+        k += ceil(
+            Int,
+            sum(bin.volumeLoad for bin in arcBins) /
+            TSArcs[src(arc), dst(arc)].volumeCapacity,
+        )
+        # println()
+        # if i == 3
+        #     throw(ErrorException("Test"))
+        # end
     end
+    verbose && println("$i arcs : $j bins (BP) / $k bins (GC)")
     return totalCost
 end
 

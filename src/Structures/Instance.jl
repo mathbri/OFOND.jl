@@ -116,3 +116,19 @@ function extract_sub_instance(
         instance.prices,
     )
 end
+
+function instance_1D(instance::Instance; mixing::Bool=false)
+    # Changing all commodities with a new size 
+    newBundles = [bundle_1D(bundle; mixing=mixing) for bundle in instance.bundles]
+    @info "Changed instance to 1D (mixing = $mixing)"
+    return Instance(
+        instance.networkGraph,
+        TravelTimeGraph(instance.networkGraph, newBundles),
+        instance.timeSpaceGraph,
+        newBundles,
+        instance.timeHorizon,
+        instance.dates,
+        instance.partNumbers,
+        instance.prices,
+    )
+end

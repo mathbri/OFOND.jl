@@ -19,14 +19,14 @@ end
 
 function get_lb_transport_units(order::Order, arcData::NetworkArc)
     # If the arc is shared or already linear
-    arcData.type != :direct && return (order.volume / arcData.capacity)
+    arcData.type != :direct && return (order.volume / arcData.volumeCapacity)
     # If the arc is direct
-    return ceil(order.volume / arcData.capacity)
+    return ceil(order.volume / arcData.volumeCapacity)
 end
 
 function get_transport_units(order::Order, arcData::NetworkArc)
     # If the arc has linear cost
-    arcData.isLinear && return (order.volume / arcData.capacity)
+    arcData.isLinear && return (order.volume / arcData.volumeCapacity)
     # If the arc is consolidated
     return get(order.bpUnits, arcData.type, 0)
 end

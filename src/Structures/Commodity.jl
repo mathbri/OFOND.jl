@@ -35,3 +35,10 @@ end
 function Base.zero(::Type{Commodity})
     return Commodity(UInt(0), UInt(0), 0, 0, 0.0)
 end
+
+function commodity_1D(commodity::Commodity; mixing::Bool=false)
+    oh, ph = commodity.orderHash, commodity.partNumHash
+    size, weight = commodity.size, commodity.weight
+    newSize = mixing ? round(Int, (size + weight * SCORE_FACTOR) / 2) : size
+    return Commodity(oh, ph, max(size, newSize), 0, commodity.stockCost)
+end

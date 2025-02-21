@@ -51,13 +51,14 @@ end
 
 function refill_bins!(bins::Vector{Bin}, fullCapacity::Int)
     # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
-    ceil(sum(bin.load for bin in bins) / fullCapacity) == length(bins) && return 0
+    ceil(sum(bin.volumeLoad for bin in bins; init=0) / fullCapacity) == length(bins) &&
+        return 0
     # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
     allCommodities = get_all_commodities(bins)
     binsBefore = length(bins)
     empty!(bins)
     # Filling it back again
-    first_fit_decreasing!(bins, fullCapacity, allCommodities; sorted=false)
+    first_fit_decreasing!(bins, fullCapacity, WEIGHT_CAPACITY, allCommodities; sorted=false)
     return length(bins) - binsBefore
 end
 
@@ -86,7 +87,8 @@ function refill_bins!(
             end
             # Adding new bins cost
             costAdded +=
-                refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
+                refill_bins!(solution.bins[tSrc, tDst], arcData.volumeCapacity) *
+                arcData.unitCost
         end
     end
     return costAdded
@@ -120,7 +122,8 @@ function refill_bins!(
             arcData.isLinear && continue
             # Adding new bins cost
             costAdded +=
-                refill_bins!(solution.bins[tSrc, tDst], arcData.capacity) * arcData.unitCost
+                refill_bins!(solution.bins[tSrc, tDst], arcData.volumeCapacity) *
+                arcData.unitCost
         end
     end
     return costAdded

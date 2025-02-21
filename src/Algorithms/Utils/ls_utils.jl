@@ -5,8 +5,8 @@ function is_bin_candidate(bins::Vector{Bin}, arcData::NetworkArc; skipLinear::Bo
     length(bins) <= 1 && return false
     skipLinear && arcData.isLinear && return false
     # If there is no gap with the lower bound, skipping arc
-    arcVolume = sum(bin.load for bin in bins)
-    ceil(arcVolume / arcData.capacity) == length(bins) && return false
+    arcVolume = sum(bin.volumeLoad for bin in bins)
+    ceil(arcVolume / arcData.volumeCapacity) == length(bins) && return false
     return true
 end
 
@@ -14,8 +14,12 @@ function compute_new_bins(
     arcData::NetworkArc, allCommodities::Vector{Commodity}; sorted::Bool
 )
     # TODO : parrallelize the recomputations with the different heuristics
-    newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
-    bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
+    newBins = first_fit_decreasing(
+        Bin[], arcData.volumeCapacity, arcData.weightCapacity, allCommodities; sorted=sorted
+    )
+    bfdBins = best_fit_decreasing(
+        Bin[], arcData.volumeCapacity, allCommodities; sorted=sorted
+    )
     length(newBins) > length(bfdBins) && (newBins = bfdBins)
     return newBins
 end
@@ -27,8 +31,12 @@ function compute_new_bins(
     };
     sorted::Bool,
 )
-    newBins = first_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
-    bfdBins = best_fit_decreasing(Bin[], arcData.capacity, allCommodities; sorted=sorted)
+    newBins = first_fit_decreasing(
+        Bin[], arcData.volumeCapacity, arcData.weightCapacity, allCommodities; sorted=sorted
+    )
+    bfdBins = best_fit_decreasing(
+        Bin[], arcData.volumeCapacity, allCommodities; sorted=sorted
+    )
     length(newBins) > length(bfdBins) && (newBins = bfdBins)
     return newBins
 end
@@ -232,8 +240,8 @@ end
 # computes an (over)estimated number of bins removed 
 function estimated_transport_units(order::Order, bins::Vector{Bin})
     n, vol = 0, 0
-    for binIdx in sortperm(bins; by=bin -> bin.load)
-        vol += bins[binIdx].load
+    for binIdx in sortperm(bins; by=bin -> bin.volumeLoad)
+        vol += bins[binIdx].volumeLoad
         vol >= order.volume && return n
         n += 1
     end

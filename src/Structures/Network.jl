@@ -46,10 +46,11 @@ struct NetworkArc
     isLinear::Bool       # is it linear cost or bin-packing cost 
     carbonCost::Float64  # co2 cost induced by (fully-loaded) transport units
     # Load
-    capacity::Int        # transport unit capacity
+    volumeCapacity::Int  # transport unit volume capacity
+    weightCapacity::Int  # transport unit volume capacity
 end
 
-const SHORTCUT = NetworkArc(:shortcut, EPS, 1, false, EPS, false, EPS, 1_000_000)
+const SHORTCUT = NetworkArc(:shortcut, EPS, 1, false, EPS, false, EPS, 1_000_000, 1_000_000)
 
 # Network Graph
 struct NetworkGraph
@@ -182,7 +183,7 @@ end
 
 # TODO : change from this to throw error ?
 function Base.zero(::Type{NetworkArc})
-    return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0)
+    return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0, 0)
 end
 
 function Base.show(io::IO, node::NetworkNode)
