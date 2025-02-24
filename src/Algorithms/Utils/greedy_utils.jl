@@ -91,6 +91,28 @@ function arc_update_cost(
 )
     # If the arc is forbidden for the bundle, returning INF
     # is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
+    # arcsToCheck = partition(
+    #     [
+    #         11548,
+    #         8978,
+    #         8966,
+    #         16033,
+    #         16119,
+    #         16382,
+    #         15993,
+    #         16394,
+    #         16105,
+    #         16031,
+    #         16117,
+    #         16152,
+    #         256,
+    #     ],
+    #     2,
+    #     1,
+    # )
+    # if bundle.idx == 6309 && (src, dst) in arcsToCheck
+    #     println("Arc $(src)-$(dst)")
+    # end
     # Otherwise, computing the new cost
     arcBundleCost = EPS
     for order in bundle.orders
@@ -114,7 +136,14 @@ function arc_update_cost(
             units *
             transport_cost(TSGraph, tSrc, tDst; current_cost=current_cost) *
             opening_factor
+        # if bundle.idx == 6309 && (src, dst) in arcsToCheck
+        #     println(order)
+        #     println("Cost added after order : $arcBundleCost")
+        # end
     end
+    # if bundle.idx == 6309 && (src, dst) in arcsToCheck
+    #     println()
+    # end
     return arcBundleCost
 end
 
@@ -216,7 +245,14 @@ function create_channel(::Type{Vector{Int}}; n::Int=Threads.nthreads())
     return chnl
 end
 
-# TODO : benchmark the time saved 
+function create_filled_channel(; n::Int=Threads.nthreads(), bufferSize::Int=200)
+    chnl = Channel{Vector{Int}}(n)
+    foreach(1:n) do _
+        put!(chnl, [0 for _ in 1:bufferSize])
+    end
+    return chnl
+end
+
 function parallel_update_cost_matrix!(
     solution::Solution,
     TTGraph::TravelTimeGraph,
@@ -273,6 +309,7 @@ function parallel_update_cost_matrix2!(
     CHANNEL::Channel{Vector{Int}},
     sorted::Bool=true,
     use_bins::Bool=true,
+    opening_factor::Float64=1.0,
 )
     # Iterating in parallel (thanks to @tasks) through the bundle arcs
     @tasks for (src, dst) in TTGraph.bundleArcs[bundle.idx]
@@ -288,6 +325,7 @@ function parallel_update_cost_matrix2!(
                 CAPACITIES;
                 sorted=sorted,
                 use_bins=use_bins,
+                opening_factor=opening_factor,
             )
         else
             EPS

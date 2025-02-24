@@ -63,7 +63,7 @@ function NetworkGraph()
         label_type=UInt,
         vertex_data_type=NetworkNode,
         edge_data_type=NetworkArc,
-        graph_data=nothing,
+        graph_data=Dict{Symbol,Int}(),
     )
     return NetworkGraph(network)
 end

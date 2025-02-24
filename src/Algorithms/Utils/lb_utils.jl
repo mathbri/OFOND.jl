@@ -118,6 +118,35 @@ function update_lb_cost_matrix!(
     end
 end
 
+# Doing like greedy beacuse doesn't work for lower bound to have channels with travel time graphs
+function parallel_update_lb_cost_matrix!(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    use_bins::Bool=false,
+    giant::Bool=false,
+)
+    # Iterating in parallel (thanks to @tasks) through the bundle arcs
+    @tasks for (src, dst) in TTGraph.bundleArcs[bundle.idx]
+        TTGraph.costMatrix[src, dst] = if is_update_candidate(TTGraph, src, dst, bundle)
+            arc_lb_update_cost(
+                solution,
+                TTGraph,
+                TSGraph,
+                bundle,
+                src,
+                dst;
+                use_bins=use_bins,
+                current_cost=false,
+                giant=giant,
+            )
+        else
+            EPS
+        end
+    end
+end
+
 # Updating cost matrix on the travel time graph for a specific bundle 
 function update_lb_filtering_cost_matrix!(
     travelTimeGraph::TravelTimeGraph, timeSpaceGraph::TimeSpaceGraph, bundle::Bundle
@@ -130,5 +159,18 @@ function update_lb_filtering_cost_matrix!(
         travelTimeGraph.costMatrix[src, dst] = arc_lb_filtering_update_cost(
             travelTimeGraph, timeSpaceGraph, bundle, src, dst
         )
+    end
+end
+
+function parallel_update_lb_filtering_cost_matrix!(
+    TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundle::Bundle
+)
+    # Iterating in parallel (thanks to @tasks) through the bundle arcs
+    @tasks for (src, dst) in TTGraph.bundleArcs[bundle.idx]
+        TTGraph.costMatrix[src, dst] = if is_update_candidate(TTGraph, src, dst, bundle)
+            arc_lb_filtering_update_cost(TTGraph, TSGraph, bundle, src, dst)
+        else
+            EPS
+        end
     end
 end

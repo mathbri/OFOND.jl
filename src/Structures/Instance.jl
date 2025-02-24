@@ -24,6 +24,7 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
+    println("Properties added to bundles")
     for bundle in newBundles
         newOrders = [
             add_properties(order, bin_packing, CAPACITIES) for order in bundle.orders
@@ -31,6 +32,7 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
         empty!(bundle.orders)
         append!(bundle.orders, newOrders)
     end
+    println("Properties added to orders")
     newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
     @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
@@ -163,7 +165,7 @@ end
 # but it should be an efficient heuristic in terms of coding time and performance trade-off
 
 # Split the instance into multiple instances based on the common time horizon given, 12 weeks by default
-function split_instance(instance::Instance, newHorizon::Int=12)
+function split_instance(instance::Instance, newHorizon::Int=13)
     nFullInstances = div(instance.timeHorizon, newHorizon)
     network = instance.networkGraph
     splitInstances = Instance[]
@@ -195,6 +197,69 @@ function split_instance(instance::Instance, newHorizon::Int=12)
         push!(splitInstances, newInstance)
     end
     return splitInstances
+end
+
+# Split the instance into multiple instances based on the common time horizon given, 12 weeks by default
+function split_all_bundles_by_part(instance::Instance)
+    # Splitting all bundles
+    newBundles = vcat([split_bundle_by_part(bundle, 1) for bundle in instance.bundles]...)
+    nBun = length(newBundles)
+    println("Split $(length(instance.bundles)) bundles into $nBun bundles")
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
+    nBun = length(newBundles)
+    nOrd = sum(length(bundle.orders) for bundle in newBundles; init=0)
+    nCom = sum(
+        sum(length(order.content) for order in bundle.orders) for bundle in newBundles;
+        init=0,
+    )
+    nComU = sum(
+        sum(length(unique(order.content)) for order in bundle.orders) for
+        bundle in newBundles;
+        init=0,
+    )
+    timeHorizon = instance.timeHorizon
+    @info "Split instance (by parts) $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique) on a $timeHorizon steps time horizon"
+    return Instance(
+        instance.networkGraph,
+        TravelTimeGraph(instance.networkGraph, newBundles),
+        TimeSpaceGraph(instance.networkGraph, timeHorizon),
+        newBundles,
+        timeHorizon,
+        instance.dates[1:timeHorizon],
+        instance.partNumbers,
+    )
+end
+
+function split_all_bundles_by_time(instance::Instance, newHorizon::Int=13)
+    # Splitting all bundles
+    newBundles = vcat(
+        [split_bundle_by_time(bundle, 1, newHorizon) for bundle in instance.bundles]...
+    )
+    newBundles = [bundle for bundle in newBundles if length(bundle.orders) > 0]
+    nBun = length(newBundles)
+    println("Split $(length(instance.bundles)) bundles into $nBun bundles")
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
+    nOrd = sum(length(bundle.orders) for bundle in newBundles; init=0)
+    nCom = sum(
+        sum(length(order.content) for order in bundle.orders) for bundle in newBundles;
+        init=0,
+    )
+    nComU = sum(
+        sum(length(unique(order.content)) for order in bundle.orders) for
+        bundle in newBundles;
+        init=0,
+    )
+    timeHorizon = instance.timeHorizon
+    @info "Split instance (by time) $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique) on a $timeHorizon steps time horizon"
+    return Instance(
+        instance.networkGraph,
+        TravelTimeGraph(instance.networkGraph, newBundles),
+        TimeSpaceGraph(instance.networkGraph, timeHorizon),
+        newBundles,
+        timeHorizon,
+        instance.dates[1:timeHorizon],
+        instance.partNumbers,
+    )
 end
 
 function outsource_arc(arc::NetworkArc, oursourceCost::Float64)

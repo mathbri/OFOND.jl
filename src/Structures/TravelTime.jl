@@ -194,28 +194,83 @@ function add_arc_to_vectors!(
     return append!(costs, fill(EPS, length(srcs)))
 end
 
-function add_bundle_arcs!(travelTimeGraph::TravelTimeGraph, bundle::Bundle)
+function add_bundle_arcs!(
+    travelTimeGraph::TravelTimeGraph,
+    bundle::Bundle,
+    commonNetworkReach::Dict{Tuple{Int,Int},Bool},
+)
     bunArcs = Tuple{Int,Int}[]
+    bunArcs2 = Tuple{Int,Int}[]
     # Discovering all nodes reachable from the bundle source 
     reachableNodes = bfs_parents(
         travelTimeGraph.graph, travelTimeGraph.bundleSrc[bundle.idx]
     )
     # If a node cannot be reached, it as 0 as parent
     reachableNodes = [i for (i, n) in enumerate(reachableNodes) if n != 0]
-    # Constrcuting bundle arcs by adding all outgoing arcs of all reachable nodes
+    # Constructing bundle arcs by adding all outgoing arcs of all reachable nodes
     bunDst = travelTimeGraph.bundleDst[bundle.idx]
     for arcSrc in reachableNodes
-        # If the source cannot reach the plant, I don't need it in the bundle arcs 
-        if !has_path(travelTimeGraph.graph, arcSrc, bunDst)
+        srcData = travelTimeGraph.networkNodes[arcSrc]
+        # If the source is in the common network and it can't reach the pant
+        if srcData.type != :supplier && !haskey(commonNetworkReach, (arcSrc, bunDst))
+            # We can skip it directly 
             continue
         end
-        # Adding all outgoing arcs that can lead to the plant
-        outSrcArcs = filter(
-            arcDst -> has_path(travelTimeGraph.graph, arcDst, bunDst),
-            outneighbors(travelTimeGraph.graph, arcSrc),
-        )
-        append!(bunArcs, [(arcSrc, arcDst) for arcDst in outSrcArcs])
+        # Otherwise, it is either a supplier (a plant can't be a source) or a common node that can reach the plant
+        # We will need to check its outneighbors to see which arcs we want to keep
+        for outNeighbor in outneighbors(travelTimeGraph.graph, arcSrc)
+            # For every outneighbor 
+            outData = travelTimeGraph.networkNodes[outNeighbor]
+            # Either it is a common node and we need to check if it can reach the plant
+            if outData.type != :plant && outData.type != :supplier
+                if haskey(commonNetworkReach, (outNeighbor, bunDst))
+                    # If it can reach, adding it 
+                    push!(bunArcs, (arcSrc, outNeighbor))
+                end
+            elseif outData.type == :supplier
+                # Either it is a supplier because shortcut and we add it if has path
+                if has_path(travelTimeGraph.graph, outNeighbor, bunDst)
+                    push!(bunArcs, (arcSrc, outNeighbor))
+                end
+            else
+                # Either it is a plant and we need to check if it is the right plant
+                if outNeighbor == bunDst
+                    push!(bunArcs, (arcSrc, outNeighbor))
+                end
+            end
+        end
     end
+    # for arcSrc in reachableNodes
+    #     # If the source cannot reach the plant, I don't need it in the bundle arcs 
+    #     if !has_path(travelTimeGraph.graph, arcSrc, bunDst)
+    #         continue
+    #     end
+    #     # Adding all outgoing arcs that can lead to the plant
+    #     outSrcArcs = filter(
+    #         arcDst -> has_path(travelTimeGraph.graph, arcDst, bunDst),
+    #         outneighbors(travelTimeGraph.graph, arcSrc),
+    #     )
+    #     append!(bunArcs2, [(arcSrc, arcDst) for arcDst in outSrcArcs])
+    # end
+    # if bunArcs != bunArcs2
+    #     println("Bundle $bundle")
+    #     println(
+    #         "Bundle src and dst : $(travelTimeGraph.bundleSrc[bundle.idx])-$(travelTimeGraph.bundleDst[bundle.idx])",
+    #     )
+    #     println("Reachable nodes : $reachableNodes")
+    #     # println(
+    #     #     "Common reach 1 : $([haskey(commonNetworkReach, (node, bunDst)) for node in reachableNodes])",
+    #     # )
+    #     # println(
+    #     #     "Common reach 2 : $([has_path(travelTimeGraph.graph, node, bunDst) for node in reachableNodes])",
+    #     # )
+    #     sort!(bunArcs)
+    #     println("\nBundle arcs 1 : $(length(bunArcs)) \n$(bunArcs)")
+    #     sort!(bunArcs2)
+    #     println("\nBundle arcs 2 : $(length(bunArcs2)) \n $(bunArcs2)")
+    #     println("\nEqual if sorted : $(bunArcs == bunArcs2)")
+    # end
+    # @assert bunArcs == bunArcs2
     # Adding the complete list to the Travel Time Graph
     return travelTimeGraph.bundleArcs[bundle.idx] = bunArcs
 end
@@ -239,10 +294,27 @@ function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
         srcs, dsts = add_network_arc!(travelTimeGraph, srcData, dstData, arcData)
         add_arc_to_vectors!((I, J, arcs, costs), srcs, dsts, arcData)
     end
+    println(
+        "Common arcs : $((count(arc -> arc.type in COMMON_ARC_TYPES, arcs))) (travel time graph)",
+    )
+    # Computing common network reach
+    println("Reachbility properties : ")
+    plantNodes = findall(node -> node.type == :plant, travelTimeGraph.networkNodes)
+    commonNetworkReach = Dict{Tuple{Int,Int},Bool}()
+    for node in travelTimeGraph.commonNodes
+        for plant in plantNodes
+            if has_path(travelTimeGraph.graph, node, plant)
+                commonNetworkReach[(node, plant)] = true
+            end
+        end
+    end
+    print("Common network done, bundles ")
     # Computing bundle arcs
     for bundle in bundles
-        add_bundle_arcs!(travelTimeGraph, bundle)
+        add_bundle_arcs!(travelTimeGraph, bundle, commonNetworkReach)
+        bundle.idx % 100 == 0 && print("|")
     end
+    println()
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
 end

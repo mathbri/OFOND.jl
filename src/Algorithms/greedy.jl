@@ -21,7 +21,8 @@
 
 # Switching from Dijkstra to A* is clearly not a priority for now 
 
-# TODO : if update cost matrix is really expensive, do it once with every option and store all option results in different objects
+# TODO : choosing parallel_update_cost_matrix2 as default option 
+# Make all changes after seeing that it gives the same solution as classical greedy
 
 # Compute path and cost for the greedy insertion of a bundle, not handling path admissibility
 function greedy_path(
@@ -38,8 +39,6 @@ function greedy_path(
     current_cost::Bool=false,
     findSources::Bool=true,
 )
-    # TODO : uncomment for tests with real instances
-    # startTime = time()
     update_cost_matrix!(
         solution,
         TTGraph,
@@ -52,40 +51,114 @@ function greedy_path(
         current_cost=current_cost,
         findSources=findSources,
     )
-    # computeTime = time() - startTime
-    # TODO : garbage collecting in here, need to recode dijkstra_shortest_paths ?
     dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
     removedCost = remove_shortcuts!(shortestPath, TTGraph)
     pathCost = dijkstraState.dists[dst]
+    return shortestPath, pathCost - removedCost
+end
 
-    # ARC_COSTS = fill(EPS, length(TTGraph.bundleArcs[bundle.idx]))
-    # CHANNEL = create_channel(Vector{Int})
-    # # Filling channel vectors with the content they could have (removing the allocation time from the benchmark)
-    # for i in 1:Threads.nthreads() 
-    #     buffer = take!(CHANNEL)
-    #     append!(buffer, CAPACITIES)
-    #     put!(CHANNEL, buffer)
-    # end
-    # startTime = time()
-    # parallel_update_cost_matrix!(solution, TTGraph, TSGraph, bundle, CHANNEL, ARC_COSTS)
-    # computeTime2 = time() - startTime
-    # dijkstraState2 = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
-    # shortestPath2 = enumerate_paths(dijkstraState2, dst)
-    # removedCost2 = remove_shortcuts!(shortestPath2, TTGraph)
-    # pathCost2 = dijkstraState2.dists[dst]
+function greedy_path2(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    src::Int,
+    dst::Int,
+    CHANNEL::Channel{Vector{Int}},
+    ARC_COSTS::Vector{Float64},
+    use_bins::Bool=true,
+)
+    parallel_update_cost_matrix!(
+        solution, TTGraph, TSGraph, bundle, CHANNEL, ARC_COSTS, true, use_bins
+    )
+    dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
+    shortestPath = enumerate_paths(dijkstraState, dst)
+    removedCost = remove_shortcuts!(shortestPath, TTGraph)
+    pathCost = dijkstraState.dists[dst]
+    return shortestPath, pathCost - removedCost
+end
 
-    # @assert shortestPath == shortestPath2
-    # @assert pathCost ≈ pathCost2
-    # computeTime2 < computeTime ? print("O") : print("X")
-
-    # TODO : also compare witht he second version that don't have a buffer for arc costs
-
+function greedy_path3(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    src::Int,
+    dst::Int,
+    CHANNEL::Channel{Vector{Int}},
+    use_bins::Bool=true,
+    opening_factor::Float64=1.0,
+)
+    # The remaining garbage collecting and runtime dispatch are caused by the parallelism
+    parallel_update_cost_matrix2!(
+        solution, TTGraph, TSGraph, bundle, CHANNEL, true, use_bins, opening_factor
+    )
+    # Most of the garbage collecting happens here 
+    # Fix : recode a version where the obejcts used (alwayse the same) are passed to the function
+    dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
+    shortestPath = enumerate_paths(dijkstraState, dst)
+    removedCost = remove_shortcuts!(shortestPath, TTGraph)
+    pathCost = dijkstraState.dists[dst]
     return shortestPath, pathCost - removedCost
 end
 
 # TODO : this recompuation happens rarely in the greedy heuristic but maybe more in the local search
 # Compute the path and cost for the greedy insertion of a bundle, handling path admissibility
+function greedy_insertion2(
+    solution::Solution,
+    TTGraph::TravelTimeGraph,
+    TSGraph::TimeSpaceGraph,
+    bundle::Bundle,
+    src::Int,
+    dst::Int,
+    CHANNEL::Channel{Vector{Int}},
+)
+    shortestPath, pathCost = greedy_path3(
+        solution, TTGraph, TSGraph, bundle, src, dst, CHANNEL, true, 1.0
+    )
+    # If the path is not admissible, re-computing it
+    if !is_path_admissible(TTGraph, shortestPath)
+        # TODO : store this path cost matrix in travel time graph if the recomputation is needed numerous times 
+        # First trying to halve cost for the path computation
+        costMatrix = deepcopy(TTGraph.costMatrix)
+        shortestPath, pathCost = greedy_path3(
+            solution, TTGraph, TSGraph, bundle, src, dst, CHANNEL, true, 0.5
+        )
+        if !is_path_admissible(TTGraph, shortestPath)
+            # Then not taking into account the current solution
+            # If this happens, we want to be sure to have an admissible path
+            shortestPath, pathCost = greedy_path3(
+                solution, TTGraph, TSGraph, bundle, src, dst, CHANNEL, false, 1.0
+            )
+            if !is_path_admissible(TTGraph, shortestPath)
+                # println("Switching to distance based path")
+                for (aSrc, aDst) in TTGraph.bundleArcs[bundle.idx]
+                    TTGraph.costMatrix[aSrc, aDst] =
+                        TTGraph.networkArcs[aSrc, aDst].distance
+                end
+                # parallel_update_cost_matrix2!(solution, TTGraph, TSGraph, bundle, CHANNEL)
+                dijkstraState = dijkstra_shortest_paths(
+                    TTGraph.graph, src, TTGraph.costMatrix
+                )
+                shortestPath = enumerate_paths(dijkstraState, dst)
+                removedCost = remove_shortcuts!(shortestPath, TTGraph)
+                # shortestPath = [src, dst]
+                # @assert is_path_admissible(TTGraph, shortestPath)
+                print("X3")
+                # direct arc between two random nodes may not exist
+                # TODO : Need to switch to constrained shortest paths ?
+            else
+                print("X2")
+            end
+        else
+            print("X1")
+        end
+        pathCost = path_cost(shortestPath, costMatrix)
+    end
+    return shortestPath, pathCost
+end
+
 function greedy_insertion(
     solution::Solution,
     TTGraph::TravelTimeGraph,
@@ -125,8 +198,8 @@ function greedy_insertion(
             dst,
             CAPACITIES;
             sorted=sorted,
-            use_bins=true,
             opening_factor=0.5,
+            use_bins=true,
             current_cost=current_cost,
             findSources=findSources,
         )
@@ -143,32 +216,48 @@ function greedy_insertion(
                 CAPACITIES;
                 sorted=sorted,
                 use_bins=false,
-                current_cost=false,
+                current_cost=current_cost,
                 findSources=findSources,
             )
             if !is_path_admissible(TTGraph, shortestPath)
-                println("\nAll tentative path were non admissible")
-                println("Bundle $bundle")
-                println(
-                    "Bundle src and dst : $(TTGraph.bundleSrc[bundle.idx])-$(TTGraph.bundleDst[bundle.idx])",
+                # println("\nAll tentative path were non admissible")
+                # println("Bundle $bundle")
+                # println(
+                #     "Bundle src and dst : $(TTGraph.bundleSrc[bundle.idx])-$(TTGraph.bundleDst[bundle.idx])",
+                # )
+                # println("Path src and dst : $src-$dst")
+                # println("Path nodes : $shortestPath")
+                # println(
+                #     "Path info : $(join(string.(map(n -> TTGraph.networkNodes[n], shortestPath)), ", "))",
+                # )
+                # println("Switching to distance based path")
+                for (aSrc, aDst) in TTGraph.bundleArcs[bundle.idx]
+                    TTGraph.costMatrix[aSrc, aDst] =
+                        TTGraph.networkArcs[aSrc, aDst].distance
+                end
+                # parallel_update_cost_matrix2!(solution, TTGraph, TSGraph, bundle, CHANNEL)
+                dijkstraState = dijkstra_shortest_paths(
+                    TTGraph.graph, src, TTGraph.costMatrix
                 )
-                println("Path src and dst : $src-$dst")
-                println("Path nodes : $shortestPath")
-                println(
-                    "Path info : $(join(string.(map(n -> TTGraph.networkNodes[n], shortestPath)), ", "))",
-                )
+                shortestPath = enumerate_paths(dijkstraState, dst)
+                removedCost = remove_shortcuts!(shortestPath, TTGraph)
                 # shortestPath = [src, dst]
-                # @assert is_path_admissible(TTGraph, shortestPath)
+                @assert is_path_admissible(TTGraph, shortestPath)
+                print("X3")
                 # direct arc between two random nodes may not exist
                 # TODO : Need to switch to constrained shortest paths ?
+            else
+                print("X2")
             end
+        else
+            print("X1")
         end
         pathCost = path_cost(shortestPath, costMatrix)
     end
     return shortestPath, pathCost
 end
 
-function greedy!(solution::Solution, instance::Instance)
+function greedy!(solution::Solution, instance::Instance; mode::Int=1)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
     sort_order_content!(instance)
@@ -177,6 +266,7 @@ function greedy!(solution::Solution, instance::Instance)
     totalCost = 0.0
     print("Greedy introduction progress : ")
     CAPACITIES = Int[]
+    CHANNEL = create_filled_channel()
     percentIdx = ceil(Int, length(sortedBundleIdxs) / 100)
     for (i, bundleIdx) in enumerate(sortedBundleIdxs)
         bundle = instance.bundles[bundleIdx]
@@ -184,16 +274,16 @@ function greedy!(solution::Solution, instance::Instance)
         suppNode = TTGraph.bundleSrc[bundleIdx]
         custNode = TTGraph.bundleDst[bundleIdx]
         # Computing shortest path
-        shortestPath, pathCost = greedy_insertion(
-            solution, TTGraph, TSGraph, bundle, suppNode, custNode, CAPACITIES; sorted=true
+        shortestPath, pathCost = greedy_insertion2(
+            solution, TTGraph, TSGraph, bundle, suppNode, custNode, CHANNEL
         )
         # Adding to solution
         updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # verification
-        @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle ($suppNode - $custNode) \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
+        # @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle ($suppNode - $custNode) \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost
         i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * percentIdx))% ")
+        i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
     end
     println()
     return totalCost

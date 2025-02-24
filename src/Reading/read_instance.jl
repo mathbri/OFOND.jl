@@ -53,26 +53,30 @@ end
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
-    # shipmentFactor = if arcType == :oversea
-    #     0.25
-    # elseif arcType == :outsource
-    #     0.1
-    # else
-    #     0.5
-    # end
-
+    shipmentFactor = if arcType == :oversea
+        0.25
+    elseif arcType == :outsource
+        0.1
+    else
+        0.5
+    end
+    shipCost = if arcType == :oversea
+        5e3 + 5e3 * rand()
+    else
+        row.shipment_cost
+    end
     return NetworkArc(
         arcType,
         row.distance,
-        floor(Int, row.travel_time + 0.5),
-        # min(floor(Int, row.travel_time), 7),
+        # floor(Int, row.travel_time + 0.5),
+        min(floor(Int, row.travel_time), 7),
         isCommon,
-        # row.shipment_cost * shipmentFactor,
-        row.shipment_cost,
+        # row.shipment_cost * shipmentFactor / 5,
+        shipCost,
         row.is_linear,
         # false,
         row.carbon_cost,
-        row.capacity * VOLUME_FACTOR,
+        min(LAND_CAPACITY, row.capacity * VOLUME_FACTOR),
     )
 end
 
@@ -112,15 +116,21 @@ function order_hash(row::CSV.Row)
 end
 
 function com_size(row::CSV.Row)
-    baseSize = min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
+    baseSize = min(round(Int, max(10, row.size * 100)), SEA_CAPACITY)
     # if baseSize > 0.5 * SEA_CAPACITY
     #     return baseSize
     # elseif baseSize > 0.25 * SEA_CAPACITY
     #     return min(SEA_CAPACITY, baseSize * 2)
     # elseif baseSize > 0.1 * SEA_CAPACITY
+    #     return min(SEA_CAPACITY, baseSize * 3)
+    # elseif baseSize > 0.05 * SEA_CAPACITY
     #     return min(SEA_CAPACITY, baseSize * 4)
+    # elseif baseSize > 0.025 * SEA_CAPACITY
+    #     return min(SEA_CAPACITY, baseSize * 5)
+    # elseif baseSize > 0.01 * SEA_CAPACITY
+    #     return min(SEA_CAPACITY, baseSize * 6)
     # end
-    # return baseSize * 5
+    # return min(SEA_CAPACITY, baseSize * 7)
     return baseSize
 end
 
@@ -182,8 +192,16 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         partNumHash = hash(row.part_number)
         partNums[partNumHash] = row.part_number
         commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
-        # rowQuantity = round(Int, row.quantity * 1.5)
         rowQuantity = round(Int, row.quantity)
+        # if rowQuantity < 3
+        #     rowQuantity *= 5
+        # elseif rowQuantity < 5
+        #     rowQuantity *= 4
+        # elseif rowQuantity < 10
+        #     rowQuantity *= 3
+        # elseif rowQuantity < 20
+        #     rowQuantity *= 2
+        # end
         append!(order.content, [commodity for _ in 1:(rowQuantity)])
         comCount += rowQuantity
         comUnique += 1
@@ -200,6 +218,19 @@ function read_instance(node_file::String, leg_file::String, commodities_file::St
     networkGraph = NetworkGraph()
     read_and_add_nodes!(networkGraph, node_file)
     read_and_add_legs!(networkGraph, leg_file)
+    # Adding general properties 
+    seaTime, seaNumber, maxLeg = 0, 0, 0
+    netGraph = networkGraph.graph
+    for (srcHash, dstHash) in edge_labels(netGraph)
+        if netGraph[srcHash, dstHash].type == :oversea
+            seaTime += netGraph[srcHash, dstHash].travelTime
+            seaNumber += 1
+        end
+        maxLeg = max(maxLeg, netGraph[srcHash, dstHash].travelTime)
+    end
+    meanOverseaTime = seaNumber == 0 ? 0 : round(Int, seaTime / seaNumber)
+    netGraph[][:meanOverseaTime] = meanOverseaTime
+    netGraph[][:maxLeg] = maxLeg
     bundles, dates, partNums = read_commodities(networkGraph, commodities_file)
     return Instance(
         networkGraph,

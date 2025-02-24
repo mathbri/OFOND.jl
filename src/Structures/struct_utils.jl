@@ -9,22 +9,10 @@ end
 function add_properties(bundle::Bundle, network::NetworkGraph)
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
     netGraph, supp, cust = network.graph, bundle.supplier, bundle.customer
-    # Computing median oversea time 
-    seaTime, seaNumber = 0, 0
-    for (srcHash, dstHash) in edge_labels(netGraph)
-        if netGraph[srcHash, dstHash].type == :oversea
-            seaTime += netGraph[srcHash, dstHash].travelTime
-            seaNumber += 1
-        end
-    end
-    meanOverseaTime = seaNumber == 0 ? 0 : seaTime / seaNumber
     maxDelTime = if haskey(netGraph, supp.hash, cust.hash)
-        max(netGraph[supp.hash, cust.hash].travelTime, meanOverseaTime)
+        max(netGraph[supp.hash, cust.hash].travelTime, netGraph[][:meanOverseaTime])
     else
-        max(
-            maximum(leg -> netGraph[leg[1], leg[2]].travelTime, edge_labels(netGraph)),
-            meanOverseaTime,
-        )
+        netGraph[][:maxLeg]
     end
     idx, h = bundle.idx, bundle.hash
     return Bundle(supp, cust, bundle.orders, idx, h, maxPackSize, maxDelTime + 1)

@@ -251,6 +251,7 @@ end
 # Compute the cost of a solution : node cost + arc cost + commodity cost
 function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
     totalCost = 0.0
+    bi, bj, bk = 0, 0, 0.0
     # Iterate over sparse matrix
     rows = rowvals(solution.bins)
     vals = nonzeros(solution.bins)
@@ -262,8 +263,14 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
             totalCost += compute_arc_cost(
                 instance.timeSpaceGraph, arcBins, i, j; current_cost=current_cost
             )
+            # Counters 
+            arcVolume = sum(bin.load for bin in arcBins; init=0)
+            bi += length(arcBins)
+            bj += ceil(arcVolume / LAND_CAPACITY)
+            bk += arcVolume / LAND_CAPACITY
         end
     end
+    println("$bi bins (BP) / $bj bins (GC) / $bk bins (LC)")
     return totalCost
 end
 

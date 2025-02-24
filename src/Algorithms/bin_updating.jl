@@ -89,6 +89,10 @@ function update_bins!(
             costAdded += remove_order!(solution, TSGraph, timedPath, order)
         else
             costAdded += add_order!(solution, TSGraph, timedPath, order; sorted=sorted)
+            # if bundle.idx == 6309
+            #     println(order)
+            #     println("Cost added after order : $costAdded")
+            # end
         end
     end
     return costAdded

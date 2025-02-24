@@ -24,22 +24,24 @@ function solve_lns_milp(
         @info "MILP has $(num_constr(model)) constraints ($(num_path_constr(model)) path, $(num_pack_constr(model)) packing and $(num_cut_constr(model)) cuts)"
     end
     add_objective!(model, instance, perturbation)
-    warmStart && warm_start!(model, instance, perturbation)
+    # warmStart && warm_start!(model, instance, perturbation)
     # println(model)
     # Solving
+    set_time_limit_sec(model, 300.0)
     start = time()
     optimize!(model)
-    if verbose
-        # Can cause conflict with InferOpt objective_value
-        value, bound = JuMP.objective_value(model) + 1e-5, objective_bound(model)
-        gap = round(min(100, abs(value - bound) / value); digits=2)
-        @info "MILP solved in $(round(time() - start; digits=2)) s with an Objective value = $(round(value; digits=2)) (gap = $gap %)"
-    end
 
     # Getting the solution 
     if has_values(model)
+        if verbose
+            # Can cause conflict with InferOpt objective_value
+            value, bound = JuMP.objective_value(model) + 1e-5, objective_bound(model)
+            gap = round(min(100, abs(value - bound) / value); digits=2)
+            @info "MILP solved in $(round(time() - start; digits=2)) s with an Objective value = $(round(value; digits=2)) (gap = $gap %)"
+        end
         return get_paths(model, instance, perturbation)
     else
+        @info "MILP found no solution in $(round(time() - start; digits=2)) s"
         return perturbation.oldPaths
     end
 end
@@ -52,24 +54,28 @@ function perturbate!(
     # Selecting perturbation based on neighborhood given 
     perturbation = get_perturbation(neighborhood, instance, solution)
     is_perturbation_empty(perturbation; verbose=verbose) && return 0.0, 0
-    verbose && println(
-        "Bundles : $(perturbation.bundleIdxs) \nOld paths : $(perturbation.oldPaths)"
-    )
+    # verbose && println(
+    #     "Bundles : $(perturbation.bundleIdxs) \nOld paths : $(perturbation.oldPaths)"
+    # )
+    verbose && println("Bundles : $(length(perturbation.bundleIdxs))")
 
     # Computing new paths with lns milp
-    pertPaths = solve_lns_milp(instance, perturbation; verbose=verbose)
-    verbose && println("New paths : $pertPaths")
+    pertPaths = solve_lns_milp(instance, perturbation; verbose=verbose, optVerbose=true)
+    # verbose && println("New paths : $pertPaths")
 
     # Filtering bundles to work on
     !are_new_paths(perturbation.oldPaths, pertPaths; verbose=verbose) && return 0.0, 0
     changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
     bunIdxs = perturbation.bundleIdxs[changedIdxs]
-    verbose && println("Changed bundles : $bunIdxs (changedIdxs = $changedIdxs)")
+    # verbose && println("Changed bundles : $bunIdxs (changedIdxs = $changedIdxs)")
+    verbose && println("Changed bundles : $(length(bunIdxs))")
+
     pertBundles = instance.bundles[bunIdxs]
     # Here we want to have changedIdxs not bunIdxs
     oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
 
     # Applying new paths to the bundles for which it actually changed
+    startCost = compute_cost(instance, solution)
     previousBins = save_previous_bins(instance, solution, pertBundles, oldPaths)
     costRemoved = update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
     updateCost = update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
@@ -79,16 +85,16 @@ function perturbate!(
     )
 
     # Reverting if cost augmented by more than 0.75% 
-    if updateCost + costRemoved > 0.0075 * compute_cost(instance, solution)
-        verbose && println("Update refused")
-        revert_solution!(
-            solution, instance, changedBundles, oldPaths, previousBins, pertPaths
-        )
-        return 0.0, 0
-    else
-        verbose && println("Update accpeted")
-        return improvement, length(bunIdxs)
-    end
+    # if updateCost + costRemoved > 0.05 * startCost
+    #     verbose && println("Update refused")
+    #     revert_solution!(solution, instance, pertBundles, oldPaths, previousBins, pertPaths)
+    #     return 0.0, 0
+    # else
+    #     verbose && println("Update accpeted")
+    #     return improvement, length(bunIdxs)
+    # end
+    println("Update accpeted")
+    return improvement, length(bunIdxs)
 end
 
 # How to analyse neighborhood difference with initial solution ? see notes in Books
@@ -117,9 +123,9 @@ function LNS!(
     solution::Solution,
     instance::Instance;
     timeLimit::Int=1800,
-    perturbTimeLimit::Int=150,
-    lsTimeLimit::Int=600,
-    lsStepTimeLimit::Int=150,
+    perturbTimeLimit::Int=300,
+    lsTimeLimit::Int=300,
+    lsStepTimeLimit::Int=60,
     resetCost::Bool=false,
     verbose::Bool=true,
 )
@@ -149,9 +155,7 @@ function LNS!(
         # If no path changed, trying one more time the perturbation 
         if changed == 0
             @warn "No path changed by $neighborhood perturbation, trying one more time"
-            improv, change .+= perturbate!(
-                solution, instance, neighborhood; verbose=verbose
-            )
+            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
             improvement += improv
             changed += change
             if changed == 0
@@ -159,11 +163,74 @@ function LNS!(
             end
         end
         # Apply local search 
-        improvement += local_search!(
+        improvement += local_search3!(
             solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
         )
         totImprov += improvement
         time() - start > timeLimit && break
+    end
+    println("\n")
+    # Final local search : applying large one
+    lsImprovement = large_local_search!(
+        solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+    )
+    totImprov += lsImprovement
+    @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
+        totImprov
+    )
+    # Reverting if cost augmented by more than 0.75% (heuristic level)
+    if totImprov > 0.0075 * startCost
+        println("Reverting solution because too much cost degradation")
+        revert_solution!(solution, instance, prevSol)
+        return 0.0
+    else
+        return totImprov
+    end
+end
+
+function LNS2(
+    solution::Solution,
+    instance::Instance;
+    timeLimit::Int=1800,
+    perturbTimeLimit::Int=300,
+    lsTimeLimit::Int=300,
+    lsStepTimeLimit::Int=60,
+    resetCost::Bool=false,
+    verbose::Bool=true,
+)
+    startCost = compute_cost(instance, solution)
+    threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
+    println("\n")
+    @info "Starting LNS step" :start_cost = startCost :threshold = threshold
+
+    bestSol = solution_deepcopy(solution, instance)
+    bestCost = startCost
+    # Slope scaling cost update  
+    slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
+    # Apply perturbations in random order
+    changed = 0
+    changeThreshold = 0.1 * length(instance.bundles)
+    while time() - start < timeLimit
+        neighborhood = rand(PERTURBATIONS)
+        improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
+        @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
+            improv :change = change
+        changed += change
+        # If enough path changed, applying local search 
+        if changed >= changeThreshold
+            local_search3!(
+                solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+            )
+            changed = 0
+            # If new best solution found, store it
+            if compute_cost(instance, solution) < bestCost
+                bestSol = solution_deepcopy(solution, instance)
+                bestCost = compute_cost(instance, solution)
+                @info "New best solution found" :cost = bestCost :time = round(
+                    time() - start
+                )
+            end
+        end
     end
     println("\n")
     # Final local search : applying large one

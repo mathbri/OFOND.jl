@@ -50,15 +50,20 @@ function greedy_heuristic(instance::Instance)
     return run_heuristic(instance, greedy!)
 end
 
-function lower_bound_heuristic(instance::Instance)
-    return run_heuristic(instance, lower_bound!)
+function lower_bound_heuristic(instance::Instance; parallel::Bool=false)
+    if parallel
+        return run_heuristic(instance, parallel_lower_bound2!)
+    else
+        return run_heuristic(instance, lower_bound!)
+    end
 end
 
-# TODO : add a mix startup heuristic where it starts with lower bound and little by little goes to greedy
-# Like the cost update would be (i * greedy + (B - i) * lower_bound) / B  
-
-function lower_bound_filtering_heuristic(instance::Instance)
-    return run_heuristic(instance, lower_bound_filtering!)
+function lower_bound_filtering_heuristic(instance::Instance; parallel::Bool=false)
+    if parallel
+        run_heuristic(instance, parallel_lower_bound_filtering2!)
+    else
+        run_heuristic(instance, lower_bound_filtering!)
+    end
 end
 
 function local_search_heuristic(instance::Instance, solution::Solution; timeLimit::Int)

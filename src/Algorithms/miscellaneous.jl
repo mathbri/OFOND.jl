@@ -10,23 +10,32 @@ function shortest_delivery!(solution::Solution, instance::Instance)
     # Sorting commodities
     sort_order_content!(instance)
     # Computing the shortest delivery possible for each bundle
-    for bundle in instance.bundles
+    print("Shortest delivery introduction progress : ")
+    percentIdx = ceil(Int, length(instance.bundles) / 100)
+    for (i, bundle) in enumerate(instance.bundles)
         # Retrieving bundle start and end nodes
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
         # Computing shortest path
+        for (aSrc, aDst) in TTGraph.bundleArcs[bundle.idx]
+            TTGraph.costMatrix[aSrc, aDst] = TTGraph.networkArcs[aSrc, aDst].distance
+        end
         shortestPath = enumerate_paths(
             dijkstra_shortest_paths(TTGraph.graph, suppNode, TTGraph.costMatrix), custNode
         )
         # Adding to solution
         totCost += update_solution!(solution, instance, bundle, shortestPath; sorted=true)
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
     end
+    println()
     return totCost
 end
 
 # Benchmark heuristic where all bundle path are computed as the minimum cost average delivery using giant trucks approximation for consolidated arcs
 # Can be seen as greedy on the relaxation using averaged bundles
 function average_delivery!(solution::Solution, instance::Instance)
+    println("Averaging bundles")
     # First step : transforming bundles by averaging bundles orders 
     netGraph, timeHorizon = instance.networkGraph, instance.timeHorizon
     avgBundles = Bundle[
@@ -44,7 +53,9 @@ function average_delivery!(solution::Solution, instance::Instance)
     # Sorting commodities
     sort_order_content!(instance)
     # Computing the average delivery
-    for (bundle, avgBundle) in zip(instance.bundles, avgBundles)
+    print("Average delivery introduction progress : ")
+    percentIdx = ceil(Int, length(instance.bundles) / 100)
+    for (i, (bundle, avgBundle)) in enumerate(zip(instance.bundles, avgBundles))
         # Retrieving bundle start and end nodes
         bSrc = TTGraph.bundleSrc[bundle.idx]
         bDst = TTGraph.bundleDst[bundle.idx]
@@ -54,26 +65,32 @@ function average_delivery!(solution::Solution, instance::Instance)
         )
         # Adding to solution
         totCost += update_solution!(solution, instance, bundle, shortestPath; sorted=true)
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
     end
+    println()
     return totCost
 end
 
 # Benchmark heuristic where all bundle path are computed as the minimum cost delivery using random costs on arcs
 function random_delivery!(
-    solution::Solution, instance::Instance; nSol::Int=10, check::Bool=false
+    solution::Solution, instance::Instance; nSol::Int=5, check::Bool=false
 )
+    println("Generating $nSol random deliveries")
     TTGraph = instance.travelTimeGraph
     # Sorting commodities
     sort_order_content!(instance)
     # Computing the best solution in nSol random solutions 
     solutions = Solution[Solution(instance) for _ in 1:nSol]
     costs = Float64[]
-    for sol in solutions
+    percentIdx = ceil(Int, length(instance.bundles) / 100)
+    for (s, sol) in enumerate(solutions)
         solCost = 0.0
+        print("Random delivery $s introduction progress : ")
         # Updating costs matrix (1e5 to put every arc cost to 1 and then rand() to put it between 0 and 1)
-        TTGraph.costMatrix .*= 1e5 .* rand(Float64, size(TTGraph.costMatrix))
+        TTGraph.costMatrix .*= 1e5 .* rand(size(TTGraph.costMatrix))
         # Computing the best random deliveries for each bundle
-        for bundle in instance.bundles
+        for (i, bundle) in enumerate(instance.bundles)
             # Retrieving bundle start and end nodes
             suppNode = TTGraph.bundleSrc[bundle.idx]
             custNode = TTGraph.bundleDst[bundle.idx]
@@ -84,15 +101,16 @@ function random_delivery!(
             )
             # Adding to solution
             solCost += update_solution!(sol, instance, bundle, shortestPath; sorted=true)
+            i % 10 == 0 && print("|")
+            i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
         end
+        println()
         push!(costs, solCost)
-        print("|")
         # Checking computations
         if check
             @assert is_feasible(instance, sol)
         end
     end
-    println()
     # Updating the best has the current solution
     bestSol = solutions[argmin(costs)]
     return update_solution!(
@@ -117,7 +135,7 @@ end
 function full_lower_bound_milp(instance::Instance; withPacking::Bool=true)
     # Creating an arc flow perturbation with all bundles 
     perturbation = full_perturbation(instance)
-    model = model_with_optimizer(; timeLimit=60.0, verbose=true)
+    model = model_with_optimizer(; timeLimit=600.0, verbose=true)
     add_variables!(model, instance, perturbation)
     # Putting the current cost back to default unit costs
     slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
@@ -363,4 +381,13 @@ function fully_outsourced!(solution::Solution, instance::Instance; maxPathLength
         shortest_delivery!(solution, instance)
     end
     return JuMP.objective_value(model) + 1e-5
+end
+
+function fully_outsourced2!(solution::Solution, instance::Instance; maxPathLength::Int=-1)
+    # Building the new instance costs
+    newInstance = outsource_instance(instance)
+    # Solution generation (it is a linear program now)
+    lower_bound!(solution, newInstance)
+    println("Fully outsourced cost = $(compute_cost(newInstance, solution))")
+    return compute_cost(instance, solution)
 end

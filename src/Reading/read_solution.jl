@@ -5,7 +5,7 @@ function check_bundle(instance::Instance, row::CSV.Row)
     bundleHash = hash(suppNode, hash(custNode))
     bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
     if bundleIdx === nothing
-        @warn "Bundle unknown in the instance" :bundle = bundleHash :row = row
+        # @warn "Bundle unknown in the instance" :bundle = bundleHash :row = row
     else
         return instance.bundles[bundleIdx]
     end
@@ -17,7 +17,7 @@ function check_node(instance::Instance, row::CSV.Row)
     if haskey(instance.networkGraph.graph, nodeHash)
         return instance.networkGraph.graph[nodeHash]
     else
-        @warn "Node unknown in the network" :node = nodeHash :row = row
+        # @warn "Node unknown in the network" :node = nodeHash :row = row
     end
 end
 
@@ -79,8 +79,8 @@ function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::
         if nextNode === nothing
             pathStr = join(string.(path), ", ")
             prev_node = TTGraph.networkNodes[ttPath[end]]
-            @warn "Next node not found, path not projectable for bundle $(idx) (either the node doesn't exist or the maximum delivery time is exceeded)" :node =
-                node :prev_node = prev_node :path = pathStr
+            # @warn "Next node not found, path not projectable for bundle $(idx) (either the node doesn't exist or the maximum delivery time is exceeded)" :node =
+            #     node :prev_node = prev_node :path = pathStr
             break
         end
         push!(ttPath, nextNode)

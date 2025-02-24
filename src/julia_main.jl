@@ -3,6 +3,7 @@
 # using OFOND
 using ProfileView
 using JLD2
+using Statistics
 
 function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     # Read files based on ARGS
@@ -117,29 +118,100 @@ end
 function julia_main_test()
     println("Launching OFO Network Design (test)")
 
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_170225")
     println("Reading data from $directory")
-    node_file = joinpath(directory, "GeoDataProcessed_LC.csv")
-    leg_file = joinpath(directory, "LegDataProcessed_NV1.csv")
-    com_file = joinpath(directory, "VolumeDataProcessed_SC.csv")
+    node_file = joinpath(directory, "ND-MD-Geo_V5_preprocessing.csv")
+    leg_file = joinpath(directory, "Legs_preprocessed.csv")
+    com_file = joinpath(directory, "Volumes_preprocessed.csv")
     # read instance 
     instance = read_instance(node_file, leg_file, com_file)
     # adding properties to the instance
     CAPACITIES = Int[]
     instance = add_properties(instance, tentative_first_fit, CAPACITIES)
     # read solution
-    sol_file = joinpath(directory, "RouteDataProcessed.csv")
+    sol_file = joinpath(directory, "route_Preprocessed.csv")
     solution = read_solution(instance, joinpath(directory, sol_file))
 
     # cut it into smaller instances 
-    # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
-    instanceSub = extract_sub_instance2(
-        instance;
-        continents=["Western Europe", "South America", "South-East Asia"],
-        timeHorizon=9,
+    instanceSub = instance
+    # instanceSub = split_all_bundles_by_part(instanceSub)
+    instanceSub = split_all_bundles_by_time(instanceSub, 6)
+
+    _, solution_LBF = lower_bound_filtering_heuristic(instanceSub)
+    println(
+        "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
     )
 
-    # instanceSub = instance
+    instanceSubSub = extract_filtered_instance(instanceSub, solution_LBF)
+    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+
+    nCom = sum(b -> sum(o -> length(o.content), b.orders), instanceSubSub.bundles)
+    meanSize =
+        sum(b -> sum(o -> sum(c -> c.size, o.content), b.orders), instanceSubSub.bundles) /
+        nCom / VOLUME_FACTOR
+    meanCost =
+        sum(
+            b -> sum(o -> sum(c -> c.stockCost, o.content), b.orders),
+            instanceSubSub.bundles,
+        ) / nCom
+    println("Mean size $meanSize and mean cost $meanCost")
+
+    _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+
+    # _, solutionSub_G = greedy_heuristic(instanceSubSub)
+
+    @info "Running heuristic average delivery"
+    startTime = time()
+    solution = Solution(instanceSubSub)
+    average_delivery!(solution, instanceSubSub)
+    println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instanceSubSub, solution)
+    totalCost = compute_cost(instanceSubSub, solution)
+    @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    @info "Running heuristic fully outsourced"
+    startTime = time()
+    solution = Solution(instanceSubSub)
+    fully_outsourced2!(solution, instanceSubSub)
+    println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instanceSubSub, solution)
+    totalCost = compute_cost(instanceSubSub, solution)
+    @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    local_search3!(solutionSub_LB, instanceSubSub)
+
+    # sol = LNS2(solutionSub_LB, instanceSubSub)
+
+    return 0
+
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_test")
+    println("Reading data from $directory")
+    node_file = joinpath(directory, "ND-MD-Geo_V5_preprocessing.csv")
+    leg_file = joinpath(directory, "Legs_preprocessed.csv")
+    com_file = joinpath(directory, "Volumes_preprocessed.csv")
+    # read instance 
+    instance = read_instance(node_file, leg_file, com_file)
+    # adding properties to the instance
+    CAPACITIES = Int[]
+    instance = add_properties(instance, tentative_first_fit, CAPACITIES)
+    # read solution
+    sol_file = joinpath(directory, "route_Preprocessed.csv")
+    solution = read_solution(instance, joinpath(directory, sol_file))
+
+    # cut it into smaller instances 
+    instanceSub = instance
+    # instanceSub = extract_sub_instance(instance; country="FRANCE", timeHorizon=6)
+    # instanceSub = extract_sub_instance2(
+    #     instance;
+    #     continents=["Western Europe", "South America", "South-East Asia"],
+    #     timeHorizon=6,
+    # )
+
+    # instanceSub = split_all_bundles_by_part(instanceSub)
+    instanceSub = split_all_bundles_by_time(instanceSub, 4)
+
     # adding properties to the instance
     # instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
     # solutionSub_C = extract_sub_solution(solution, instance, instanceSub)
@@ -147,18 +219,25 @@ function julia_main_test()
 
     # test algorithms  
 
-    _, solution_LBF = lower_bound_filtering_heuristic(instance)
+    _, solution_LBF = lower_bound_filtering_heuristic(instanceSub)
     println(
         "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
     )
 
-    instanceSub = extract_filtered_instance(instance, solution_LBF)
-    instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES)
+    # return 0
 
-    solutionSub_C = extract_sub_solution(solution, instance, instanceSubSub)
+    # _, solution_LBF2 = lower_bound_filtering_heuristic(instance; parallel=true)
+    # println(
+    #     "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF2.bundlePaths))",
+    # )
+
+    instanceSubSub = extract_filtered_instance(instanceSub, solution_LBF)
+    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+
+    # solutionSub_C = extract_sub_solution(solution, instance, instanceSubSub)
     # solutionSub_C = solution
 
-    # save("instance.jld2", "instance", instanceSubSub)
+    save("instance.jld2", "instance", instanceSubSub)
 
     netGraph = instanceSubSub.networkGraph.graph
     nSuppliers = count(lab -> netGraph[lab].type == :supplier, labels(netGraph))
@@ -167,13 +246,15 @@ function julia_main_test()
 
     nPlat = length(labels(netGraph)) - nSuppliers - nPlants
     meanPlatCost = sum(lab -> netGraph[lab].volumeCost, labels(netGraph)) / nPlat
-    nCom = sum(b -> sum(o -> length(o.content), b.orders), instance.bundles)
+    nCom = sum(b -> sum(o -> length(o.content), b.orders), instanceSubSub.bundles)
     meanSize =
-        sum(b -> sum(o -> sum(c -> c.size, o.content), b.orders), instance.bundles) / nCom /
-        VOLUME_FACTOR
+        sum(b -> sum(o -> sum(c -> c.size, o.content), b.orders), instanceSubSub.bundles) /
+        nCom / VOLUME_FACTOR
     meanCost =
-        sum(b -> sum(o -> sum(c -> c.stockCost, o.content), b.orders), instance.bundles) /
-        nCom
+        sum(
+            b -> sum(o -> sum(c -> c.stockCost, o.content), b.orders),
+            instanceSubSub.bundles,
+        ) / nCom
     println(
         "Mean platform cost $meanPlatCost and mean size $meanSize and mean cost $meanCost"
     )
@@ -183,40 +264,145 @@ function julia_main_test()
 
     # printing bundle arcs to see difference
     println(
-        "Min bundle arcs : $(minimum(x -> length(x), instance.travelTimeGraph.bundleArcs))"
+        "Min bundle arcs : $(minimum(x -> length(x), instanceSubSub.travelTimeGraph.bundleArcs))",
     )
     println(
-        "Mean bundle arcs : $(mean(x -> length(x), instance.travelTimeGraph.bundleArcs))"
+        "Mean bundle arcs : $(mean(x -> length(x), instanceSubSub.travelTimeGraph.bundleArcs))",
     )
     println(
-        "Max bundle arcs : $(maximum(x -> length(x), instance.travelTimeGraph.bundleArcs))"
+        "Max bundle arcs : $(maximum(x -> length(x), instanceSubSub.travelTimeGraph.bundleArcs))",
     )
 
     # return 0
+    # end
 
+    # function julia_main_test2()
     # println("Loading instance")
     # instanceSubSub = load("instance.jld2", "instance")
 
     # _, solutionSub_SD = shortest_delivery_heuristic(instanceSub)
     # global MAX_LENGTH, GREEDY_RECOMPUTATION = 0, 0
 
-    _, solutionSub_G = greedy_heuristic(instanceSubSub)
-    greedyCost = compute_cost(instanceSubSub, solutionSub_G)
+    # _, solutionSub_G = greedy_heuristic(instanceSubSub)
+    # greedyCost = compute_cost(instanceSubSub, solutionSub_G)
+
+    # @info "Running heuristic greedy with mode 2"
+    # startTime = time()
+    # solution = Solution(instanceSubSub)
+    # greedy!(solution, instanceSubSub; mode=2)
+    # println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    # solveTime = get_elapsed_time(startTime)
+    # feasible = is_feasible(instanceSubSub, solution)
+    # totalCost = compute_cost(instanceSubSub, solution)
+    # @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    # @info "Running heuristic greedy with mode 3"
+    # startTime = time()
+    # solution = Solution(instanceSubSub)
+    # ProfileView.@profview greedy!(solution, instanceSubSub; mode=3)
+    # println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    # solveTime = get_elapsed_time(startTime)
+    # feasible = is_feasible(instanceSubSub, solution)
+    # totalCost = compute_cost(instanceSubSub, solution)
+    # @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
 
     # println("Max length encountered for packing : $MAX_LENGTH")
     # println("Path recompuations needed : $GREEDY_RECOMPUTATION")
 
-    _, solutionSub_LB = lower_bound_heuristic(instanceSub)
-    lbCost = compute_cost(instanceSub, solutionSub_LB)
+    _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+    lbCost = compute_cost(instanceSubSub, solutionSub_LB)
+
+    # _, solutionSub_LB = lower_bound_heuristic(instanceSubSub; parallel=true)
+    # lbCost = compute_cost(instanceSubSub, solutionSub_LB)
+
+    # Mix greedy and lower bound 
+    # @info "Running heuristic mix greedy and lower bound with mode 3"
+    # startTime = time()
+    # solution = Solution(instanceSubSub)
+    # greedy!(solution, instanceSubSub; mode=3)
+    # println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    # solveTime = get_elapsed_time(startTime)
+    # feasible = is_feasible(instanceSubSub, solution)
+    # totalCost = compute_cost(instanceSubSub, solution)
+    # @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    # Shortest delivery 
+    # @info "Running heuristic shortest_delivery"
+    # startTime = time()
+    # solution = Solution(instanceSubSub)
+    # shortest_delivery!(solution, instanceSubSub)
+    # println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    # solveTime = get_elapsed_time(startTime)
+    # feasible = is_feasible(instanceSubSub, solution)
+    # totalCost = compute_cost(instanceSubSub, solution)
+    # @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    # Average delivery 
+    @info "Running heuristic average delivery"
+    startTime = time()
+    solution = Solution(instanceSubSub)
+    average_delivery!(solution, instanceSubSub)
+    println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instanceSubSub, solution)
+    totalCost = compute_cost(instanceSubSub, solution)
+    @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    # Random delivery 
+    # @info "Running heuristic random delivery"
+    # startTime = time()
+    # solution = Solution(instanceSubSub)
+    # random_delivery!(solution, instanceSubSub)
+    # println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    # solveTime = get_elapsed_time(startTime)
+    # feasible = is_feasible(instanceSubSub, solution)
+    # totalCost = compute_cost(instanceSubSub, solution)
+    # @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    # @info "Running heuristic milp lower bound"
+    # startTime = time()
+    # solution = Solution(instanceSubSub)
+    # milp_lower_bound!(solution, instanceSubSub)
+    # println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    # solveTime = get_elapsed_time(startTime)
+    # feasible = is_feasible(instanceSubSub, solution)
+    # totalCost = compute_cost(instanceSubSub, solution)
+    # @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    @info "Running heuristic fully outsourced"
+    startTime = time()
+    solution = Solution(instanceSubSub)
+    fully_outsourced2!(solution, instanceSubSub)
+    println("Cost after heuristic: $(compute_cost(instanceSubSub, solution))")
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instanceSubSub, solution)
+    totalCost = compute_cost(instanceSubSub, solution)
+    @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+
+    # Then try the lns
+
+    # TODO : Test milp packing here to see what is there to gain
 
     # Choosing the best initial solution on which to apply local search 
-    solution = solutionSub_G
-    if lbCost < greedyCost
-        solution = solutionSub_LB
-        @info "Choosing lower bound solution as initial solution"
-    else
-        @info "Choosing greedy solution as initial solution"
-    end
+    solution = solutionSub_LB
+    # if lbCost < greedyCost
+    #     solution = solutionSub_LB
+    #     @info "Choosing lower bound solution as initial solution"
+    # else
+    #     @info "Choosing greedy solution as initial solution"
+    # end
+
+    # Then try the different local search heuristics 
+    solution1, solution2 = deepcopy(solution), deepcopy(solution)
+
+    # local_search!(solution, instanceSubSub)
+    # local_search1!(solution1, instanceSubSub)
+    # local_search2!(solution2, instanceSubSub)
+    local_search3!(solution, instanceSubSub)
+
+    sol = LNS2(solution, instanceSubSub)
+
+    return 0
 
     # save("start_solution.jld2", "solution", solution)
     # println("Loading initial solution")
@@ -224,15 +410,15 @@ function julia_main_test()
 
     # _, solutionSubSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSubSub; timeLimit=300)
 
-    local_search_heuristic!(solution, instanceSubSub; timeLimit=600, stepLimit=90)
+    # local_search_heuristic!(solution, instanceSubSub; timeLimit=600, stepLimit=90)
 
     # TODO : need to compare just local search and LNS on the same time frame to see the difference
     # Without warm start diversity seems to lead to more improvement
     # Still need to see wether slope scaling helps
 
-    lns_heuristic!(
-        solution, instanceSubSub; timeLimit=1800, lsTimeLimit=600, lsStepTimeLimit=90
-    )
+    # lns_heuristic!(
+    #     solution, instanceSubSub; timeLimit=1800, lsTimeLimit=600, lsStepTimeLimit=90
+    # )
     # println("Cost of solution : $(compute_cost(instanceSubSub, solution))")
 
     # TODO : do soluttion analysis function to print relevant KPIs
@@ -271,6 +457,8 @@ function julia_main_test()
     # local_search!(solutionSubSub_GLS, instanceSub; twoNode=true, timeLimit=300)
 
     # finalSolution = fuse_solutions(solution, solutionSub_LBF, instanceSub, instanceSubSub)
+
+    # Test milp packing here to see what is there to gain
 
     # Cleaning final solution linears arcs
     # @info "Cleaning final solution before extraction"

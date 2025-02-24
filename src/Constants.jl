@@ -19,7 +19,7 @@ const SEA_CAPACITY = 6500
 const PERTURBATIONS = [
     :single_plant, :two_shared_node, :attract_reduce, :random, :suppliers
 ]
-const MAX_MILP_VAR = 1_000_000
+const MAX_MILP_VAR = 500_000
 const MILP_TIME_LIMIT = 150
 
 const NETWORK_DESIGN_COLUMNS = [

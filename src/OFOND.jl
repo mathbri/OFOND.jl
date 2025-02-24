@@ -82,5 +82,6 @@ export perturbate!, LNS!, slope_scaling_cost_update!, local_search!
 # export lns_heuristic
 export write_solution
 export julia_main, julia_main_test
+# export julia_main_test2
 
 end
