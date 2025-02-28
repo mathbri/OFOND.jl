@@ -46,6 +46,7 @@ function add_properties(order::Order, bin_packing::Function, CAPACITIES::Vector{
     for arcType in BP_ARC_TYPES
         capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
         order.bpUnits[arcType] = bin_packing(Bin[], capacity, order.content, CAPACITIES)
+        first_fit_decreasing!(Bin[], capacity, order.content)
     end
     minPackSize = minimum(com -> com.size, order.content)
     stockCost = sum(com -> com.stockCost, order.content)

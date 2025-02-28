@@ -61,7 +61,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         0.5
     end
     shipCost = if arcType == :oversea
-        5e3 + 5e3 * rand()
+        min(row.shipment_cost, 7.5e3 + 5e3 * rand())
     else
         row.shipment_cost
     end
@@ -76,7 +76,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         row.is_linear,
         # false,
         row.carbon_cost,
-        min(LAND_CAPACITY, row.capacity * VOLUME_FACTOR),
+        min(SEA_CAPACITY, row.capacity * VOLUME_FACTOR),
     )
 end
 
@@ -116,7 +116,7 @@ function order_hash(row::CSV.Row)
 end
 
 function com_size(row::CSV.Row)
-    baseSize = min(round(Int, max(10, row.size * 100)), SEA_CAPACITY)
+    baseSize = min(round(Int, max(11, row.size * 100)), SEA_CAPACITY)
     # if baseSize > 0.5 * SEA_CAPACITY
     #     return baseSize
     # elseif baseSize > 0.25 * SEA_CAPACITY

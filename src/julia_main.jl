@@ -118,7 +118,7 @@ end
 function julia_main_test()
     println("Launching OFO Network Design (test)")
 
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_170225")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_test")
     println("Reading data from $directory")
     node_file = joinpath(directory, "ND-MD-Geo_V5_preprocessing.csv")
     leg_file = joinpath(directory, "Legs_preprocessed.csv")
@@ -135,7 +135,21 @@ function julia_main_test()
     # cut it into smaller instances 
     instanceSub = instance
     # instanceSub = split_all_bundles_by_part(instanceSub)
-    instanceSub = split_all_bundles_by_time(instanceSub, 6)
+    # instanceSub = split_all_bundles_by_time(instanceSub, 4)
+
+    @info "Filtering with standard lower bound"
+    _, solution_LBF = lower_bound_heuristic(instanceSub)
+    println("Bundles filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))")
+    instanceSubSub = extract_filtered_instance(instanceSub, solution_LBF)
+    instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
+    @info "Finishing lower bound construction"
+    solution_MILP = Solution(instanceSubSub)
+    plant_by_plant_milp!(solution_MILP, instanceSubSub)
+    feasible = is_feasible(instanceSubSub, solution_MILP)
+    totalCost = compute_cost(instanceSubSub, solution_MILP)
+    @info "Lower bound MILP heuristic results" :feasible = feasible :total_cost = totalCost
+
+    return 0
 
     _, solution_LBF = lower_bound_filtering_heuristic(instanceSub)
     println(
@@ -157,6 +171,8 @@ function julia_main_test()
     println("Mean size $meanSize and mean cost $meanCost")
 
     _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+
+    solutionSub_LNS = LNS2(solutionSub_LB, instanceSubSub)
 
     # _, solutionSub_G = greedy_heuristic(instanceSubSub)
 

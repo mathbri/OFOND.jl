@@ -185,33 +185,52 @@ end
 function plant_by_plant_milp!(solution::Solution, instance::Instance)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     totCost = 0.0
-    emptySol = Solution(instance)
-    shortest_delivery!(emptySol, instance)
+    # emptySol = Solution(instance)
+    shortest_delivery!(solution, instance)
     # Sorting commodities
     sort_order_content!(instance)
     # Gathering all plants
     plants = findall(node -> node.type == :plant, TTGraph.networkNodes)
     # Going through all plants in random order to select one
     for (i, plant) in enumerate(shuffle(plants))
-        bunIdxs = findall(dst -> dst == plant, TTGraph.bundleDst)
+        plantIdxs = findall(dst -> dst == plant, TTGraph.bundleDst)
         # If no bundle for this plant, skipping to another directly
-        length(bunIdxs) == 0 && continue
+        length(plantIdxs) == 0 && continue
         @info "Treating plant : $plant ($i / $(length(plants)))"
         # If too much bundles, seperating into smaller groups
-        nCommon = length(TSGraph.commonArcs)
-        nVar = nCommon + sum(length(TTGraph.bundleArcs[b]) for b in bunIdxs)
-        nGroups = ceil(Int, nVar / (MAX_MILP_VAR - nCommon))
-        nPart = ceil(Int, length(bunIdxs) / nGroups)
-        for bunGroupIdxs in partition(bunIdxs, nPart)
-            bunGroupIdxs = collect(bunGroupIdxs)
-            # Computing paths for the whole group
-            perturbation = arc_flow_perturbation(instance, emptySol, bunGroupIdxs)
-            bunPaths = solve_lns_milp(instance, perturbation; warmStart=false, verbose=true)
+        nCommon, j = length(TSGraph.commonArcs), 1
+        while length(plantIdxs) > 0
+            @info "Treating group : $j (plant $i)"
+            nVars = cumsum([length(TTGraph.bundleArcs[b]) for b in plantIdxs])
+            stopIdx = findlast(n -> n <= MAX_MILP_VAR - nCommon, nVars)
+            bunGroupIdxs = plantIdxs[1:stopIdx]
+            plantIdxs = plantIdxs[(stopIdx + 1):end]
+            # Computing new paths
+            perturbation = arc_flow_perturbation(instance, solution, bunGroupIdxs)
+            bunPaths = solve_lns_milp(
+                instance, perturbation; warmStart=false, verbose=true, optVerbose=true
+            )
             # Adding to solution
             bunGroup = instance.bundles[bunGroupIdxs]
             totCost += update_solution!(solution, instance, bunGroup, bunPaths; sorted=true)
-            println("Bundles added : $(length(bunGroup))")
+            println(
+                "Bundles added : $(length(bunGroup)) (directs = $(count(x -> length(x) == 2, bunPaths)))",
+            )
+            j += 1
         end
+        # nVar = nCommon + sum(length(TTGraph.bundleArcs[b]) for b in bunIdxs)
+        # nGroups = ceil(Int, nVar / (MAX_MILP_VAR - nCommon))
+        # nPart = ceil(Int, length(bunIdxs) / nGroups)
+        # for bunGroupIdxs in partition(bunIdxs, nPart)
+        #     bunGroupIdxs = collect(bunGroupIdxs)
+        #     # Computing paths for the whole group
+        #     perturbation = arc_flow_perturbation(instance, emptySol, bunGroupIdxs)
+        #     bunPaths = solve_lns_milp(instance, perturbation; warmStart=false, verbose=true)
+        #     # Adding to solution
+        #     bunGroup = instance.bundles[bunGroupIdxs]
+        #     totCost += update_solution!(solution, instance, bunGroup, bunPaths; sorted=true)
+        #     println("Bundles added : $(length(bunGroup))")
+        # end
     end
     return totCost
 end
@@ -255,24 +274,38 @@ function random_by_random_milp!(solution::Solution, instance::Instance)
     # Sorting commodities
     sort_order_content!(instance)
     # Going through groups one after another
+    nCommon = length(TSGraph.commonArcs)
     while length(allIdxs) > 0
         # Constructing the group to work on
-        bunGroupIdxs, nVar = [pop!(allIdxs)], length(TSGraph.commonArcs)
-        while length(allIdxs) > 0 && nVar < MAX_MILP_VAR
-            bIdx = allIdxs[end]
-            if nVar + length(TTGraph.bundleArcs[bIdx]) <= MAX_MILP_VAR
-                push!(bunGroupIdxs, pop!(allIdxs))
-                nVar += length(TTGraph.bundleArcs[bIdx])
-            end
-        end
+        # println("Contructing random group")
+        nVars = cumsum([length(TTGraph.bundleArcs[b]) for b in allIdxs])
+        # println("Cumsum computed")
+        stopIdx = findlast(n -> n <= MAX_MILP_VAR - nCommon, nVars)
+        # println("Stop idx computed")
+        bunGroupIdxs = allIdxs[1:stopIdx]
+        allIdxs = allIdxs[(stopIdx + 1):end]
+        # println("All bundle idxs divided")
+        # bunGroupIdxs, nVar = [pop!(allIdxs)], length(TSGraph.commonArcs)
+        # while length(allIdxs) > 0 && nVar < MAX_MILP_VAR
+        #     bIdx = allIdxs[end]
+        #     if nVar + length(TTGraph.bundleArcs[bIdx]) <= MAX_MILP_VAR
+        #         push!(bunGroupIdxs, pop!(allIdxs))
+        #         nVar += length(TTGraph.bundleArcs[bIdx])
+        #     end
+        # end
         # Computing paths for the whole group 
         @info "Treating random group $i ($(length(allIdxs)) bundles left)"
-        perturbation = arc_flow_perturbation(instance, emptySol, bunGroupIdxs)
-        bunPaths = solve_lns_milp(instance, perturbation; warmStart=false)
+        perturbation = arc_flow_perturbation(instance, solution, bunGroupIdxs)
+        bunPaths = solve_lns_milp(
+            instance, perturbation; warmStart=false, verbose=true, optVerbose=true
+        )
         # Adding to solution
         bunGroup = instance.bundles[bunGroupIdxs]
         totCost += update_solution!(solution, instance, bunGroup, bunPaths; sorted=true)
-        println("Bundles added : $(length(bunGroup))")
+        println(
+            "Bundles added : $(length(bunGroup)) (directs = $(count(x -> length(x) == 2, bunPaths)))",
+        )
+        i += 1
     end
     return totCost
 end

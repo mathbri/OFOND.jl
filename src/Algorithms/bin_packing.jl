@@ -1,10 +1,17 @@
 # Bin packing functions
 
+global FFD_TIME = 0.0
+global FFD_NUM = 0
+
+global TFFD_TIME = 0.0
+global TFFD_NUM = 0
+
 # As expected, this functions remains the bottleneck
 # Raises a question : is there a way to avoid garbage collecting and push! operation ?
 function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
 )
+    start = time()
     # Sorting commodities in decreasing order of size (if not already done)
     comIdxs = if !sorted
         sortperm(commodities; rev=true)
@@ -22,6 +29,8 @@ function first_fit_decreasing!(
         # pre-allocate empty bins ? maybe not a good idea
         idxB === nothing && push!(bins, Bin(fullCapacity, commodity))
     end
+    global FFD_TIME += time() - start
+    global FFD_NUM += 1
     return length(bins) - lengthBefore
 end
 
@@ -105,13 +114,16 @@ function tentative_first_fit(
     CAPACITIES::Vector{Int};
     sorted::Bool=false,
 )
+    start = time()
     # Sorting commodities in decreasing order of size (if not already done)
     comIdxs = if !sorted
         sortperm(commodities; rev=true)
     else
         eachindex(commodities)
     end
-    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
+    # nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
+    nBinsBef, nBinsAft = 0, 0
+    CAPACITIES = Int[0 for i in 1:50]
     # Adding commodities on top of others
     for idxC in comIdxs
         commodity = commodities[idxC]
@@ -124,6 +136,8 @@ function tentative_first_fit(
             add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
         end
     end
+    global TFFD_TIME += time() - start
+    global TFFD_NUM += 1
     return nBinsAft - nBinsBef
 end
 

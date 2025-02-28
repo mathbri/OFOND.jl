@@ -27,7 +27,7 @@ function solve_lns_milp(
     # warmStart && warm_start!(model, instance, perturbation)
     # println(model)
     # Solving
-    set_time_limit_sec(model, 300.0)
+    # set_time_limit_sec(model, 300.0)
     start = time()
     optimize!(model)
 
@@ -211,11 +211,13 @@ function LNS2(
     changed = 0
     changeThreshold = 0.1 * length(instance.bundles)
     while time() - start < timeLimit
-        neighborhood = rand(PERTURBATIONS)
+        # neighborhood = rand(PERTURBATIONS)
+        neighborhood = :single_plant
         improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
         @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
             improv :change = change
         changed += change
+        throw(ErrorException("debug"))
         # If enough path changed, applying local search 
         if changed >= changeThreshold
             local_search3!(

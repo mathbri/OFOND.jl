@@ -358,7 +358,7 @@ function get_lns_paths_to_update(
 end
 
 function model_with_optimizer(;
-    MIPGap::Float64=0.01, timeLimit::Float64=150.0, verbose::Bool=false
+    MIPGap::Float64=0.001, timeLimit::Float64=150.0, verbose::Bool=false
 )
     model = Model(HiGHS.Optimizer)
     gapFlag = "mip_rel_gap"

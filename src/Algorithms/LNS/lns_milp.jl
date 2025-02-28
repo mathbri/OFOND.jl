@@ -168,7 +168,7 @@ function milp_arc_cost(instance::Instance, bIdx::Int, src::Int, dst::Int)
     if is_outsource_direct(TTGraph, src, dst)
         for order in bundle.orders
             tSrc, tDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
-            orderTrucks = get_transport_units(order, arcData)
+            orderTrucks = get_lb_transport_units(order, arcData)
             cost += orderTrucks * TSGraph.currentCost[tSrc, tDst]
         end
     end
