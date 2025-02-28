@@ -63,7 +63,7 @@ const SHIPMENT_CONTENT_COLUMNS = [
     "part_customer_account",
     "quantity",
     "packaging_size",
-    "pack_weight",
+    "packaging_weight",
     "volume",
     "weight",
 ]
