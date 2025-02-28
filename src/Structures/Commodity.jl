@@ -36,6 +36,7 @@ function Base.zero(::Type{Commodity})
     return Commodity(UInt(0), UInt(0), 0, 0, 0.0)
 end
 
+# Change to exponential weights ? 
 function commodity_1D(commodity::Commodity; mixing::Bool=false)
     oh, ph = commodity.orderHash, commodity.partNumHash
     size, weight = commodity.size, commodity.weight

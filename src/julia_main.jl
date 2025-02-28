@@ -52,17 +52,17 @@ function julia_main()::Cint
     end
     # length(ARGS) >= 4 && isfile(ARGS[4]) && (com_file = ARGS[4])
     # read instance 
-    instance = read_instance(node_file, leg_file, com_file)
+    instance2D = read_instance(node_file, leg_file, com_file)
     # println("Instance dates : $(instance.dates)")
 
     # adding properties to the instance
     CAPACITIES_V, CAPACITIES_W = Int[], Int[]
-    instance = add_properties(instance, tentative_first_fit, CAPACITIES_V)
+    instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
 
-    totVol = sum(sum(o.volume for o in b.orders) for b in instance.bundles)
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance2D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
     totWei = sum(
-        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance.bundles
+        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance2D.bundles
     )
     println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
 
@@ -78,7 +78,8 @@ function julia_main()::Cint
         end
     end
     # length(ARGS) >= 5 && isfile(ARGS[5]) && (sol_file = ARGS[5])
-    solution = read_solution(instance, sol_file)
+    solution2D = read_solution(instance2D, sol_file)
+    println("Cost of current solution (2D) : $(compute_cost(instance2D, solution2D))")
 
     # Export directory
     exportDir = joinpath(dirname(@__DIR__), "scripts", "export")
@@ -92,23 +93,26 @@ function julia_main()::Cint
     end
 
     println("Exporting current solution to $exportDir")
-    # write_solution(solution, instance; suffix="current", directory=exportDir)
+    clean_empty_bins!(solution2D, instance2D)
+    write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
+
+    # return 0
 
     # Transform here from 2D to 1D
-    instance1D = instance_1D(instance; mixing=true)
+    instance1D = instance_1D(instance2D; mixing=true)
+    instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
 
     # Computing current solution in 1D to get a reference also
     solution1D = Solution(instance1D)
-    update_solution!(solution1D, instance1D, instance1D.bundles, solution.bundlePaths)
-    # solution1D = read_solution(instance1D, sol_file)
-    println("Cost of 1D current solution : $(compute_cost(instance1D, solution1D))")
+    update_solution!(solution1D, instance1D, instance1D.bundles, solution2D.bundlePaths)
+    println("Cost of current solution (1D) : $(compute_cost(instance1D, solution1D))")
 
-    # # Reading instance again but ignoring current network
-    # instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    # Reading instance again but ignoring current network
+    instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
 
-    # # Transform here from 2D to 1D
-    # instance1D = instance_1D(instance; mixing=false)
-    # instance1D = add_properties(instance, tentative_first_fit, CAPACITIES_V)
+    # Transform here from 2D to 1D
+    instance1D = instance_1D(instance; mixing=true)
+    instance1D = add_properties(instance, tentative_first_fit, CAPACITIES_V)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -140,22 +144,23 @@ function julia_main()::Cint
     _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=100)
 
     # Fusing solutions
-    # finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
-    finalSolution1D = solutionSub_GLS
+    finalSolution1D = fuse_solutions(solutionSub_GLS, solution_LBF, instance1D, instanceSub)
 
     # Un-transform here from 1D to 2D
-    finalSolution = Solution(instance)
-    update_solution!(finalSolution, instance, instance.bundles, finalSolution1D.bundlePaths)
-    println("Cost of 2D proposed solution : $(compute_cost(instance, finalSolution))")
+    finalSolution = Solution(instance2D)
+    update_solution!(
+        finalSolution, instance2D, instance2D.bundles, finalSolution1D.bundlePaths
+    )
+    println("Cost of 2D proposed solution : $(compute_cost(instance2D, finalSolution))")
 
     # Cleaning final solution linears arcs
     @info "Cleaning final solution before extraction"
-    bin_packing_improvement!(finalSolution, instance; sorted=true, skipLinear=false)
-    clean_empty_bins!(finalSolution, instance)
+    bin_packing_improvement!(finalSolution, instance2D; sorted=true, skipLinear=false)
+    clean_empty_bins!(finalSolution, instance2D)
 
     # length(ARGS) >= 6 && isdir(directory) && (directory = ARGS[6])
     println("Exporting proposed solution to $exportDir")
-    write_solution(finalSolution, instance; suffix="proposed", directory=exportDir)
+    write_solution(finalSolution, instance2D; suffix="proposed", directory=exportDir)
 
     return 0 # if things finished successfully
 end

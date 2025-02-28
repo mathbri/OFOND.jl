@@ -32,7 +32,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                         print(io, bundle.customer.account, ",") # customer_account
                         print(io, instance.partNumbers[com.partNumHash], ",") # part_number
                         print(io, comSize, ",") # packaging
-                        print(io, comWeight, ",") # weight
+                        print(io, comWeight, ",") # package_weight
                         print(io, quantPartInRoute, ",") # quantity_part_in_route
                         print(io, instance.dates[order.deliveryDate], ",") # delivery_date
                         print(io, TSGraph.networkNodes[node].account, ",") # point_account
@@ -47,6 +47,13 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
         end
     end
     return nLines
+end
+
+function price_hash(instance::Instance, arc::Edge{Int})
+    TSGraph = instance.timeSpaceGraph
+    srcH = TSGraph.networkNodes[src(arc)].hash
+    dstH = TSGraph.networkNodes[dst(arc)].hash
+    return hash(srcH, dstH)
 end
 
 function write_shipment_info(io::IO, solution::Solution, instance::Instance)
@@ -67,15 +74,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, arcData.type, ",") # type
             print(io, bin.volumeLoad / VOLUME_FACTOR, ",") # volume
             print(io, bin.weightLoad / WEIGHT_FACTOR, ",") # weight
-            # Adding price if available
-            srcH = TSGraph.networkNodes[src(arc)].hash
-            dstH = TSGraph.networkNodes[dst(arc)].hash
-            if haskey(instance.prices, hash(srcH, dstH))
-                price = instance.prices[hash(srcH, dstH)]
-                print(io, price, ",")
-            else
-                print(io, ",")
-            end
+            print(io, get(instance.prices, price_hash(instance, arc), ""), ",") # tariff_name (if available)
             print(io, transportCost, ",") # unit_cost
             print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
             println(io, dstData.volumeCost * fillingRate) # platform_cost
@@ -119,9 +118,9 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
                     quantity = length(findall(x -> x === com, bin.content))
                     print(io, quantity, ",") # quantity
                     print(io, com.size / VOLUME_FACTOR, ",") # packaging_size
-                    print(io, com.weight / WEIGHT_FACTOR, ",") # pack_weight
-                    println(io, quantity * com.size / VOLUME_FACTOR) # volume
-                    print(io, quantity * com.weight / WEIGHT_FACTOR, ",") # weight
+                    print(io, com.weight / WEIGHT_FACTOR, ",") # packaging_weight
+                    print(io, quantity * com.size / VOLUME_FACTOR, ",") # volume
+                    println(io, quantity * com.weight / WEIGHT_FACTOR) # weight
                     contentId += 1
                     nLines += 1
                 end

@@ -211,6 +211,6 @@ end
 function clean_empty_bins!(solution::Solution, instance::Instance)
     TSGraph = instance.timeSpaceGraph
     for arc in edges(TSGraph.graph)
-        filter!(bin -> bin.load > 0, solution.bins[src(arc), dst(arc)])
+        filter!(bin -> bin.volumeLoad > 0, solution.bins[src(arc), dst(arc)])
     end
 end

@@ -138,8 +138,9 @@ function bundle_reintroduction!(
         if updateCost + costRemoved > 1e4
             refillCostChange = refill_bins!(solution, TTGraph, TSGraph, bundle, oldPath)
             if updateCost + costRemoved + refillCostChange > 1e4
-                println()
-                @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) for $bundle (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
+                print("x")
+                # println()
+                # @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) for $bundle (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
             end
             return updateCost + costRemoved + refillCostChange
         end
@@ -200,8 +201,10 @@ function two_node_incremental!(
         updateCost = update_solution!(
             solution, instance, twoNodeBundles, oldPaths; sorted=sorted
         )
-        updateCost + costRemoved > 1e4 &&
-            @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved)) for $twoNodeBundles between $src and $dst (removed $(round(costRemoved)) and added cost $(round(updateCost)))"
+        if updateCost + costRemoved > 1e4
+            print("x")
+            # @warn "Removal than insertion lead to cost increase of $(round(updateCost + costRemoved)) for $twoNodeBundles between $src and $dst (removed $(round(costRemoved)) and added cost $(round(updateCost)))"
+        end
         return updateCost + costRemoved
     end
     # Inserting it back
@@ -239,8 +242,9 @@ function two_node_incremental!(
             binsUpdated = get_bins_updated(TSGraph, TTGraph, twoNodeBundles, oldPaths)
             refillCostChange = refill_bins!(solution, TSGraph, binsUpdated)
             if updateCost + costRemoved + refillCostChange > 1e4
-                println()
-                @warn "Two Node Incremental : Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
+                print("x")
+                # println()
+                # @warn "Two Node Incremental : Removal than insertion lead to cost increase of $(round(updateCost + costRemoved + refillCostChange)) (removed $(round(costRemoved)), added $(round(updateCost))) and refill made $(round(refillCostChange))"
             end
             return updateCost + costRemoved + refillCostChange
         end
