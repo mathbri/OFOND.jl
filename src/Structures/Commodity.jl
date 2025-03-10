@@ -41,5 +41,8 @@ function commodity_1D(commodity::Commodity; mixing::Bool=false)
     oh, ph = commodity.orderHash, commodity.partNumHash
     size, weight = commodity.size, commodity.weight
     newSize = mixing ? round(Int, (size + weight * SCORE_FACTOR) / 2) : size
+    if newSize > SEA_CAPACITY
+        throw(ErrorException("Commodity too big : $(newSize) > $(SEA_CAPACITY)"))
+    end
     return Commodity(oh, ph, max(size, newSize), 0, commodity.stockCost)
 end

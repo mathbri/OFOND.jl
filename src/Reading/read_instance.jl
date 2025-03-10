@@ -34,6 +34,10 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String; verbose::
 end
 
 function src_dst_hash(row::CSV.Row)
+    @assert !ismissing(row.src_account)
+    @assert !ismissing(row.dst_account)
+    @assert !ismissing(row.src_type)
+    @assert !ismissing(row.dst_type)
     return hash(row.src_account, hash(Symbol(row.src_type))),
     hash(row.dst_account, hash(Symbol(row.dst_type)))
 end
@@ -43,11 +47,20 @@ function is_common_arc(row::CSV.Row)
 end
 
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
+    @assert !ismissing(row.leg_type)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
+    if ismissing(row.distance)
+        println(row)
+    end
+    @assert !ismissing(row.distance)
+    @assert !ismissing(row.travel_time)
+    @assert !ismissing(row.shipment_cost)
+    @assert !ismissing(row.carbon_cost)
+    @assert !ismissing(row.capacity)
     if row.shipment_cost > 1e6
-        # @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
-        #     arcType :row = row
+        @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
+            arcType :row = row
     end
     return NetworkArc(
         arcType,
