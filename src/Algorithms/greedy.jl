@@ -263,7 +263,7 @@ function greedy!(solution::Solution, instance::Instance; mode::Int=1)
     sort_order_content!(instance)
     sortedBundleIdxs = sortperm(instance.bundles; by=bun -> bun.maxPackSize, rev=true)
     # Computing the greedy delivery possible for each bundle
-    totalCost = 0.0
+    totalCost, totalPathCost = 0.0, 0.0
     print("Greedy introduction progress : ")
     CAPACITIES = Int[]
     CHANNEL = create_filled_channel()
@@ -277,6 +277,7 @@ function greedy!(solution::Solution, instance::Instance; mode::Int=1)
         shortestPath, pathCost = greedy_insertion2(
             solution, TTGraph, TSGraph, bundle, suppNode, custNode, CHANNEL
         )
+        totalPathCost += pathCost
         # Adding to solution
         updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # verification
@@ -286,6 +287,9 @@ function greedy!(solution::Solution, instance::Instance; mode::Int=1)
         i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
     end
     println()
+    if !approx(totalPathCost, totalCost; atol=1.0)
+        @warn "Computed path cost and update cost don't match" totalPathCost totalCost
+    end
     return totalCost
 end
 

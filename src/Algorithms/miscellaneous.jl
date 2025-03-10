@@ -193,14 +193,19 @@ function plant_by_plant_milp!(solution::Solution, instance::Instance)
     plants = findall(node -> node.type == :plant, TTGraph.networkNodes)
     # Going through all plants in random order to select one
     for (i, plant) in enumerate(shuffle(plants))
+        @info "Treating plant : $plant ($i / $(length(plants)))"
         plantIdxs = findall(dst -> dst == plant, TTGraph.bundleDst)
         # If no bundle for this plant, skipping to another directly
         length(plantIdxs) == 0 && continue
-        @info "Treating plant : $plant ($i / $(length(plants)))"
         # If too much bundles, seperating into smaller groups
         nCommon, j = length(TSGraph.commonArcs), 1
+        totGroups = ceil(
+            Int,
+            sum(length(TTGraph.bundleArcs[b]) for b in plantIdxs) /
+            (MAX_MILP_VAR - nCommon),
+        )
         while length(plantIdxs) > 0
-            @info "Treating group : $j (plant $i)"
+            @info "Treating group : $j / $totGroups (plant $i / $(length(plants)))"
             nVars = cumsum([length(TTGraph.bundleArcs[b]) for b in plantIdxs])
             stopIdx = findlast(n -> n <= MAX_MILP_VAR - nCommon, nVars)
             bunGroupIdxs = plantIdxs[1:stopIdx]
@@ -310,9 +315,80 @@ function random_by_random_milp!(solution::Solution, instance::Instance)
     return totCost
 end
 
-# Compute the full MILP formulation of the problem
-function exact_milp!(solution::Solution, instance::Instance)
-    # TODO
+# The computation as it would be done for the load plan design problem (erera et al. for example)
+# Need solving perturbation milps but also retrieving the objective of the milp bound
+
+function load_plan_design_arc_cost(
+    TSGraph::TimeSpaceGraph, bins::Vector{Bin}, src::Int, dst::Int
+)::Float64
+    dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
+    # Computing useful quantities
+    arcVolume = sum(bin.load for bin in bins; init=0)
+    stockCost = sum(stock_cost(bin) for bin in bins; init=0.0)
+    # Volume and Stock cost 
+    cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
+    cost += arcData.carbonCost * arcVolume / arcData.capacity
+    cost += arcData.distance * stockCost
+    # Transport cost 
+    transportUnits = if arcData.isLinear
+        (arcVolume / arcData.capacity)
+    else
+        ceil(arcVolume / arcData.capacity)
+    end
+    cost += transportUnits * arcData.unitCost
+    return cost
+end
+
+function load_plan_design_cost(instance::Instance, solution::Solution)
+    totalCost, TSGraph = 0.0, instance.timeSpaceGraph
+    # Iterate over sparse matrix
+    rows = rowvals(solution.bins)
+    vals = nonzeros(solution.bins)
+    for j in 1:size(solution.bins, 2)
+        for idx in nzrange(solution.bins, j)
+            i = rows[idx]
+            arcBins = vals[idx]
+            # Arc cost
+            totalCost += load_plan_design_arc_cost(TSGraph, arcBins, i, j)
+        end
+    end
+    return totalCost
+end
+
+function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit::Int=300)
+    bestCost = load_plan_design_cost(instance, solution)
+    realCost = compute_cost(instance, solution)
+    @info "Starting load plan design ILS" :start_cost = bestCost :real_cost = realCost
+    start, i = time(), 0
+    while time() - start < timeLimit
+        # Perturbating using single plant
+        @info "Starting perturbation $i (single_plant)"
+        perturbation = get_perturbation(:single_plant, instance, solution)
+        is_perturbation_empty(perturbation; verbose=true) && continue
+        println("Bundles : $(length(perturbation.bundleIdxs))")
+        # With warm start, guaranteed to get a better solution
+        pertPaths = solve_lns_milp(
+            instance, perturbation; verbose=true, optVerbose=true, warmStart=true
+        )
+        !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
+        newBestCost = load_plan_design_cost(instance, solution)
+        newRealCost = compute_cost(instance, solution)
+        println(
+            "New best cost : $(round(newBestCost; digits=1)) (Real cost : $(round(newRealCost; digits=1)))",
+        )
+        println(
+            "Improvement : $(round(newBestCost - bestCost; digits=1)) (Real improvement : $(round(newRealCost - realCost; digits=1)))",
+        )
+        bestCost, realCost = newBestCost, newRealCost
+        # Updating solution
+        changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
+        bunIdxs = perturbation.bundleIdxs[changedIdxs]
+        println("Changed bundles : $(length(bunIdxs))")
+        pertBundles = instance.bundles[bunIdxs]
+        oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
+        update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
+        update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
+    end
 end
 
 ###########################################################################################
@@ -332,15 +408,14 @@ function mix_greedy_and_lower_bound!(
     # Computing the delivery possible for each bundle
     print("All introduction progress : ")
     CAPA, percentIdx = Int[], ceil(Int, B / 100)
+    CHANNEL = create_filled_channel()
     for (i, bundleIdx) in enumerate(sortedBundleIdxs)
         bundle = instance.bundles[bundleIdx]
         # Retrieving bundle start and end nodes
         bSrc = TTGraph.bundleSrc[bundleIdx]
         bDst = TTGraph.bundleDst[bundleIdx]
         # Computing greedy shortest path
-        gPath, _ = greedy_insertion(
-            gSol, TTGraph, TSGraph, bundle, bSrc, bDst, CAPA; sorted=true
-        )
+        gPath, _ = greedy_insertion2(gSol, TTGraph, TSGraph, bundle, bSrc, bDst, CHANNEL)
         update_solution!(gSol, instance, bundle, gPath; sorted=true)
         # Saving cost matrix 
         greedyCostMatrix = deepcopy(TTGraph.costMatrix)

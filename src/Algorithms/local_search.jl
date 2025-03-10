@@ -594,6 +594,9 @@ function two_node_common_incremental2!(
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     twoNodeBundleIdxs = get_bundles_to_update(TTGraph, solution, src, dst)
     twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
+
+    # TODO : change this to <= 1 to account for change in candidate nodes acceptance criteria for separated bundles
+
     length(twoNodeBundles) == 0 && return 0.0, 0
     fullOldPaths = solution.bundlePaths[twoNodeBundleIdxs]
     commonOldPaths = get_paths_to_update(solution, twoNodeBundles, src, dst)
@@ -613,6 +616,9 @@ function two_node_common_incremental2!(
     # Creating a unique bundle for all the bundles concerned
     commonBundle = fuse_bundles(instance, twoNodeBundles, CAPACITIES)
     # Inserting it back
+
+    # TODO : should be able to indicate if we want to force path admissibility because not always possible at this stage and reintroduction will fix it
+
     newPath, pathCost = greedy_insertion2(
         solution, TTGraph, TSGraph, commonBundle, src, dst, CHANNEL
     )
@@ -624,8 +630,14 @@ function two_node_common_incremental2!(
     # Inserting back concerned bundles
     for (i, bIdx) in enumerate(shuffle(twoNodeBundleIdxs))
         bundle = instance.bundles[bIdx]
+        forceReIntro = !is_path_admissible(TTGraph, solution.bundlePaths[bIdx])
         improvement += bundle_reintroduction2!(
-            solution, instance, bundle, CHANNEL; costThreshold=1.0
+            solution,
+            instance,
+            bundle,
+            CHANNEL;
+            costThreshold=1.0,
+            directReIntro=forceReIntro,
         )
         i % 100 == 0 && print(".")
         (improvement < -1) && (bunCounter += 1)
@@ -1016,6 +1028,7 @@ function local_search2!(
     return totImprov
 end
 
+# TODO : add changes from lenovo
 function local_search3!(
     solution::Solution, instance::Instance; timeLimit::Int=300, stepTimeLimit::Int=60
 )
@@ -1030,10 +1043,11 @@ function local_search3!(
     dstNodes = vcat(srcNodes, plantNodes)
     # Looping while there is time
     startTime = time()
-    while (time() - startTime < timeLimit) && i < 50_001
+    while (time() - startTime < timeLimit) && (i <= 150_000) && (noImprov < 5000)
+        startLoopImprov = totImprov
+        # TODO : make the probability of the neighborhood vary with time ? skewed towards bundle reintroduction ? 
         # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
-        choice = rand(1:2)
-        if choice == 1
+        if rand() < 0.5
             # Bundle reintroduction
             bundle = instance.bundles[rand(1:length(instance.bundles))]
             totImprov += bundle_reintroduction2!(
@@ -1043,6 +1057,9 @@ function local_search3!(
         else
             # Two node common incremental
             src, dst = rand(srcNodes), rand(dstNodes)
+
+            # TODO : for bundles separated by parts, (suppliers, plants) couples should also be candidate
+
             while !are_nodes_candidate(TTGraph, src, dst)
                 src, dst = rand(srcNodes), rand(dstNodes)
             end
@@ -1052,10 +1069,20 @@ function local_search3!(
             totImprov += improvement
             # TODO : add two node counters
         end
+        # Recording useless step
+        if isapprox(totImprov, startLoopImprov; atol=1.0)
+            noImprov += 1
+        else
+            noImprov = 0
+        end
+        # Printing progress
         i += 1
         i % 100 == 0 && print("|")
         i % 1000 == 0 && print(" $i ")
     end
+    println(
+        "\nLoop Break : time = $(round(time() - startTime; digits=1)), i = $i, noImprov = $noImprov",
+    )
     # Finally, bin packing improvement to optimize packings
     startTime = time()
     improvement = bin_packing_improvement!(solution, instance, COMMO, CAPA; sorted=true)
@@ -1063,7 +1090,14 @@ function local_search3!(
         (time() - startTime); digits=2
     )
     totImprov += improvement
-    @info "Full local search done" :total_improvement = totImprov
+    finalCost = compute_cost(instance, solution)
+    if !isapprox(totImprov, finalCost - startCost; atol=1.0)
+        @warn "Improvement computed inside local search is different from the one computed outside" :totImprov =
+            totImprov :realImprov = (finalCost - startCost)
+    end
+    @info "Full local search done" :total_improvement = totImprov :time = round(
+        (time() - startTime); digits=2
+    )
     return totImprov
 end
 

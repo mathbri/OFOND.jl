@@ -264,10 +264,11 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
                 instance.timeSpaceGraph, arcBins, i, j; current_cost=current_cost
             )
             # Counters 
+            arcData = instance.timeSpaceGraph.networkArcs[i, j]
             arcVolume = sum(bin.load for bin in arcBins; init=0)
             bi += length(arcBins)
-            bj += ceil(arcVolume / LAND_CAPACITY)
-            bk += arcVolume / LAND_CAPACITY
+            bj += ceil(arcVolume / arcData.capacity)
+            bk += arcVolume / arcData.capacity
         end
     end
     println("$bi bins (BP) / $bj bins (GC) / $bk bins (LC)")

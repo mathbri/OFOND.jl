@@ -137,24 +137,29 @@ function julia_main_test()
     # instanceSub = split_all_bundles_by_part(instanceSub)
     # instanceSub = split_all_bundles_by_time(instanceSub, 4)
 
-    @info "Filtering with standard lower bound"
+    @info "Filtering with lower bound"
     _, solution_LBF = lower_bound_heuristic(instanceSub)
     println("Bundles filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))")
     instanceSubSub = extract_filtered_instance(instanceSub, solution_LBF)
     instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
-    @info "Finishing lower bound construction"
+
+    @info "Finishing load plan design construction"
     solution_MILP = Solution(instanceSubSub)
     plant_by_plant_milp!(solution_MILP, instanceSubSub)
     feasible = is_feasible(instanceSubSub, solution_MILP)
     totalCost = compute_cost(instanceSubSub, solution_MILP)
-    @info "Lower bound MILP heuristic results" :feasible = feasible :total_cost = totalCost
+    @info "Load plan design heuristic results" :feasible = feasible :total_cost = totalCost
 
-    return 0
+    load_plan_design_ils!(solution_MILP, instanceSubSub; timeLimit=300)
+    feasible = is_feasible(instanceSubSub, solution_MILP)
+    totalCost = compute_cost(instanceSubSub, solution_MILP)
+    @info "Load plan design ILS results" :feasible = feasible :total_cost = totalCost
 
+    # return 0
+
+    @info "Filtering with standard procedure"
     _, solution_LBF = lower_bound_filtering_heuristic(instanceSub)
-    println(
-        "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
-    )
+    println("Bundles filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))")
 
     instanceSubSub = extract_filtered_instance(instanceSub, solution_LBF)
     instanceSubSub = add_properties(instanceSubSub, tentative_first_fit, CAPACITIES)
@@ -170,9 +175,42 @@ function julia_main_test()
         ) / nCom
     println("Mean size $meanSize and mean cost $meanCost")
 
-    _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+    @info "Constructing greedy, lower bound and mixed solution"
+    solution_Mix = Solution(instanceSubSub)
+    solution_G, solution_LB = mix_greedy_and_lower_bound!(solution_Mix, instanceSubSub)
+    feasibles = [
+        is_feasible(instanceSubSub, sol) for sol in [solution_Mix, solution_G, solution_LB]
+    ]
+    mixCost = compute_cost(instanceSubSub, solution_Mix)
+    gCost = compute_cost(instanceSubSub, solution_G)
+    lbCost = compute_cost(instanceSubSub, solution_LB)
+    @info "Mixed heuristic results" :feasible = feasibles :mixed_cost = mixCost :greedy_cost =
+        gCost :lower_bound_cost = lbCost
 
-    solutionSub_LNS = LNS2(solutionSub_LB, instanceSubSub)
+    # Choosing the best solution as the starting solution
+    solutionSub = solution_G
+    choiceSolution = argmin([mixCost, gCost, lbCost])
+    if choiceSolution == 3
+        solutionSub = solution_LB
+        @info "Lower bound solution chosen"
+    elseif choiceSolution == 1
+        solutionSub = solution_Mix
+        @info "Mixed solution chosen"
+    else
+        @info "Greedy solution chosen"
+    end
+
+    # Applying local search 
+    local_search3!(solutionSub, instanceSubSub)
+
+    # Applying ILS 
+    LNS2!(solutionSub, instanceSubSub)
+
+    return 0
+
+    # _, solutionSub_LB = lower_bound_heuristic(instanceSubSub)
+
+    # solutionSub_LNS = LNS2(solutionSub_LB, instanceSubSub)
 
     # _, solutionSub_G = greedy_heuristic(instanceSubSub)
 

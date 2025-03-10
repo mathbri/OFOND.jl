@@ -13,6 +13,7 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
         continent,
         nodeType in COMMON_NODE_TYPES,
         row.point_m3_cost,
+        # 0.0,
     )
 end
 
@@ -77,6 +78,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         # false,
         row.carbon_cost,
         min(SEA_CAPACITY, row.capacity * VOLUME_FACTOR),
+        # round(Int, row.capacity * VOLUME_FACTOR),
     )
 end
 
@@ -116,7 +118,7 @@ function order_hash(row::CSV.Row)
 end
 
 function com_size(row::CSV.Row)
-    baseSize = min(round(Int, max(11, row.size * 100)), SEA_CAPACITY)
+    baseSize = min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
     # if baseSize > 0.5 * SEA_CAPACITY
     #     return baseSize
     # elseif baseSize > 0.25 * SEA_CAPACITY

@@ -274,10 +274,18 @@ end
 
 # Construct an instance where all arcs are linear with oursource costs 
 function outsource_instance(instance::Instance)
-    # Getting the outsource km m3 cost thanks to one of the oursource arc 
-    outArcIdx = findfirst(a -> a.type == :outsource, instance.travelTimeGraph.networkArcs)
-    outArc = instance.travelTimeGraph.networkArcs[outArcIdx]
-    oursourceCost = outArc.unitCost / (outArc.distance * (LAND_CAPACITY / VOLUME_FACTOR))
+    # Getting the outsource km m3 cost thanks to the mean of the oursource arcs 
+    nOutsourceArcs = count(a -> a.type == :outsource, instance.travelTimeGraph.networkArcs)
+    sumOutsourceCost = sum(
+        a -> if a.type == :outsource
+            a.unitCost / (a.distance * (LAND_CAPACITY / VOLUME_FACTOR))
+        else
+            0
+        end,
+        instance.travelTimeGraph.networkArcs,
+    )
+    oursourceCost = sumOutsourceCost / nOutsourceArcs
+    println("Mean outsourcing cost : $(round(oursourceCost; digits=3)) € / m3 / km")
     # Building the new travel time graph with outsource costs
     newInstance = deepcopy(instance)
     I, J, V = findnz(instance.travelTimeGraph.networkArcs)

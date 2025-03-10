@@ -6,7 +6,7 @@
 function solve_lns_milp(
     instance::Instance,
     perturbation::Perturbation;
-    warmStart::Bool=true,
+    warmStart::Bool=false,
     verbose::Bool=false,
     optVerbose::Bool=false,
     withCuts::Bool=false,
@@ -24,7 +24,7 @@ function solve_lns_milp(
         @info "MILP has $(num_constr(model)) constraints ($(num_path_constr(model)) path, $(num_pack_constr(model)) packing and $(num_cut_constr(model)) cuts)"
     end
     add_objective!(model, instance, perturbation)
-    # warmStart && warm_start!(model, instance, perturbation)
+    warmStart && warm_start!(model, instance, perturbation)
     # println(model)
     # Solving
     # set_time_limit_sec(model, 300.0)
@@ -84,17 +84,17 @@ function perturbate!(
         "Improvement : $(round(improvement; digits=1)) (Cost Removed = $(round(costRemoved; digits=1)), Cost Added = $(round(updateCost; digits=1)))",
     )
 
-    # Reverting if cost augmented by more than 0.75% 
-    # if updateCost + costRemoved > 0.05 * startCost
-    #     verbose && println("Update refused")
-    #     revert_solution!(solution, instance, pertBundles, oldPaths, previousBins, pertPaths)
-    #     return 0.0, 0
-    # else
-    #     verbose && println("Update accpeted")
-    #     return improvement, length(bunIdxs)
-    # end
-    println("Update accpeted")
-    return improvement, length(bunIdxs)
+    # Reverting if cost augmented by more than 5% 
+    if updateCost + costRemoved > 0.05 * startCost
+        verbose && println("Update refused")
+        revert_solution!(solution, instance, pertBundles, oldPaths, previousBins, pertPaths)
+        return 0.0, 0
+    else
+        verbose && println("Update accpeted")
+        return improvement, length(bunIdxs)
+    end
+    # println("Update accpeted")
+    # return improvement, length(bunIdxs)
 end
 
 # How to analyse neighborhood difference with initial solution ? see notes in Books
@@ -188,7 +188,7 @@ function LNS!(
     end
 end
 
-function LNS2(
+function LNS2!(
     solution::Solution,
     instance::Instance;
     timeLimit::Int=1800,
@@ -205,10 +205,14 @@ function LNS2(
 
     bestSol = solution_deepcopy(solution, instance)
     bestCost = startCost
-    # Slope scaling cost update  
-    slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
+    # Slope scaling cost update
+    if resetCost
+        slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
+    else
+        slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
+    end
     # Apply perturbations in random order
-    changed = 0
+    changed, noChange = 0, 0
     changeThreshold = 0.1 * length(instance.bundles)
     while time() - start < timeLimit
         # neighborhood = rand(PERTURBATIONS)
@@ -217,7 +221,6 @@ function LNS2(
         @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
             improv :change = change
         changed += change
-        throw(ErrorException("debug"))
         # If enough path changed, applying local search 
         if changed >= changeThreshold
             local_search3!(
@@ -232,14 +235,28 @@ function LNS2(
                     time() - start
                 )
             end
+        else
+            println("Change threshold : $(change * 100 / changeThreshold)%")
         end
+        # Recording step with no change 
+        if change == 0
+            noChange += 1
+        else
+            noChange = 0
+        end
+        # Breaking if multiple times no change
+        if noChange >= 5
+            break
+        end
+        throw(ErrorException("debug"))
     end
     println("\n")
     # Final local search : applying large one
     lsImprovement = large_local_search!(
-        solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+        bestSol, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
     )
-    totImprov += lsImprovement
+    finalCost = compute_cost(instance, bestSol)
+    totImprov = finalCost - startCost
     @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
         totImprov
     )

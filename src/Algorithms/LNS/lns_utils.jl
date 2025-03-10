@@ -2,7 +2,7 @@
 
 # For arcs in the time-space network :
 #     Update the current cost with the following mechanism :
-#         Compute an actual volume cost : volume_cost = (unit_cost * nb_of_units) / total_volume_in_units
+#         Compute an actual bin cost : true_cost = unit_cost * (nb_of_units / ceil(total_volume_in_units) )
 #         Compute the updated unit cost : unit cost = unit_capacity * volume_cost
 # Use this new costs in all the other heuristics
 
@@ -18,7 +18,8 @@ function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::So
         arcVolume = sum(bin.load for bin in arcBins; init=0)
         # No scaling for arcs with no volume
         arcVolume <= EPS && continue
-        costFactor = length(arcBins) * arcData.capacity / arcVolume
+        # costFactor = length(arcBins) * arcData.capacity / arcVolume
+        costFactor = length(arcBins) / ceil(arcVolume / arcData.capacity)
         # Limiting cost factor to 2
         costFactor = min(2.0, costFactor)
         # Allowing cost decrease for common arcs

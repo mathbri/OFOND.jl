@@ -83,6 +83,105 @@ function my_dijkstra(
     return path, dists[dst]
 end
 
-function shortest_path()
-    # TODO : tranfer the corresponding function from the travel time graph file
+# TODO : La dominanace se fait par rapport aux ressources qui sont utilisés
+# - un chemin plus long qui n'utilise pas les mêmes ressources ne peut être coupés
+
+# Implementation of the ressource constrained shortest path a star specialized to our problem
+function my_ressource_a_star(
+    g::SimpleDiGraph,
+    src::Int,
+    dst::Int,
+    distmx::Matrix{Float64},
+    nodesData::Vector{NetworkNode};
+    dists::Vector{Float64},
+    parents::Vector{Int},
+    queue::PriorityQueue{Int,Float64},
+    verbose::Bool=false,
+)
+    # No path if src == dst
+    if src == dst
+        return Int[]
+    end
+    # Computing bounds by reverse dijkstra without ressource constraints
+    rg, tdistmx = reverse(g), transpose(distmx)
+    my_dijkstra(rg, dst, src, tdistmx; dists=dists, parents=parents, queue=queue)
+    bounds = deepcopy(dists)
+    # Computing shortest path with explicit elementarity constraint
+    dists[src] = 0
+    resources = Dict{Vector{Int},Vector{UInt}}([src] => UInt[])
+    L = PriorityQueue{Vector{Int},Float64}([src] => 0.0)
+    # Initialization
+    c_star = Inf
+    p_star = [src]
+    while !isempty(L)
+        # Dequeing path with smallest cost
+        p, cp = popfirst!(L)
+        v = p[end]
+        rp = resources[p]
+        for w in outneighbors(graph, v)
+            # Checking path extension admissibility 
+            wHash = nodesData[w].hash
+            if wHash in rp
+                continue
+            end
+            # Extanding path and ressource with neighbor
+            q = copy(p)
+            push!(q, w)
+            if nodesData[w].type != :supplier
+                # Multiple supplier is possible because of shortcut arcs
+                rq = copy(rp)
+                push!(rq, wHash)
+            end
+            # Computing new cost 
+            cq = cp + distmx[v, w]
+            # Storing best sol
+            if w == dst && cq < c_star
+                c_star = cq
+                p_star = copy(q)
+                continue
+            end
+            altq = cq + bounds[w]
+            # Adding it to the queue
+            if altq < c_star
+                resources[q] = rq
+                push!(L, q => altq)
+            end
+        end
+    end
+    return p_star, c_star
+end
+
+function my_shortest_path(
+    travelTimeGraph::TravelTimeGraph,
+    src::Int,
+    dst::Int;
+    dists::Vector{Float64},
+    parents::Vector{Int},
+    queue::PriorityQueue{Int,Float64},
+    force_elementarity::Bool=false,
+)
+    shortestPath, pathCost = my_dijkstra(
+        travelTimeGraph.graph,
+        src,
+        dst,
+        travelTimeGraph.costMatrix;
+        dists=dists,
+        parents=parents,
+        queue=queue,
+    )
+    pathCost -= remove_shortcuts!(shortestPath, travelTimeGraph)
+    if force_elementarity && !is_path_admissible(travelTimeGraph, shortestPath)
+        shortestPath, pathCost = my_ressource_a_star(
+            travelTimeGraph.graph,
+            src,
+            dst,
+            travelTimeGraph.costMatrix,
+            travelTimeGraph.networkNodes;
+            dists=dists,
+            parents=parents,
+            queue=queue,
+        )
+        pathCost -= remove_shortcuts!(shortestPath, travelTimeGraph)
+    end
+    return shortestPath, pathCost
 end
