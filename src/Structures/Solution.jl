@@ -274,14 +274,13 @@ function compute_cost(
         totalCost += compute_arc_cost(
             instance.timeSpaceGraph, arcBins, src(arc), dst(arc); current_cost=current_cost
         )
-        TSArcs = instance.timeSpaceGraph.networkArcs
+        arcCapaV = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)].volumeCapacity
+        arcCapaW = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)].weightCapacity
         i += 1
         j += length(arcBins)
-        k += ceil(
-            Int,
-            sum(bin.volumeLoad for bin in arcBins) /
-            TSArcs[src(arc), dst(arc)].volumeCapacity,
-        )
+        kV = ceil(Int, sum(bin.volumeLoad for bin in arcBins) / arcCapaV)
+        kW = ceil(Int, sum(bin.weightLoad for bin in arcBins) / arcCapaW)
+        k += max(kV, kW)
         # println()
         # if i == 3
         #     throw(ErrorException("Test"))

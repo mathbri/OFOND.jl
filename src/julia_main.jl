@@ -7,7 +7,7 @@ function julia_main()::Cint
     # Read files based on ARGS
     println("Launching OFO Network Design")
     println("Arguments : ", ARGS)
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_170225")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_100325")
     if length(ARGS) >= 1
         if isdir(ARGS[1])
             directory = ARGS[1]
@@ -96,8 +96,6 @@ function julia_main()::Cint
     clean_empty_bins!(solution2D, instance2D)
     write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
 
-    # return 0
-
     # Transform here from 2D to 1D
     instance1D = instance_1D(instance2D; mixing=true)
     instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
@@ -108,11 +106,12 @@ function julia_main()::Cint
     println("Cost of current solution (1D) : $(compute_cost(instance1D, solution1D))")
 
     # Reading instance again but ignoring current network
-    instance = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    # instance2D = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    # instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
 
-    # Transform here from 2D to 1D
-    instance1D = instance_1D(instance; mixing=true)
-    instance1D = add_properties(instance, tentative_first_fit, CAPACITIES_V)
+    # # Transform here from 2D to 1D
+    # instance1D = instance_1D(instance2D; mixing=true)
+    # instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -140,8 +139,10 @@ function julia_main()::Cint
         "Common arcs in travel time graph : $(count(x -> x.type in BP_ARC_TYPES, instanceSub.travelTimeGraph.networkArcs))",
     )
 
+    return 0
+
     # Greedy or Lower Bound than Local Search heuristic
-    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=100)
+    _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=30)
 
     # Fusing solutions
     finalSolution1D = fuse_solutions(solutionSub_GLS, solution_LBF, instance1D, instanceSub)
