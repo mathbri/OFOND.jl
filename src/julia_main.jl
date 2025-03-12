@@ -106,12 +106,12 @@ function julia_main()::Cint
     println("Cost of current solution (1D) : $(compute_cost(instance1D, solution1D))")
 
     # Reading instance again but ignoring current network
-    # instance2D = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
-    # instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
+    instance2D = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
 
     # # Transform here from 2D to 1D
-    # instance1D = instance_1D(instance2D; mixing=true)
-    # instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
+    instance1D = instance_1D(instance2D; mixing=true)
+    instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -139,7 +139,7 @@ function julia_main()::Cint
         "Common arcs in travel time graph : $(count(x -> x.type in BP_ARC_TYPES, instanceSub.travelTimeGraph.networkArcs))",
     )
 
-    return 0
+    # return 0
 
     # Greedy or Lower Bound than Local Search heuristic
     _, solutionSub_GLS = greedy_or_lb_then_ls_heuristic(instanceSub; timeLimit=30)
