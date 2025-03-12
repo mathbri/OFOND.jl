@@ -134,6 +134,8 @@ function batch_data()
     #
 end
 
+# TODO : prendre batch size 1 pour l'instant
+
 function train_smart_greedy_predictor()
     # Regularized predictor and Fenchel Young loss
     reg_path_predictor = PerturbedMultiplicative(path_predictor; ε=0.1, nb_samples=10)

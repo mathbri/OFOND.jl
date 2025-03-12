@@ -251,7 +251,9 @@ end
 # Compute the cost of a solution : node cost + arc cost + commodity cost
 function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
     totalCost = 0.0
+    directCost = 0.0
     bi, bj, bk = 0, 0, 0.0
+    costj, costk = 0.0, 0.0
     # Iterate over sparse matrix
     rows = rowvals(solution.bins)
     vals = nonzeros(solution.bins)
@@ -260,18 +262,27 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
             i = rows[idx]
             arcBins = vals[idx]
             # Arc cost
-            totalCost += compute_arc_cost(
+            arcCost = compute_arc_cost(
                 instance.timeSpaceGraph, arcBins, i, j; current_cost=current_cost
             )
+            totalCost += arcCost
             # Counters 
             arcData = instance.timeSpaceGraph.networkArcs[i, j]
             arcVolume = sum(bin.load for bin in arcBins; init=0)
             bi += length(arcBins)
             bj += ceil(arcVolume / arcData.capacity)
             bk += arcVolume / arcData.capacity
+            if arcData.type == :direct
+                directCost += arcCost
+            end
+            commonCost = arcCost - length(arcBins) * arcData.unitCost
+            costj += commonCost + ceil(arcVolume / arcData.capacity) * arcData.unitCost
+            costk += commonCost + arcVolume / arcData.capacity * arcData.unitCost
         end
     end
-    println("$bi bins (BP) / $bj bins (GC) / $bk bins (LC)")
+    println("Bins computed : $bi bins (BP) / $bj bins (GC) / $bk bins (LC)")
+    println("Cost computed : $(totalCost) (BP) / $(costj) bins (GC) / $(costk) bins (LC)")
+    println("Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%)")
     return totalCost
 end
 

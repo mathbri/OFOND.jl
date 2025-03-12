@@ -315,82 +315,6 @@ function random_by_random_milp!(solution::Solution, instance::Instance)
     return totCost
 end
 
-# The computation as it would be done for the load plan design problem (erera et al. for example)
-# Need solving perturbation milps but also retrieving the objective of the milp bound
-
-function load_plan_design_arc_cost(
-    TSGraph::TimeSpaceGraph, bins::Vector{Bin}, src::Int, dst::Int
-)::Float64
-    dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
-    # Computing useful quantities
-    arcVolume = sum(bin.load for bin in bins; init=0)
-    stockCost = sum(stock_cost(bin) for bin in bins; init=0.0)
-    # Volume and Stock cost 
-    cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
-    cost += arcData.carbonCost * arcVolume / arcData.capacity
-    cost += arcData.distance * stockCost
-    # Transport cost 
-    transportUnits = if arcData.isLinear
-        (arcVolume / arcData.capacity)
-    else
-        ceil(arcVolume / arcData.capacity)
-    end
-    cost += transportUnits * arcData.unitCost
-    return cost
-end
-
-function load_plan_design_cost(instance::Instance, solution::Solution)
-    totalCost, TSGraph = 0.0, instance.timeSpaceGraph
-    # Iterate over sparse matrix
-    rows = rowvals(solution.bins)
-    vals = nonzeros(solution.bins)
-    for j in 1:size(solution.bins, 2)
-        for idx in nzrange(solution.bins, j)
-            i = rows[idx]
-            arcBins = vals[idx]
-            # Arc cost
-            totalCost += load_plan_design_arc_cost(TSGraph, arcBins, i, j)
-        end
-    end
-    return totalCost
-end
-
-function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit::Int=300)
-    bestCost = load_plan_design_cost(instance, solution)
-    realCost = compute_cost(instance, solution)
-    @info "Starting load plan design ILS" :start_cost = bestCost :real_cost = realCost
-    start, i = time(), 0
-    while time() - start < timeLimit
-        # Perturbating using single plant
-        @info "Starting perturbation $i (single_plant)"
-        perturbation = get_perturbation(:single_plant, instance, solution)
-        is_perturbation_empty(perturbation; verbose=true) && continue
-        println("Bundles : $(length(perturbation.bundleIdxs))")
-        # With warm start, guaranteed to get a better solution
-        pertPaths = solve_lns_milp(
-            instance, perturbation; verbose=true, optVerbose=true, warmStart=true
-        )
-        !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
-        newBestCost = load_plan_design_cost(instance, solution)
-        newRealCost = compute_cost(instance, solution)
-        println(
-            "New best cost : $(round(newBestCost; digits=1)) (Real cost : $(round(newRealCost; digits=1)))",
-        )
-        println(
-            "Improvement : $(round(newBestCost - bestCost; digits=1)) (Real improvement : $(round(newRealCost - realCost; digits=1)))",
-        )
-        bestCost, realCost = newBestCost, newRealCost
-        # Updating solution
-        changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
-        bunIdxs = perturbation.bundleIdxs[changedIdxs]
-        println("Changed bundles : $(length(bunIdxs))")
-        pertBundles = instance.bundles[bunIdxs]
-        oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
-        update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
-        update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
-    end
-end
-
 ###########################################################################################
 ###########################   Mixing greedy and Lower Bound   #############################
 ###########################################################################################
@@ -498,4 +422,111 @@ function fully_outsourced2!(solution::Solution, instance::Instance; maxPathLengt
     lower_bound!(solution, newInstance)
     println("Fully outsourced cost = $(compute_cost(newInstance, solution))")
     return compute_cost(instance, solution)
+end
+
+###########################################################################################
+#################################   Load Plan Design   ####################################
+###########################################################################################
+
+# The computation as it would be done for the load plan design problem (erera et al. for example)
+# Need solving perturbation milps but also retrieving the objective of the milp bound
+
+function load_plan_design_arc_cost(
+    TSGraph::TimeSpaceGraph, bins::Vector{Bin}, src::Int, dst::Int
+)::Float64
+    dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
+    # Computing useful quantities
+    arcVolume = sum(bin.load for bin in bins; init=0)
+    stockCost = sum(stock_cost(bin) for bin in bins; init=0.0)
+    # Volume and Stock cost 
+    cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
+    cost += arcData.carbonCost * arcVolume / arcData.capacity
+    cost += arcData.distance * stockCost
+    # Transport cost 
+    transportUnits = if arcData.isLinear
+        (arcVolume / arcData.capacity)
+    else
+        ceil(arcVolume / arcData.capacity)
+    end
+    cost += transportUnits * arcData.unitCost
+    return cost
+end
+
+function load_plan_design_cost(instance::Instance, solution::Solution)
+    totalCost, TSGraph = 0.0, instance.timeSpaceGraph
+    # Iterate over sparse matrix
+    rows = rowvals(solution.bins)
+    vals = nonzeros(solution.bins)
+    for j in 1:size(solution.bins, 2)
+        for idx in nzrange(solution.bins, j)
+            i = rows[idx]
+            arcBins = vals[idx]
+            # Arc cost
+            totalCost += load_plan_design_arc_cost(TSGraph, arcBins, i, j)
+        end
+    end
+    return totalCost
+end
+
+function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit::Int=300)
+    bestCost = load_plan_design_cost(instance, solution)
+    realCost = compute_cost(instance, solution)
+    @info "Starting load plan design ILS" :start_cost = bestCost :real_cost = realCost
+    start, i = time(), 0
+    while time() - start < timeLimit
+        # Perturbating using single plant
+        @info "Starting perturbation $i (single_plant)"
+        perturbation = get_perturbation(:single_plant, instance, solution)
+        is_perturbation_empty(perturbation; verbose=true) && continue
+        println("Bundles : $(length(perturbation.bundleIdxs))")
+        # With warm start, guaranteed to get a better solution
+        pertPaths = solve_lns_milp(
+            instance, perturbation; verbose=true, optVerbose=true, warmStart=true
+        )
+        !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
+        newBestCost = load_plan_design_cost(instance, solution)
+        newRealCost = compute_cost(instance, solution)
+        println(
+            "New best cost : $(round(newBestCost; digits=1)) (Real cost : $(round(newRealCost; digits=1)))",
+        )
+        println(
+            "Improvement : $(round(newBestCost - bestCost; digits=1)) (Real improvement : $(round(newRealCost - realCost; digits=1)))",
+        )
+        bestCost, realCost = newBestCost, newRealCost
+        # Updating solution
+        changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
+        bunIdxs = perturbation.bundleIdxs[changedIdxs]
+        println("Changed bundles : $(length(bunIdxs))")
+        pertBundles = instance.bundles[bunIdxs]
+        oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
+        update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
+        update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
+    end
+end
+
+###########################################################################################
+###########################   Split by part Implementation   ##############################
+###########################################################################################
+
+# Computes the actual lower bound when bundles are split by parts
+function split_by_part_lower_bound!()
+    # For each plant  
+    # For each supplier 
+    # get the bundles going from the supplier to the plant
+    # constrcut a perturbation with empty base sol for those bundles
+    # put them into a Milp with giant container only on the direct
+    # Get paths and objective 
+end
+
+###########################################################################################
+###########################   Part Sourcing Optimization   ################################
+###########################################################################################
+
+# Creates another instance based on part sourcing optimization
+# For every part, 30% (budget) of all quantities can be reallocated to suppliers
+# Transport cost based on the lower bound shortest path of one such part from a supplier to a plant 
+# We therefore have a integer linear allocation problem with capacities
+
+function optimize_part_sourcing()
+    # TODO
 end
