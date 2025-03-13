@@ -301,3 +301,79 @@ function outsource_instance(instance::Instance)
     end
     return newInstance
 end
+
+# Multiply instance by duplacting and shuffling bundles
+# Use this to also transform instance inot hard bp one 
+# use this to also make the bundles that have to use the common network bigger 
+function extend_instance(
+    instance::Instance,
+    multiplier::Int;
+    makeHardBP::Bool=false,
+    growSmallBundles::Bool=false,
+)
+    # Defining the new time horizon 
+    T = instance.timeHorizon
+    newHorizon = T * multiplier
+    # Defining the new bundles 
+    newBundles = [bundle for bundle in instance.bundles]
+    for bundle in instance.bundles
+        # Multiplying the bundle 
+        for _ in 1:(multiplier - 1)
+            # Collecting delivery dates 
+            delDates = shuffle(((multiplier * T - 1) + 1):(multiplier * T))
+            # Creating new orders 
+            newOrders = Order[
+                Order(order.hash, delDates[i], order.content) for
+                (i, order) in enumerate(bundle.orders)
+            ]
+            for order in bundle.orders
+                newContent = Commodity[]
+                for commodity in order.content
+                    if makeHardBP
+                        # Grow commodity size
+                        # Remove stock cost
+                        push!(newContent, newCommodity)
+                    else
+                        push!(newContent, commodity)
+                    end
+                end
+                if growSmallBundles
+                    # Add 50% quantity
+                end
+                newOrder = Order(order.hash, delDates[i], order.content)
+                push!(newOrders, newOrder)
+            end
+            # Pushing new bundle 
+            newHash = hash(i, bundle.hash)
+            newBundle = Bundle(
+                bundle.supplier, bundle.customer, newOrders, 1, newHash, 0, 0
+            )
+            push!(newBundles, newBundle)
+        end
+    end
+    # Defining new network graph if hard BP 
+    # Defining the instance to return 
+    nBun = length(newBundles)
+    println("Extended $(length(instance.bundles)) bundles into $nBun bundles")
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
+    nOrd = sum(length(bundle.orders) for bundle in newBundles; init=0)
+    nCom = sum(
+        sum(length(order.content) for order in bundle.orders) for bundle in newBundles;
+        init=0,
+    )
+    nComU = sum(
+        sum(length(unique(order.content)) for order in bundle.orders) for
+        bundle in newBundles;
+        init=0,
+    )
+    @info "Extended instance (by time) $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique) on a $newHorizon steps time horizon"
+    return Instance(
+        instance.networkGraph,
+        TravelTimeGraph(instance.networkGraph, newBundles),
+        TimeSpaceGraph(instance.networkGraph, newHorizon),
+        newBundles,
+        newHorizon,
+        repeat(instance.dates, multiplier),
+        instance.partNumbers,
+    )
+end

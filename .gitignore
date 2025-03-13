@@ -1,11 +1,6 @@
 /Manifest.toml
 *test.csv
 scripts/data/*
-scripts/data_test/*
-scripts/data_8M/*
-scripts/data_140225/*
-scripts/data_170225/*
-scripts/data_060325/*
-scripts/data_100325/*
+scripts/data_*
 scripts/export/*
 *.jld2

@@ -314,12 +314,27 @@ function project_on_sub_instance(
 end
 
 # Repair paths by putting direct paths for bundles with errors
-function repair_paths!(paths::Vector{Vector{Int}}, instance::Instance)
+function repair_paths!(
+    paths::Vector{Vector{Int}}, instance::Instance; directRepair::Bool=false
+)
     TTGraph = instance.travelTimeGraph
     count = length(findall(path -> length(path) == 0, paths))
     for (idx, path) in enumerate(paths)
         if length(path) == 0
+            bundle = instance.bundles[idx]
             suppNode, custNode = TTGraph.bundleSrc[idx], TTGraph.bundleDst[idx]
+            for (src, dst) in TTGraph.bundleArcs[bundle.idx]
+                # If the arc doesn't need an update, skipping
+                is_update_candidate(TTGraph, src, dst, bundle) || continue
+                # Otherwise, computing the new cost
+                if directRepair
+                    TTGraph.costMatrix[src, dst] = TTGraph.networkArcs[src, dst].distance
+                else
+                    TTGraph.costMatrix[src, dst] = arc_lb_filtering_update_cost(
+                        travelTimeGraph, timeSpaceGraph, bundle, src, dst
+                    )
+                end
+            end
             shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
             append!(path, shortestPath)
         end

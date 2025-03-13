@@ -508,14 +508,108 @@ end
 ###########################   Split by part Implementation   ##############################
 ###########################################################################################
 
+# To compute it exaclty, for each bundle groups, they need to choose whether direct or lower bound path which makes it way more easier to solve
+
+function is_direct(arcData::NetorkArc)
+    return arcData.type == :direct
+end
+
 # Computes the actual lower bound when bundles are split by parts
-function split_by_part_lower_bound!()
-    # For each plant  
-    # For each supplier 
-    # get the bundles going from the supplier to the plant
-    # constrcut a perturbation with empty base sol for those bundles
-    # put them into a Milp with giant container only on the direct
-    # Get paths and objective 
+function split_by_part_lower_bound!(solution::Solution, instance::Instance)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    totCost, lowerBound = 0.0, 0.0
+    sort_order_content!(instance)
+    # Computing ordinary shortest (direct if possible) and lower bound solution
+    @info "Computing base lower bound and shortest delivery"
+    lowerBoundSol = Solution(instance)
+    lower_bound!(lowerBoundSol, instance)
+    # Shortest solution will serve as "new paths" in the attract reduce perturbation, adapted for multiple bundle on direct paths
+    shortestSol = Solution(instance)
+    shortest_delivery!(shortestSol, instance)
+    # Constructing this attract reduce perturbation
+    # Bundles already on the direct can be ignored (we are going to decrease the cost of using the direct)
+    bunIdxs = findall(path -> length(path) > 2, lowerBoundSol.bundlePaths)
+    # Bundles without direct delivery possible can also be ignored (no choice possible)
+    filter!(idx -> length(shortestSol.bundlePaths[idx]) == 2, bunIdxs)
+    oldPaths = lowerBoundSol.bundlePaths[bunIdxs]
+    newPaths = shortestSol.bundlePaths[bunIdxs]
+    loads = map(bins -> 0, solution.bins)
+    perturb = Perturbation(:attract_reduce, bunIdxs, oldPaths, newPaths, loads)
+    # Constructing the model
+    model = model_with_optimizer(; verbose=true)
+    @variable(model, z[perturbation.bundleIdxs], Bin)
+    arcDatas = TSGraph.networkArcs
+    directArcs = [
+        (a.src, a.dst) for arc in edges(TSGraph.graph) if is_direct(arcDatas[a.src, a.dst])
+    ]
+    @variable(model, direct[arc in directArcs], Int)
+    @info "MILP has $(num_variables(model)) variables ($(num_binaries(model)) binary and $(num_integers(model)) integer)"
+
+    packConExpr = Dict{Tuple{Int,Int},AffExpr}()
+    # Initiating the expressions
+    for (src, dst) in directArcs
+        packConExpr[(src, dst)] = AffExpr(
+            0.0, direct[(src, dst)] => -arcDatas[src, dst].capacity
+        )
+    end
+    # Completing the expressions with the path variables
+    for bIdx in perturbation.bundleIdxs
+        bundle = instance.bundles[bIdx]
+        for order in bundle.orders
+            # Only packing in the direct arc
+            bSrc, bDst = newPaths[bIdx]
+            tsSrc, tsDst = time_space_projector(TTGraph, TSGraph, bSrc, bDst, order)
+            # Getting the corresponding expression
+            packExpr = packConExpr[(tsSrc, tsDst)]
+            # Add to expression order.volume * z[bIdx]
+            add_to_expression!(packExpr, z[bIdx], order.volume)
+        end
+    end
+    @constraint(model, packing[(src, dst) in directArcs], packConExpr[(src, dst)] <= 0)
+    @info "MILP has $(num_constr(model)) constraints"
+
+    # Adapting the objective 
+    objExpr = AffExpr()
+    # Adding costs of the common arcs in the time space graph 
+    for (src, dst) in directArcs
+        add_to_expression!(objExpr, direct[(src, dst)], TSGraph.currentCost[src, dst])
+    end
+    emptySol = Solution(instance)
+    # Adding costs of arcs in the travel time graph
+    for bIdx in perturbation.bundleIdxs
+        bundle = instance.bundle[bIdx]
+        # Adding a cost per path for attract reduce
+        oldPathCost = sum(
+            arc_lb_update_cost(
+                emptySol, TTGraph, TSGraph, bundle, src, dst; current_cost=true
+            ) for (src, dst) in partition(perturbation.oldPaths[bIdx], 2, 1)
+        )
+        # Adding to the objective oldPathCost * (1 - z[bIdx])
+        add_to_expression!(objExpr, oldPathCost)
+        add_to_expression!(objExpr, z[bIdx], -oldPathCost)
+        newPathCost = sum(
+            arc_lb_update_cost(
+                emptySol, TTGraph, TSGraph, bundle, src, dst; current_cost=true
+            ) for (src, dst) in partition(perturbation.oldPaths[bIdx], 2, 1)
+        )
+        # Adding to the objective newPathCost * z[bIdx]
+        add_to_expression!(objExpr, z[bIdx], newPathCost)
+    end
+    @objective(model, Min, objExpr)
+    @info "MILP objective constructed"
+
+    start = time()
+    optimize!(model)
+    value, bound = JuMP.objective_value(model) + 1e-5, objective_bound(model)
+    gap = round(min(100, abs(value - bound) / value); digits=2)
+    @info "MILP solved in $(round(time() - start; digits=2)) s with an Objective value = $(round(value; digits=2)) (gap = $gap %)"
+
+    bunPaths = get_paths(model, instance, perturb)
+    update_solution!(solution, instance, instance.bundles[bunIdxs], bunPaths; sorted=true)
+    return totCost = compute_cost(instance, solution)
+
+    # For the lower bound we want to add the objective value and the costs from bundles not considered
+
 end
 
 ###########################################################################################
@@ -526,7 +620,8 @@ end
 # For every part, 30% (budget) of all quantities can be reallocated to suppliers
 # Transport cost based on the lower bound shortest path of one such part from a supplier to a plant 
 # We therefore have a integer linear allocation problem with capacities
+# Also have to put the constraint that a plant still needs to get the correct amount of said part at the right time
 
-function optimize_part_sourcing()
-    # TODO
+function optimize_part_sourcing(instance::Instance)
+    # TODO : think on books and then write here
 end
