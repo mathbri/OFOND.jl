@@ -57,9 +57,6 @@ include("Algorithms/local_search.jl")
 include("Algorithms/LNS/lns_utils.jl")
 include("Algorithms/LNS/lns_milp.jl")
 include("Algorithms/LNS/lns.jl")
-# Smart Greedy
-include("Algorithms/Smart Greedy/smart_greedy_utils.jl")
-include("Algorithms/Smart Greedy/smart_greedy.jl")
 # Miscellaneous heuristics (benchmrks and comparisons)
 include("Algorithms/miscellaneous.jl")
 
@@ -78,10 +75,8 @@ export shortest_delivery_heuristic, average_delivery_heuristic
 export greedy_heuristic
 export local_search_heuristic, greedy_then_ls_heuristic
 export lower_bound_heuristic, greedy_or_lb_then_ls_heuristic
-export perturbate!, LNS!, slope_scaling_cost_update!, local_search!
-# export lns_heuristic
+export perturbate!, ILS!, slope_scaling_cost_update!, local_search!
 export write_solution
-export julia_main, julia_main_test
-# export julia_main_test2
+export julia_main
 
 end

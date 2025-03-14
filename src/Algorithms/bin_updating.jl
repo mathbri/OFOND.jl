@@ -1,11 +1,5 @@
 # Updating functions for the bins
 
-# TODO : solution updating is also a major spot to parallelize
-# Would need to create an arcAndOrder vector to parallelize on it 
-# Is it efficient in terms of memory ?
-# Recheck with profiling !
-
-# TODO : harmonize arc cost computation
 function compute_new_cost(
     arcData::NetworkArc, dstData::NetworkNode, newBins::Int, commodities::Vector{Commodity}
 )
@@ -60,7 +54,6 @@ function remove_order!(
     return costAdded
 end
 
-# TODO : a lot of garbage collecting for the projection
 function update_bins!(
     solution::Solution,
     TSGraph::TimeSpaceGraph,
@@ -89,10 +82,6 @@ function update_bins!(
             costAdded += remove_order!(solution, TSGraph, timedPath, order)
         else
             costAdded += add_order!(solution, TSGraph, timedPath, order; sorted=sorted)
-            # if bundle.idx == 6309
-            #     println(order)
-            #     println("Cost added after order : $costAdded")
-            # end
         end
     end
     return costAdded

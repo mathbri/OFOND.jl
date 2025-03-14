@@ -240,37 +240,6 @@ function add_bundle_arcs!(
             end
         end
     end
-    # for arcSrc in reachableNodes
-    #     # If the source cannot reach the plant, I don't need it in the bundle arcs 
-    #     if !has_path(travelTimeGraph.graph, arcSrc, bunDst)
-    #         continue
-    #     end
-    #     # Adding all outgoing arcs that can lead to the plant
-    #     outSrcArcs = filter(
-    #         arcDst -> has_path(travelTimeGraph.graph, arcDst, bunDst),
-    #         outneighbors(travelTimeGraph.graph, arcSrc),
-    #     )
-    #     append!(bunArcs2, [(arcSrc, arcDst) for arcDst in outSrcArcs])
-    # end
-    # if bunArcs != bunArcs2
-    #     println("Bundle $bundle")
-    #     println(
-    #         "Bundle src and dst : $(travelTimeGraph.bundleSrc[bundle.idx])-$(travelTimeGraph.bundleDst[bundle.idx])",
-    #     )
-    #     println("Reachable nodes : $reachableNodes")
-    #     # println(
-    #     #     "Common reach 1 : $([haskey(commonNetworkReach, (node, bunDst)) for node in reachableNodes])",
-    #     # )
-    #     # println(
-    #     #     "Common reach 2 : $([has_path(travelTimeGraph.graph, node, bunDst) for node in reachableNodes])",
-    #     # )
-    #     sort!(bunArcs)
-    #     println("\nBundle arcs 1 : $(length(bunArcs)) \n$(bunArcs)")
-    #     sort!(bunArcs2)
-    #     println("\nBundle arcs 2 : $(length(bunArcs2)) \n $(bunArcs2)")
-    #     println("\nEqual if sorted : $(bunArcs == bunArcs2)")
-    # end
-    # @assert bunArcs == bunArcs2
     # Adding the complete list to the Travel Time Graph
     return travelTimeGraph.bundleArcs[bundle.idx] = bunArcs
 end

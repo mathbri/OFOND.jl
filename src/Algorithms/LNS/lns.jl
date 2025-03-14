@@ -2,7 +2,6 @@
 # by adding a binary variable per path and a Special Ordered Set of Type 1 constraint on those, 
 # possibly ordered by (real) path cost
 
-# TODO : if elementarity problem in paths returned, add constraint as callback
 function solve_lns_milp(
     instance::Instance,
     perturbation::Perturbation;
@@ -19,15 +18,12 @@ function solve_lns_milp(
     end
     add_path_constraints!(model, instance, perturbation)
     add_packing_constraints!(model, instance, perturbation)
-    withCuts && add_cut_set_inequalities!(model, instance)
     if verbose
         @info "MILP has $(num_constr(model)) constraints ($(num_path_constr(model)) path, $(num_pack_constr(model)) packing and $(num_cut_constr(model)) cuts)"
     end
     add_objective!(model, instance, perturbation)
     warmStart && warm_start!(model, instance, perturbation)
-    # println(model)
-    # Solving
-    # set_time_limit_sec(model, 300.0)
+
     start = time()
     optimize!(model)
 
@@ -54,20 +50,15 @@ function perturbate!(
     # Selecting perturbation based on neighborhood given 
     perturbation = get_perturbation(neighborhood, instance, solution)
     is_perturbation_empty(perturbation; verbose=verbose) && return 0.0, 0
-    # verbose && println(
-    #     "Bundles : $(perturbation.bundleIdxs) \nOld paths : $(perturbation.oldPaths)"
-    # )
     verbose && println("Bundles : $(length(perturbation.bundleIdxs))")
 
     # Computing new paths with lns milp
     pertPaths = solve_lns_milp(instance, perturbation; verbose=verbose, optVerbose=true)
-    # verbose && println("New paths : $pertPaths")
 
     # Filtering bundles to work on
     !are_new_paths(perturbation.oldPaths, pertPaths; verbose=verbose) && return 0.0, 0
     changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
     bunIdxs = perturbation.bundleIdxs[changedIdxs]
-    # verbose && println("Changed bundles : $bunIdxs (changedIdxs = $changedIdxs)")
     verbose && println("Changed bundles : $(length(bunIdxs))")
 
     pertBundles = instance.bundles[bunIdxs]
@@ -93,33 +84,11 @@ function perturbate!(
         verbose && println("Update accpeted")
         return improvement, length(bunIdxs)
     end
-    # println("Update accpeted")
-    # return improvement, length(bunIdxs)
 end
-
-# How to analyse neighborhood difference with initial solution ? see notes in Books
-# We can start with the following mechnism : 
-# - try a local search after eahc pertubation 
-# - if it can fnd a better solution then keep it
-# - if it can't find a better solution, keep the just perturbed solution to appy another perturbation on it 
-# - if the three neighborhoods + local search can't find better solution, revert to the solution at the start of the iteration
-
-# TODO : Analyze this mechanism the same way as the other heuristics 
-
-# TODO : config to test :
-# - one slope scaling reset at first 
-# - slope scaling at each iteration
-# - local search after each perturbation
-
-# TODO : how to revert the solution to the previous step if the perturbation + local search didn't find a better solution ?
-# Put nodes and bundle slection outside of the loop : choose all bundles to be updated with each perturbation before applying them
-# Store previous bins for all those bundles at once
-# This will also allow for easier miw between neighborhood bundle selection and neighborhood perturbation milp :
-# - reduce / attract / two_shared_node / random bundles with single_plant milp could be a good idea
 
 # Combine the large perturbations and the small neighborhoods
 # By default small instance time limits for test purposes, but should be used with time limit = 12h = 43200s
-function LNS!(
+function ILS!(
     solution::Solution,
     instance::Instance;
     timeLimit::Int=1800,
@@ -132,76 +101,7 @@ function LNS!(
     startCost = compute_cost(instance, solution)
     threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
     println("\n")
-    @info "Starting LNS step" :start_cost = startCost :threshold = threshold
-    println("Saving starting solution (in case of too much degradation)")
-    prevSol = solution_deepcopy(solution, instance)
-    # Slope scaling cost update  
-    if resetCost
-        slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
-    else
-        slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
-    end
-    # Apply perturbations in random order
-    for neighborhood in shuffle(PERTURBATIONS)
-        # Apply perturbation and get correponding solution (1 time for arc flows, multiple time for path flows)
-        perturbStartTime, improvement, changed = time(), 0.0, 0
-        while time() - perturbStartTime < perturbTimeLimit
-            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
-            improvement += improv
-            changed += change
-        end
-        @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
-            improvement :changed = changed
-        # If no path changed, trying one more time the perturbation 
-        if changed == 0
-            @warn "No path changed by $neighborhood perturbation, trying one more time"
-            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
-            improvement += improv
-            changed += change
-            if changed == 0
-                @warn "No path changed by $neighborhood perturbation, trying another perturbation"
-            end
-        end
-        # Apply local search 
-        improvement += local_search3!(
-            solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
-        )
-        totImprov += improvement
-        time() - start > timeLimit && break
-    end
-    println("\n")
-    # Final local search : applying large one
-    lsImprovement = large_local_search!(
-        solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
-    )
-    totImprov += lsImprovement
-    @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
-        totImprov
-    )
-    # Reverting if cost augmented by more than 0.75% (heuristic level)
-    if totImprov > 0.0075 * startCost
-        println("Reverting solution because too much cost degradation")
-        revert_solution!(solution, instance, prevSol)
-        return 0.0
-    else
-        return totImprov
-    end
-end
-
-function LNS2!(
-    solution::Solution,
-    instance::Instance;
-    timeLimit::Int=1800,
-    perturbTimeLimit::Int=300,
-    lsTimeLimit::Int=300,
-    lsStepTimeLimit::Int=60,
-    resetCost::Bool=false,
-    verbose::Bool=true,
-)
-    startCost = compute_cost(instance, solution)
-    threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
-    println("\n")
-    @info "Starting LNS step" :start_cost = startCost :threshold = threshold
+    @info "Starting ILS step" :start_cost = startCost :threshold = threshold
 
     bestSol = solution_deepcopy(solution, instance)
     bestCost = startCost
@@ -223,7 +123,7 @@ function LNS2!(
         changed += change
         # If enough path changed, applying local search 
         if changed >= changeThreshold
-            local_search3!(
+            local_search!(
                 solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
             )
             changed = 0
@@ -248,7 +148,6 @@ function LNS2!(
         if noChange >= 5
             break
         end
-        throw(ErrorException("debug"))
     end
     println("\n")
     # Final local search : applying large one
@@ -257,7 +156,7 @@ function LNS2!(
     )
     finalCost = compute_cost(instance, bestSol)
     totImprov = finalCost - startCost
-    @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
+    @info "Full ILS done" :time = round(time() - start; digits=2) :improvement = round(
         totImprov
     )
     # Reverting if cost augmented by more than 0.75% (heuristic level)
@@ -269,61 +168,3 @@ function LNS2!(
         return totImprov
     end
 end
-
-# TODO : create analysis function for the LNS and to decide which architecture should be used 
-
-#######################################################################################
-# New idea to be tested
-#######################################################################################
-
-# function solve_lns_milp_paths(
-#     instance::Instance,
-#     solution::Solution,
-#     startSol::RelaxedSolution,
-#     neighborhood::Symbol,
-#     potentialPaths::Vector{Vector{Vector{Int}}};
-#     src::Int=-1,
-#     dst::Int=-1,
-#     warmStart::Bool=true,
-#     verbose::Bool=false,
-# )
-#     # Buidling model
-#     model = Model(HiGHS.Optimizer)
-#     nPaths = length(potentialPaths[1])
-#     add_variables_paths!(model, instance, startSol, nPaths)
-#     if verbose
-#         nVarBin = count(is_binary, all_variables(model))
-#         nVarInt = count(is_integer, all_variables(model))
-#         @info "$neighborhood MILP : Added $(num_variables(model)) variables" :binary =
-#             nVarBin :integer = nVarInt
-#     end
-#     add_constraints_paths!(model, instance, solution, startSol, potentialPaths)
-#     if verbose
-#         nConPath = length(model[:path])
-#         nConPack = length(model[:packing])
-#         @info "$neighborhood MILP : Added $nConTot constraints" :paths = nConPath :packing =
-#             nConPack
-#     end
-#     add_objective_paths!(model, instance, startSol, potentialPaths)
-#     # If warm start option, doing it 
-#     # TODO : find a way to activate warm start for two node neighborhood
-#     # if warmStart && neighborhood != :two_shared_node
-#     #     edgeIndex = create_edge_index(instance.travelTimeGraph)
-#     #     warm_start_milp!(model, neighborhood, instance, startSol, edgeIndex)
-#     # end
-#     # warmStart && warm_start_milp_test(model, instance, startSol)
-#     # Solving model
-#     set_optimizer_attribute(model, "mip_rel_gap", 0.05)
-#     set_time_limit_sec(model, 120.0)
-#     # set_silent(model)
-#     optimize!(model)
-#     # verbose && println(
-#     #     "Objective value = $(objective_value(model)) (gap = $(objective_gap(model)))"
-#     # )
-#     if has_values(model)
-#         # Getting the solution paths and returning it
-#         return get_paths(model, instance, startSol)
-#     else
-#         return solution.bundlePaths[startSol.bundleIdxs]
-#     end
-# end

@@ -4,8 +4,6 @@ function Order(bundle::Bundle, deliveryDate::Int)
     return Order(bundle.hash, deliveryDate)
 end
 
-# TODO : maybe change to min(maxLegTime, max(direct, meanOversea))
-# TODO : put maxLegTime and meanOverseaTime as network properties to avoid computing it every time
 function add_properties(bundle::Bundle, network::NetworkGraph)
     maxPackSize = maximum(order -> maximum(com -> com.size, order.content), bundle.orders)
     netGraph, supp, cust = network.graph, bundle.supplier, bundle.customer

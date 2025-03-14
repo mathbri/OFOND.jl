@@ -127,32 +127,6 @@ function add_packing_constraints!(
 end
 
 ###########################################################################################
-#############################   Adding valid inequalities   ###############################
-###########################################################################################
-
-# Valid inequalities found in Crainic et al. to strengthen the milp formulation
-
-# TODO : to test
-function add_cut_set_inequalities!(model::Model, instance::Instance)
-    # Check notes on boox tablet for the implementation
-end
-
-# TODO : as it may be tedious to implement, stong chance that it will never be done
-function add_c_strong_inequalities!(model::Model, instance::Instance) end
-
-###########################################################################################
-###########################   Adding elementarity callbacks   #############################
-###########################################################################################
-
-# Elementarity constraint could be sum of incoming x arc var of the problematic nodes to be less than one
-
-# An interesting question here is that by not enforcing that, the search space is larger and easier to explore, so do we really want to enforce here (an not at the very end) the strict path admissibility ?
-
-# TODO 
-
-function path_admissibility_callback() end
-
-###########################################################################################
 ################################   Adding objective   #####################################
 ###########################################################################################
 

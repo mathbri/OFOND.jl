@@ -1,7 +1,5 @@
 # Commodity structure to store corresponding metadata
 
-# The idea to mutualize the partNumber, size and stock cost was not a good idea because result in x2 space taken because of new object layer 
-
 struct Commodity
     orderHash::UInt      # hash of the order the commodity belongs
     partNumHash::UInt    # hashing part number for efficient equality comparison

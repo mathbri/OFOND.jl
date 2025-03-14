@@ -25,12 +25,6 @@ function add_bundle!(
     return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
 end
 
-# TODO : one way to avoid garbage collecting in here would be to have a shared bins_updated matrix
-# Previous values would be changed to false at the beginning
-# Then use dropzeros!(bins_updated)
-# Then fill it like usual
-# This is to be tested if this garbage collecting is significant for the performance
-
 # Combine all bundles paths in arguments into a sparse matrix indicating the arcs to work with
 function get_bins_updated(
     TSGraph::TimeSpaceGraph,

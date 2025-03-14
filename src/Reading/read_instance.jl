@@ -13,7 +13,6 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
         continent,
         nodeType in COMMON_NODE_TYPES,
         row.point_m3_cost,
-        # 0.0,
     )
 end
 
@@ -29,12 +28,6 @@ function read_and_add_nodes!(network::NetworkGraph, node_file::String; verbose::
         node = read_node!(counts, row)
         added, ignore_type = add_node!(network, node; verbose=verbose)
         added || (ignored[ignore_type] += 1)
-        if node.volumeCost < EPS && node.type in [:xdock, :iln]
-            # println(row)
-            # println(node)
-            # @error "No volume cost on this platform"
-            # throw(ErrorException("No volume cost on this platform"))
-        end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr
@@ -46,39 +39,21 @@ function src_dst_hash(row::CSV.Row)
 end
 
 function is_common_arc(row::CSV.Row)
-    # return Symbol(row.src_type) in COMMON_NODE_TYPES &&
-    #        Symbol(row.dst_type) in COMMON_NODE_TYPES
     return Symbol(row.leg_type) in COMMON_ARC_TYPES
 end
 
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
-    shipmentFactor = if arcType == :oversea
-        0.25
-    elseif arcType == :outsource
-        0.1
-    else
-        0.5
-    end
-    shipCost = if arcType == :oversea
-        min(row.shipment_cost, 7.5e3 + 5e3 * rand())
-    else
-        row.shipment_cost
-    end
     return NetworkArc(
         arcType,
         row.distance,
-        # floor(Int, row.travel_time + 0.5),
-        min(floor(Int, row.travel_time), 7),
+        floor(Int, row.travel_time + 0.5),
         isCommon,
-        # row.shipment_cost * shipmentFactor / 5,
-        shipCost,
+        row.shipment_cost,
         row.is_linear,
-        # false,
         row.carbon_cost,
-        min(SEA_CAPACITY, row.capacity * VOLUME_FACTOR),
-        # round(Int, row.capacity * VOLUME_FACTOR),
+        round(Int, row.capacity * VOLUME_FACTOR),
     )
 end
 
@@ -96,14 +71,6 @@ function read_and_add_legs!(network::NetworkGraph, leg_file::String; verbose::Bo
         arc = read_leg!(counts, row, is_common_arc(row))
         added, ignore_type = add_arc!(network, src, dst, arc; verbose=verbose)
         added || (ignored[ignore_type] += 1)
-        # if arc.carbonCost < EPS
-        # println(row)
-        # println(network.graph[src])
-        # println(network.graph[dst])
-        # println(arc)
-        # @error "No carbon cost on this arc"
-        # throw(ErrorException("No carbon cost on this arc"))
-        # end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
@@ -119,20 +86,6 @@ end
 
 function com_size(row::CSV.Row)
     baseSize = min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
-    # if baseSize > 0.5 * SEA_CAPACITY
-    #     return baseSize
-    # elseif baseSize > 0.25 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 2)
-    # elseif baseSize > 0.1 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 3)
-    # elseif baseSize > 0.05 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 4)
-    # elseif baseSize > 0.025 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 5)
-    # elseif baseSize > 0.01 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 6)
-    # end
-    # return min(SEA_CAPACITY, baseSize * 7)
     return baseSize
 end
 
@@ -195,15 +148,6 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         partNums[partNumHash] = row.part_number
         commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
         rowQuantity = round(Int, row.quantity)
-        # if rowQuantity < 3
-        #     rowQuantity *= 5
-        # elseif rowQuantity < 5
-        #     rowQuantity *= 4
-        # elseif rowQuantity < 10
-        #     rowQuantity *= 3
-        # elseif rowQuantity < 20
-        #     rowQuantity *= 2
-        # end
         append!(order.content, [commodity for _ in 1:(rowQuantity)])
         comCount += rowQuantity
         comUnique += 1

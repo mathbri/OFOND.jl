@@ -1,11 +1,5 @@
 # Bin packing functions
 
-global FFD_TIME = 0.0
-global FFD_NUM = 0
-
-global TFFD_TIME = 0.0
-global TFFD_NUM = 0
-
 # As expected, this functions remains the bottleneck
 # Raises a question : is there a way to avoid garbage collecting and push! operation ?
 function first_fit_decreasing!(
@@ -20,17 +14,11 @@ function first_fit_decreasing!(
     end
     lengthBefore = length(bins)
     # Adding commodities on top of others
-    # TODO : copy what has been done for the tentative first fit operation 
     for idxC in comIdxs
         commodity = commodities[idxC]
-        # TODO : maybe it would be faster to computes with CAPACITIES to find the index in which to put the commodity and then put it 
         idxB = findfirst(bin -> add!(bin, commodity), bins)
-        # TODO : this push! operation is taking most of the time in different profiling, probably because of garbage collecting and reallocation
-        # pre-allocate empty bins ? maybe not a good idea
         idxB === nothing && push!(bins, Bin(fullCapacity, commodity))
     end
-    global FFD_TIME += time() - start
-    global FFD_NUM += 1
     return length(bins) - lengthBefore
 end
 
@@ -121,14 +109,11 @@ function tentative_first_fit(
     else
         eachindex(commodities)
     end
-    # nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
-    nBinsBef, nBinsAft = 0, 0
-    CAPACITIES = Int[0 for i in 1:50]
+    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
     # Adding commodities on top of others
     for idxC in comIdxs
         commodity = commodities[idxC]
         idxB = findfirstbin(CAPACITIES, commodity.size, nBinsAft)
-        # idxB = findfirst(cap -> cap >= commodity.size, CAPACITIES[1:nBinsAft])
         if idxB != -1
             CAPACITIES[idxB] -= commodity.size
         else
@@ -136,8 +121,6 @@ function tentative_first_fit(
             add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
         end
     end
-    global TFFD_TIME += time() - start
-    global TFFD_NUM += 1
     return nBinsAft - nBinsBef
 end
 
@@ -161,71 +144,11 @@ function tentative_first_fit(
     for idxC in comIdxs
         commodity = commodities[idxC]
         idxB = findfirstbin(CAPACITIES, commodity.size, nBinsAft)
-        # idxB = findfirst(cap -> cap >= commodity.size, CAPACITIES[1:nBinsAft])
         if idxB != -1
             CAPACITIES[idxB] -= commodity.size
         else
             nBinsAft += 1
             add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
-        end
-    end
-    return nBinsAft - nBinsBef
-end
-
-# The idea is the following : 
-# While searching for the first bin to accomodate the current commodity, we gather information on the current state of the bins
-# We can therefore store the biggest capacity encountered throught this search
-# If the next commodity is bigger than this capacity, we can start the following search at the previous point of insertion
-# This can be extanded easily for the second, third, ... biggest capacities encountered
-function findfirstbin2(
-    CAPACITIES::Vector{Int}, comSize::Int, sizeCap::Int, startIdx::Int, maxIdx::Int
-)
-    newCap = sizeCap
-    for idxB in startIdx:maxIdx
-        # Putting the commodity if we can
-        CAPACITIES[idxB] >= comSize && return idxB, newCap
-        # Otherwise, updating cap
-        newCap = max(newCap, CAPACITIES[idxB])
-    end
-    # If no bin can fit, returning -1
-    return -1, newCap
-end
-
-# TODO : test with large instances the equality with classical tentative first fit
-# Same process as first fit but storing the second least filled bin encountered to speed up the search
-function tentative_first_fit2(
-    bins::Vector{Bin},
-    fullCapacity::Int,
-    commodities::Vector{Commodity},
-    CAPACITIES::Vector{Int};
-    sorted::Bool=false,
-)
-    # Sorting commodities in decreasing order of size (if not already done)
-    comIdxs = if !sorted
-        sortperm(commodities; rev=true)
-    else
-        eachindex(commodities)
-    end
-    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
-    # Setting an overall start idx for the search
-    sizeCap, startIdx = 0, 1
-    # Adding commodities on top of others
-    for idxC in comIdxs
-        commodity = commodities[idxC]
-        # Checking if the sizeCap allow for loop optimization
-        if commodity.size <= sizeCap
-            sizeCap, startIdx = 0, 1
-        end
-        idxB, sizeCap = findfirstbin2(
-            CAPACITIES, commodity.size, sizeCap, startIdx, nBinsAft
-        )
-        if idxB != -1
-            CAPACITIES[idxB] -= commodity.size
-            startIdx = idxB
-        else
-            nBinsAft += 1
-            add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
-            startIdx = nBinsAft
         end
     end
     return nBinsAft - nBinsBef
@@ -240,18 +163,6 @@ function tentative_first_fit(
     sorted::Bool=false,
 )
     return tentative_first_fit(
-        bins, arcData.capacity, order.content, CAPACITIES; sorted=sorted
-    )
-end
-
-function tentative_first_fit2(
-    bins::Vector{Bin},
-    arcData::NetworkArc,
-    order::Order,
-    CAPACITIES::Vector{Int};
-    sorted::Bool=false,
-)
-    return tentative_first_fit2(
         bins, arcData.capacity, order.content, CAPACITIES; sorted=sorted
     )
 end
@@ -466,11 +377,3 @@ function milp_packing(bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{
     milp_packing!(newBins, fullCapacity, commodities)
     return newBins
 end
-
-###########################################################################################
-# Vector packing functions
-###########################################################################################
-
-# TODO : adapt Bin, Commodity and read_instance to this addition
-
-# TODO : code simple vector packing functions

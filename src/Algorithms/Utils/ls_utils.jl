@@ -60,7 +60,6 @@ function tentative_best_fit(
     return tentative_best_fit([Bin(capa)], capa, commodities, CAPACITIES; sorted=false) + 1
 end
 
-# TODO : can be done in parallel ?
 # Store previous bins before removing commodities from them
 function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int})
     I, J, _ = findnz(workingArcs)
@@ -77,7 +76,6 @@ function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Boo
     return sparse(I, J, oldBins)
 end
 
-# TODO : could be done in parallel ?
 # Revert the bin loading the the vector of bins given
 function revert_bins!(solution::Solution, previousBins::SparseMatrixCSC{Vector{Bin},Int})
     # Efficient iteration over sparse matrices
@@ -90,91 +88,6 @@ function revert_bins!(solution::Solution, previousBins::SparseMatrixCSC{Vector{B
         end
     end
 end
-
-# NOT USED ANYMORE
-# Saving and removing bundles
-# function save_and_remove_bundle!(
-#     solution::Solution,
-#     instance::Instance,
-#     bundles::Vector{Bundle},
-#     paths::Vector{Vector{Int}};
-#     current_cost::Bool=false,
-# )
-#     # Getting all timed arcs concerned
-#     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-#     workingArcs = get_bins_updated(TSGraph, TTGraph, bundles, paths)
-#     previousCost = 0.0
-#     if current_cost
-#         # compute cost with adapted function
-#     end
-#     # Saving previous solution state 
-#     previousBins = save_previous_bins(solution, workingArcs)
-#     costRemoved = update_solution!(solution, instance, bundles, paths; remove=true)
-#     if current_cost
-#         # compute cost with adapted function
-#         # difference is cost removed
-#     end
-#     return previousBins, costRemoved
-# end
-
-# NOT USED ANYMORE
-# Compute paths for both insertion type 
-# function both_insertion(
-#     solution::Solution,
-#     instance::Instance,
-#     bundle::Bundle,
-#     src::Int,
-#     dst::Int,
-#     CAPACITIES::Vector{Int};
-#     sorted::Bool=false,
-#     current_cost::Bool=false,
-# )
-#     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-#     greedyPath, pathCost = greedy_insertion(
-#         solution,
-#         TTGraph,
-#         TSGraph,
-#         bundle,
-#         src,
-#         dst,
-#         CAPACITIES;
-#         sorted=sorted,
-#         current_cost=current_cost,
-#     )
-#     lowerBoundPath, pathCost = lower_bound_insertion(
-#         solution,
-#         TTGraph,
-#         TSGraph,
-#         bundle,
-#         src,
-#         dst;
-#         use_bins=true,
-#         giant=true,
-#         current_cost=current_cost,
-#     )
-#     return greedyPath, lowerBoundPath
-# end
-
-# NOT USED ANYMORE
-# Change solution paths and bins into other solution paths and bins
-# Must be the last ones added
-# function change_solution_to_other!(
-#     sol::Solution,
-#     other::Solution,
-#     instance::Instance,
-#     bundles::Vector{Bundle};
-#     sorted::Bool=false,
-# )
-#     # Removing added path by greedy update 
-#     update_solution!(
-#         sol, instance, bundles, sol.bundlePaths[idx(bundles)]; remove=true, skipRefill=true
-#     )
-#     # We can skip refill and just clean the bins as the commodities were the last added
-#     clean_empty_bins!(sol, instance)
-#     # Adding lower bound ones
-#     update_solution!(sol, instance, bundles, other.bundlePaths[idx(bundles)]; sorted=sorted)
-#     return nothing
-# end
 
 # Checking if two nodes are candidates for two node neighborhhods
 function are_nodes_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int)
@@ -235,34 +148,6 @@ function get_paths_to_update(
     return paths
 end
 
-# NOT USED ANYMORE
-# function bundle_path_linear_cost(
-#     bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
-# )
-#     cost = 0.0
-#     for (i, j) in partition(path, 2, 1), order in bundle.orders
-#         cost += volume_stock_cost(TTGraph, i, j, order)
-#         arcData = TTGraph.networkArcs[i, j]
-#         !arcData.isLinear && continue
-#         # for linear arcs, adding transport cost 
-#         cost += get_transport_units(order, arcData) * arcData.unitCost
-#     end
-#     return cost
-# end
-
-# NOT USED ANYMORE
-# function bundle_max_removal_cost(
-#     bundle::Bundle, path::Vector{Int}, TTGraph::TravelTimeGraph
-# )
-#     cost = 0.0
-#     for (i, j) in partition(path, 2, 1), order in bundle.orders
-#         cost += volume_stock_cost(TTGraph, i, j, order)
-#         arcData = TTGraph.networkArcs[i, j]
-#         cost += get_transport_units(order, arcData) * arcData.unitCost
-#     end
-#     return cost
-# end
-
 # computes an (over)estimated number of bins removed 
 function estimated_transport_units(order::Order, bins::Vector{Bin})
     n, vol = 0, 0
@@ -278,13 +163,10 @@ end
 function bundle_estimated_removal_cost(
     bundle::Bundle, path::Vector{Int}, instance::Instance, solution::Solution
 )
-    # println("Estimating removal cost for bundle $bundle on path $path")
     cost = 0.0
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     for (i, j) in partition(path, 2, 1), order in bundle.orders
-        # println("For order $order on arc $i-$j")
         cost += volume_stock_cost(TTGraph, i, j, order)
-        # println("Volume stock cost : $(volume_stock_cost(TTGraph, i, j, order))")
         arcData = TTGraph.networkArcs[i, j]
         ti, tj = time_space_projector(TTGraph, TSGraph, i, j, order)
         transportUnits = if arcData.isLinear
@@ -292,18 +174,7 @@ function bundle_estimated_removal_cost(
         else
             estimated_transport_units(order, solution.bins[ti, tj])
         end
-        # println("Transport units : $transportUnits")
-        if isnothing(transportUnits)
-            println("$bundle, $order and arc data $arcData")
-            println("TT nodes $i-$j, TS nodes $ti-$tj")
-            println("get transport units : $(get_transport_units(order, arcData))")
-            println("Bins : $(solution.bins[ti, tj])")
-            println(
-                "Estimated transport units : $(estimated_transport_units(order, solution.bins[ti, tj]))",
-            )
-        end
         cost += transportUnits * arcData.unitCost
-        # println("Transport cost : $(transportUnits * arcData.unitCost)")
     end
     return cost
 end
