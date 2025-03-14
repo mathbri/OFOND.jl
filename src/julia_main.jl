@@ -7,7 +7,7 @@ function julia_main()::Cint
     # Read files based on ARGS
     println("Launching OFO Network Design")
     println("Arguments : ", ARGS)
-    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_100325")
+    directory = joinpath(Base.dirname(@__DIR__), "scripts", "data_130325")
     if length(ARGS) >= 1
         if isdir(ARGS[1])
             directory = ARGS[1]
@@ -94,7 +94,7 @@ function julia_main()::Cint
 
     println("Exporting current solution to $exportDir")
     clean_empty_bins!(solution2D, instance2D)
-    write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
+    # write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
 
     # Transform here from 2D to 1D
     instance1D = instance_1D(instance2D; mixing=true)

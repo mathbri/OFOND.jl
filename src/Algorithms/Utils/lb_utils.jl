@@ -49,7 +49,7 @@ function arc_lb_update_cost(
     giant::Bool=false,
 )
     # If the arc is forbidden for the bundle, returning INF
-    is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
+    # is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
     # Otherwise, computing the new cost
     arcBundleCost = EPS
     for order in bundle.orders
@@ -70,7 +70,7 @@ function arc_lb_filtering_update_cost(
     TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundle::Bundle, src::Int, dst::Int;
 )
     # If the arc is forbidden for the bundle, returning INF
-    is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
+    # is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
     # Otherwise, computing the new cost
     arcBundleCost = EPS
     for order in bundle.orders

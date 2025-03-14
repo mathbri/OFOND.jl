@@ -199,6 +199,11 @@ function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false
     for bundle in instance.bundles
         bundlePath = solution.bundlePaths[bundle.idx]
         pathSrc, pathDst = bundlePath[1], bundlePath[end]
+        if pathSrc == -1
+            println("Path source will cause an error")
+            println("Bundle : $bundle")
+            println("Path : $bundlePath")
+        end
         check_supplier(instance, bundle, pathSrc; verbose=verbose) || return false
         check_customer(instance, bundle, pathDst; verbose=verbose) || return false
         check_path_continuity(instance, bundlePath; verbose=verbose) || return false
