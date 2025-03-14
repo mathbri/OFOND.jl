@@ -78,7 +78,7 @@ function julia_main(;
 
     println("Exporting current solution to $exportDir")
     clean_empty_bins!(solution2D, instance2D)
-    write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
+    # write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
 
     # Transform here from 2D to 1D
     instance1D = instance_1D(instance2D; mixing=true)
