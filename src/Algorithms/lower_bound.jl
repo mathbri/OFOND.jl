@@ -128,9 +128,16 @@ end
 function lower_bound_filtering_path(
     TTGraph::TravelTimeGraph, TSGraph::TimeSpaceGraph, bundle::Bundle, src::Int, dst::Int
 )
+    # println("Before matrix update")
+    # println("Has path : $(has_path(TTGraph.graph, src, dst))")
+    # dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
+    # println("Shortest path : $(enumerate_paths(dijkstraState, dst))")
     update_lb_filtering_cost_matrix!(TTGraph, TSGraph, bundle)
     dijkstraState = dijkstra_shortest_paths(TTGraph.graph, src, TTGraph.costMatrix)
     shortestPath = enumerate_paths(dijkstraState, dst)
+    # println("After matrix update")
+    # println("Has path : $(has_path(TTGraph.graph, src, dst))")
+    # println("Shortest path : $(enumerate_paths(dijkstraState, dst))")
     removedCost = remove_shortcuts!(shortestPath, TTGraph)
     pathCost = dijkstraState.dists[dst]
     return shortestPath, pathCost - removedCost
@@ -159,7 +166,7 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
         shortestPath, pathCost = lower_bound_filtering_path(
             TTGraph, TSGraph, bundle, suppNode, custNode;
         )
-        if length(shortestPath) > 0
+        if length(shortestPath) == 0
             throw(
                 ErrorException(
                     "No path found for bundle $bundle between supplier $suppNode ($(TTGraph.networkNodes[suppNode]) $(TTGraph.stepToDel[suppNode]) steps from delivery) and customer $custNode ($(TTGraph.networkNodes[custNode]) $(TTGraph.stepToDel[custNode]) steps from delivery)",

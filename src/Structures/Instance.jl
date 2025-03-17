@@ -47,6 +47,14 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
         )
     ]
     if length(noPaths) > 0
+        for bIdx in noPaths
+            bundle = instance.bundles[bIdx]
+            suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
+            custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
+            println(
+                "Has path in network graph : $(has_path(instance.networkGraph.graph, suppNode, custNode)) ($bIdx)",
+            )
+        end
         throw(
             ErrorException(
                 "Some bundles have no path in the travel time graph : $(join(noPaths, ", "))",
