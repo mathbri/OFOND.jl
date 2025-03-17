@@ -51,6 +51,8 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
             bundle = instance.bundles[bIdx]
             suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
             custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
+            println("Supplier : $(bundle.supplier)")
+            println("Customer : $(bundle.customer)")
             println(
                 "Has path in network graph : $(has_path(instance.networkGraph.graph, suppNode, custNode)) ($bIdx)",
             )
