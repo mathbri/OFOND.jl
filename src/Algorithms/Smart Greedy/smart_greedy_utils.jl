@@ -10,8 +10,9 @@
 
 # First objective : is to replay the solving of an instance but much faster 
 # Second objective : is to generalize to instance not seen but close (a few modifications on the instance) 
+# Later : get a stochastic-aware predictor of optimal paths 
 
-# TODO : add non_shortcu_arcs into the TTGraph structure ?
+# TODO : put return types directly to Float32 ?
 
 ###########################################################################################
 ##############################   Features utils   #########################################
@@ -22,21 +23,18 @@ function normalize_features()
     # TODO
 end
 
-function non_shortcut_arcs(instance::Instance)
-    TTGraph = instance.travelTimeGraph
-    TTArcs = instance.travelTimeGraph.networkArcs
-    return count(e -> TTArcs[e.src, e.dst].type != :shortcut, edges(TTGraph.graph))
+# Shortcuts all have the same features for now
+function shortcut_feature(nFeatures::Int)
+    return zeros(nFeatures)
 end
 
 ###########################################################################################
 ##############################   Instance features   ######################################
 ###########################################################################################
 
-# TODO : put return types directly to Float32 ?
-
 # Global features common to all bundles of the instance
 
-function arc_core_features(TTGraph::TravelTimeGraph, arcSrc::Int, arcDst::Int)
+function arc_static_features(TTGraph::TravelTimeGraph, arcSrc::Int, arcDst::Int)
     arcData = TTGraph.networkArcs[arcSrc, arcDst]
     srcData = TTGraph.networkNodes[arcSrc]
     dstData = TTGraph.networkNodes[arcDst]
@@ -47,12 +45,6 @@ function arc_core_features(TTGraph::TravelTimeGraph, arcSrc::Int, arcDst::Int)
         arcData.carbonCost,
         srcData.volumeCost,
         dstData.volumeCost,
-    ]
-end
-
-function arc_other_features(TTGraph::TravelTimeGraph, arcSrc::Int, arcDst::Int)::Float64
-    arcData = TTGraph.networkArcs[arcSrc, arcDst]
-    return [
         arcData.isCommon,
         arcData.isLinear,
         arcData.type == :direct,
@@ -67,30 +59,23 @@ function arc_other_features(TTGraph::TravelTimeGraph, arcSrc::Int, arcDst::Int):
 end
 
 # Compute common static (aka solution state independant) features among bundles
-# Size regulates the number of fetures to gather 
-# - 0 : none
-# - 1 : distance / travel time / unit cost / carbon cost / src node cost / dst node cost
-# - 2 : those above + is common / is linear / type as one-hot / src step to del / dst step to del 
-function common_static_features(instance::Instance; size::Int=1)
+# Distance / travel time / unit cost / carbon cost / src node cost / dst node cost
+# + is common / is linear / type as one-hot / src step to del / dst step to del 
+function common_static_features(instance::Instance)
     TTGraph = instance.travelTimeGraph
-    nColumns = non_shortcut_arcs(instance)
-    # Nothing to compute if size = 0
-    size == 0 && return zeros(0, nColumns)
-    nFeatures = size >= 1 ? 6 : 16
+    nColumns = ne(TTGraph.graph)
+    nFeatures = 16
     features = zeros(nFeatures, nColumns)
-    i = 1
-    for arc in edges(TTGraph.graph)
+    for (i, arc) in enumerate(edges(TTGraph.graph))
         arcInfo = TTGraph.networkArcs[arc.src, arc.dst]
-        # Skipping shortcuts
-        arcInfo.type == :shortcut && continue
         # Arc properties
-        features[1:6, i] = arc_core_features(TTGraph, arc.src, arc.dst)
-        # If extended features, computed the other properties
-        if size > 1
-            features[7:16, i] = arc_other_features(TTGraph, arc.src, arc.dst)
+        arcFeatures = if arcInfo.type == :shortcut
+            shortcut_feature(nFeatures)
+        else
+            arc_static_features(TTGraph, arc.src, arc.dst)
         end
-        # Updating index
-        i += 1
+        # Updating matrix 
+        features[:, i] = arcFeatures
     end
     return features
 end
@@ -98,6 +83,13 @@ end
 ###########################################################################################
 ###########################   Bundle static features   ####################################
 ###########################################################################################
+
+# TODO 
+# if size >= 2
+# Add quantiles of commodity size
+# Quantiles are to be computed for the whole instance 
+# To use preferably on the filtered instance because quantiles may be too far aparts
+# end
 
 # Bundle features independant of the solution
 
@@ -109,7 +101,10 @@ function direct_delivery_distance(TTGraph::TravelTimeGraph, bundle::Bundle)
     return shortest_path(TTGraph, bSrc, bDst)[2]
 end
 
-function commodities_features(commodities::Vector{Commodity})
+function commodities_features(commodities::Vector{Commodity}, CAPA::Vector{Int})
+    if length(commodities) == 0
+        return zeros(9)
+    end
     totVol, N = sum(c -> c.size, commodities), length(commodities)
     return [
         sum(c -> c.stockCost, commodities),
@@ -118,47 +113,36 @@ function commodities_features(commodities::Vector{Commodity})
         totVol,
         N,
         totVol / N,
-        tentative_first_fit(arcInfo, commodities, Int[]),
+        tentative_first_fit(arcInfo, commodities, CAPA),
         ceil(totVol / arcInfo.capacity),
         totVol / arcInfo.capacity,
     ]
 end
 
 # Compute static features for each bundle
-# Size regulates the number of fetures to gather 
-# - 0 : none
-# - 1 : distance direct delivery / total stock cost / min / max / sum / count / mean / ffd units / giant container units / linear units of concatenated orders
-# - 2 : same as above and adding the same for each order
-function bundle_static_features(instance::Instance, bundle::Bundle; size::Int=1)
+# Direct distance + stock cost / min / max / sum / count / mean / BP units / GC units / LC units of each order
+function bundle_static_features(instance::Instance, bundle::Bundle, CAPA::Vector{Int})
     TTGraph = instance.travelTimeGraph
-    nColumns = non_shortcut_arcs(instance)
-    # Nothing to compute if size = 0
-    size == 0 && return zeros(0, nColumns)
-    nFeatures = size >= 1 ? 10 : 10 + 8 * instance.timeHorizon
+    nColumns = ne(TTGraph.graph)
+    nFeatures = 1 + 8 * instance.timeHorizon
     features = zeros(nFeatures, nColumns)
-    i = 1
-    for arc in edges(TTGraph.graph)
+    for (i, arc) in enumerate(edges(TTGraph.graph))
         arcInfo = TTGraph.networkArcs[arc.src, arc.dst]
-        # Skipping shortcuts
-        arcInfo.type == :shortcut && continue
-        # Direct delivery distance
-        features[1, i] = direct_delivery_distance(TTGraph, bundle)
-        # Stats on concatenation of orders
-        allCommodities = vcat(order.content for order in bundle.orders)
-        features[2:10, i] = commodities_features(allCommodities)
-        # If extended features, computed the properties per order
-        if size >= 1
-            for order in bundle.orders
-                delDate = order.deliveryDate
-                firstIdx, lastIdx = 10 + 8 * (delDate - 1) + 1, 10 + 8 * delDate
-                features[firstIdx:lastIdx, i] = commodities_features(order.content)
-                if size >= 2
-                    # Add quantiles of commodity size
-                end
-            end
+        # Completing orders not here by empty commodity vectors
+        allContents = [Commodity[] for _ in 1:(instance.timeHorizon)]
+        for order in bundle.orders
+            allContents[order.deliveryDate] = order.content
         end
-        # Updating index
-        i += 1
+        # Arc properties
+        arcFeatures = if arcInfo.type == :shortcut
+            shortcut_feature(nFeatures)
+        else
+            vcat(
+                direct_delivery_distance(TTGraph, bundle),
+                commodities_features(content, CAPA) for content in allContents
+            )
+        end
+        features[:, i] = arcFeatures
     end
     return features
 end
@@ -173,16 +157,21 @@ end
 # This must be a precomputed state so that at training time it doesn't depend on the previous path predicted
 
 # The greedy / lower bound insertion cost can be a pretty good proxy for the compatibility of a bundle with an arc
-function arc_cost_features(inst::Instance, sol::Solution, bun::Bundle, aSrc::Int, aDst::Int)
+function arc_cost_features(
+    inst::Instance, sol::Solution, bun::Bundle, aSrc::Int, aDst::Int, CAPA::Vector{Int}
+)
     TTG, TSG = inst.travelTimeGraph, inst.timeSpaceGraph
     return [
-        arc_update_cost(sol, TTG, TSG, bun, aSrc, aDst, Int[]; sorted=true),
+        arc_update_cost(sol, TTG, TSG, bun, aSrc, aDst, CAPA; sorted=true),
         arc_lb_update_cost(sol, TTG, TSG, bun, aSrc, aDst; giant=true),
         arc_lb_update_cost(sol, TTG, TSG, bun, aSrc, aDst; use_bins=false),
     ]
 end
 
 function arc_utilization_features(solution::Solution, aSrc::Int, aDst::Int)
+    if aSrc == -1 || aDst == -1
+        return zeros(5)
+    end
     totCapa = sum(bin -> bin.load, solution.bins[tsSrc, tsDst])
     return [
         length(solution.bins[aSrc, aDst]),
@@ -195,37 +184,33 @@ end
 
 # Compute dynamic (aka solution state dependant) features for each bundle
 function bundle_dynamic_features(
-    instance::Instance, solution::Solution, bundle::Bundle; size::Int=1
+    instance::Instance, solution::Solution, bundle::Bundle, it::Int, CAPA::Vector{Int}
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
-    nColumns = non_shortcut_arcs(instance)
-    nFeatures = size >= 1 ? 4 : 9
+    nColumns = ne(TTGraph.graph)
+    nFeatures = 4 + 5 * instance.timeHorizon
     features = zeros(nFeatures, nColumns)
-    i = 1
-    for arc in edges(TTGraph.graph)
+    for (i, arc) in enumerate(edges(TTGraph.graph))
         arcInfo = TTGraph.networkArcs[arc.src, arc.dst]
-        # Skipping shortcuts
-        arcInfo.type == :shortcut && continue
-        # Greedy insertion cost
-        features[1:3, i] .= arc_cost_features(instance, solution, bundle, arc.src, arc.dst)
-        # Iteration of algorithm
-        features[4, i] = bundle.idx / length(instance.bundles)
-        # Current arc utilization
-        if size >= 1
-            concatFeatures = zeros(5)
-            for order in bundle.orders
-                tsSrc, tsDst = time_space_projector(
-                    TTGraph, TSGraph, arc.src, arc.dst, order
-                )
-                concatFeatures += arc_utilization_features(solution, tsSrc, tsDst)
-            end
-            features[5:9, i] .= concatFeatures / length(bundle.orders)
-            if size >= 2
-                # Add features for each arc of each time step
-            end
+        # Projecting arc for all possible delivery date 
+        projections = [(-1, -1) for _ in 1:(instance.timeHorizon)]
+        for order in bundle.orders
+            projections[order.deliveryDate] = time_space_projector(
+                TTGraph, TSGraph, arc.src, arc.dst, order
+            )
         end
-        # Updating index
-        i += 1
+        # Arc properties
+        arcFeatures = if arcInfo.type == :shortcut
+            shortcut_feature(nFeatures)
+        else
+            vcat(
+                arc_cost_features(instance, solution, bundle, arc.src, arc.dst, CAPA),
+                it / length(instance.bundles),
+                arc_utilization_features(solution, tsSrc, tsDst) for
+                (tsSrc, tsDst) in projections
+            )
+        end
+        features[:, i] = arcFeatures
     end
     return features
 end
@@ -243,27 +228,21 @@ end
 
 function MLP(nFeatures::Int)
     @info "Creating Multi Layer Perceptron with 2 hidden layers and $(nFeatures * 64 + 64 * 32 + 32) total parameters"
-    return Chain(
-        Dense(nFeatures => 64, relu),
-        Dropout(0.5),
-        Dense(64 => 32, relu),
-        Dense(32 => 1),
-        vec,
-    )
+    return Chain(Dense(nFeatures => 64, relu), Dense(64 => 32, relu), Dense(32 => 1), vec)
 end
 
 # Computes the shortest path given by the cost prediction theta
 function predicted_shortest_path(theta::Vector{Float64}; instance::Instance, bundle::Bundle)
     TTGraph = instance.travelTimeGraph
-    i = 1
-    for arc in edges(TTGraph.graph)
+    for (i, arc) in enumerate(edges(TTGraph.graph))
         arcInfo = TTGraph.networkArcs[arc.src, arc.dst]
-        # Skipping shortcuts
-        arcInfo.type == :shortcut && continue
+        arcCost = if arcInfo.type == :shortcut
+            EPS
+        else
+            theta[i]
+        end
         # Updating cost
-        TTGraph.costMatrix[arc.src, arc.dst] = theta[i]
-        # Updating index
-        i += 1
+        TTGraph.costMatrix[arc.src, arc.dst] = arcCost
     end
     bunSrc = TTGraph.bundleSrc[bundle.idx]
     bunDst = TTGraph.bundleDst[bundle.idx]
