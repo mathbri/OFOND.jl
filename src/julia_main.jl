@@ -81,6 +81,7 @@ function julia_main(;
     # write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
 
     # Transform here from 2D to 1D
+    CAPACITIES_V = Int[]
     instance1D = instance_1D(instance2D; mixing=true)
     instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
 

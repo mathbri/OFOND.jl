@@ -102,7 +102,7 @@ function read_and_add_legs!(
         src, dst = src_dst_hash(row)
         # Checking if there is a price name
         try
-            tariffNames[hash(src, dst)] = row.tariff_name
+            tariffNames[hash(src, dst)] = row.tarif_name
         catch e
             # Doing nothing if the column isn't here
         end
@@ -112,6 +112,7 @@ function read_and_add_legs!(
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
+    println("Tariffs read : $(length(tariffNames))")
     return tariffNames
 end
 

@@ -38,6 +38,31 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
     end
     newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
     @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
+    # Checking a path exists for every bundle in the travel time graph 
+    noPaths = [
+        bundle.idx for bundle in newBundles if !has_path(
+            newTTGraph.graph,
+            newTTGraph.bundleSrc[bundle.idx],
+            newTTGraph.bundleDst[bundle.idx],
+        )
+    ]
+    if length(noPaths) > 0
+        for bIdx in noPaths
+            bundle = instance.bundles[bIdx]
+            suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
+            custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
+            println("Supplier : $(bundle.supplier)")
+            println("Customer : $(bundle.customer)")
+            println(
+                "Has path in network graph : $(has_path(instance.networkGraph.graph, suppNode, custNode)) ($bIdx)",
+            )
+        end
+        throw(
+            ErrorException(
+                "Some bundles have no path in the travel time graph : $(join(noPaths, ", "))",
+            ),
+        )
+    end
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
     @info "Time-space graph has $(nv(newTSGraph.graph)) nodes and $(ne(newTSGraph.graph)) arcs"
     return Instance(
