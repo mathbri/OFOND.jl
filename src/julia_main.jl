@@ -1,5 +1,7 @@
 # File used to launch all kinds of scripts using OFOND package 
 
+# TODO : test the correct execution of all code on the multiple instances available
+
 # using OFOND
 using ProfileView
 using JLD2
