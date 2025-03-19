@@ -97,7 +97,6 @@ function julia_main()::Cint
     write_solution(solution2D, instance2D; suffix="current", directory=exportDir)
 
     # Transform here from 2D to 1D
-    CAPACITIES_V = Int[]
     instance1D = instance_1D(instance2D; mixing=true)
     instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
 
@@ -108,6 +107,7 @@ function julia_main()::Cint
 
     # Reading instance again but ignoring current network
     instance2D = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
+    CAPACITIES_V = Int[]
     instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
 
     # # Transform here from 2D to 1D
