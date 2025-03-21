@@ -67,3 +67,7 @@ const SHIPMENT_CONTENT_COLUMNS = [
     "volume",
     "weight",
 ]
+
+const ANOMALY_COLUMNS = [
+    "anomaly", "anomaly_type", "anomaly_location", "source", "destination"
+]

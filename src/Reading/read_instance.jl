@@ -1,5 +1,13 @@
 # File containing all functions to read an instance
 
+# TODO : gather anomalies in anomaly file
+
+function are_node_data_missing(row::CSV.Row)
+    return ismissing(row.point_account) ||
+           ismissing(row.point_type) ||
+           ismissing(row.point_m3_cost)
+end
+
 function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     nodeType = Symbol(row.point_type)
     haskey(counts, nodeType) && (counts[nodeType] += 1)
@@ -16,28 +24,57 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     )
 end
 
-function read_and_add_nodes!(network::NetworkGraph, node_file::String; verbose::Bool=false)
+function read_and_add_nodes!(
+    network::NetworkGraph, node_file::String, anomaly_file::String; verbose::Bool=false
+)
     counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     # Reading .csv file
     csv_reader = CSV.File(
         node_file; types=Dict("point_account" => String, "point_type" => String)
     )
     @info "Reading nodes from CSV file $(basename(node_file)) ($(length(csv_reader)) lines)"
-    ignored = Dict(:same_node => 0, :unknown_type => 0)
+    ignored = Dict(:same_node => 0, :unknown_type => 0, :missing_data => 0)
     for row in csv_reader
+        if are_node_data_missing(row)
+            ignored[:missing_data] += 1
+            anomaly_message = "missing data for the node,node,instance reading,$(row.point_account),"
+            open(anomaly_file, "a") do io
+                println(io, anomaly_message)
+            end
+            continue
+        end
         node = read_node!(counts, row)
         added, ignore_type = add_node!(network, node; verbose=verbose)
-        added || (ignored[ignore_type] += 1)
+        if !added
+            ignored[ignore_type] += 1
+            anomaly_message = if ignore_type == :same_node
+                "node with same account and type already in the network,node,instance reading,$(row.point_account),"
+            elseif ignore_type == :unknown_type
+                "node with unknown type,node,instance reading,$(row.point_account),"
+            end
+            open(anomaly_file, "a") do io
+                println(io, anomaly_message)
+            end
+        end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr
 end
 
+function are_leg_data_missing(row::CSV.Row)
+    return ismissing(row.src_account) ||
+           ismissing(row.dst_account) ||
+           ismissing(row.src_type) ||
+           ismissing(row.dst_type) ||
+           ismissing(row.leg_type) ||
+           ismissing(row.distance) ||
+           ismissing(row.travel_time) ||
+           ismissing(row.shipment_cost) ||
+           ismissing(row.capacity) ||
+           ismissing(row.carbon_cost)
+end
+
 function src_dst_hash(row::CSV.Row)
-    @assert !ismissing(row.src_account)
-    @assert !ismissing(row.dst_account)
-    @assert !ismissing(row.src_type)
-    @assert !ismissing(row.dst_type)
     return hash(row.src_account, hash(Symbol(row.src_type))),
     hash(row.dst_account, hash(Symbol(row.dst_type)))
 end
@@ -46,18 +83,31 @@ function is_common_arc(row::CSV.Row)
     return Symbol(row.leg_type) in COMMON_ARC_TYPES
 end
 
+function is_current_to_ignore(row::CSV.Row)
+    try
+        if row.type_simu == "e"
+            return true
+        end
+    catch e
+        # Doing nothing if the column isn't here
+    end
+    return false
+end
+
+function add_leg_price!(tariffNames::Dict{UInt,String}, src::UInt, dst::UInt, row::CSV.Row)
+    try
+        tariffNames[hash(src, dst)] = row.tarif_name
+    catch e
+        # Doing nothing if the column isn't here
+    end
+end
+
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
-    @assert !ismissing(row.leg_type)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
     if ismissing(row.distance)
         println(row)
     end
-    @assert !ismissing(row.distance)
-    @assert !ismissing(row.travel_time)
-    @assert !ismissing(row.shipment_cost)
-    @assert !ismissing(row.carbon_cost)
-    @assert !ismissing(row.capacity)
     if row.shipment_cost > 1e6
         @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
             arcType :row = row
@@ -67,7 +117,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         row.distance,
         floor(Int, row.travel_time + 0.5),
         isCommon,
-        min(row.shipment_cost, 1.5e4),
+        min(row.shipment_cost, 1.5e5),
         row.is_linear,
         row.carbon_cost,
         round(Int, row.capacity * VOLUME_FACTOR),
@@ -76,7 +126,11 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
 end
 
 function read_and_add_legs!(
-    network::NetworkGraph, leg_file::String; ignoreCurrent::Bool=false
+    network::NetworkGraph,
+    leg_file::String,
+    anomaly_file::String;
+    ignoreCurrent::Bool=false,
+    verbose::Bool=false,
 )
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
@@ -84,36 +138,61 @@ function read_and_add_legs!(
     csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
     @info "Reading legs from CSV file $(basename(leg_file)) ($(length(csv_reader)) lines)"
     ignored = Dict(
-        :same_arc => 0, :unknown_type => 0, :unknown_source => 0, :unknown_dest => 0
+        :same_arc => 0,
+        :unknown_type => 0,
+        :unknown_source => 0,
+        :unknown_dest => 0,
+        :missing_data => 0,
     )
     tariffNames = Dict{UInt,String}()
     # println(csv_reader[1])
     for row in csv_reader
-        # Checking if we should ignore this arc
-        if ignoreCurrent
-            try
-                if row.type_simu == "e"
-                    continue
-                end
-            catch e
-                # Doing nothing if the column isn't here
+        if are_leg_data_missing(row)
+            ignored[:missing_data] += 1
+            anomaly_message = "missing data for the leg,leg,instance reading,$(row.src_account),$(row.dst_account)"
+            open(anomaly_file, "a") do io
+                println(io, anomaly_message)
             end
+            continue
         end
+        # Checking if we should ignore this arc
+        ignoreCurrent && is_current_to_ignore(row) && continue
         src, dst = src_dst_hash(row)
         # Checking if there is a price name
-        try
-            tariffNames[hash(src, dst)] = row.tarif_name
-        catch e
-            # Doing nothing if the column isn't here
-        end
+        add_leg_price!(tariffNames, src, dst, row)
         arc = read_leg!(counts, row, is_common_arc(row))
         added, ignore_type = add_arc!(network, src, dst, arc; verbose=verbose)
-        added || (ignored[ignore_type] += 1)
+        if !added
+            ignored[ignore_type] += 1
+            anomaly_message = if ignore_type == :same_arc
+                "leg with same source and destination already in the network,leg,instance reading,$(row.src_account),$(row.dst_account)"
+            elseif ignore_type == :unknown_type
+                "leg with unknown type,leg,instance reading,$(row.src_account),$(row.dst_account)"
+            elseif ignore_type == :unknown_source
+                "leg with unknown source,leg,instance reading,$(row.src_account),$(row.dst_account)"
+            elseif ignore_type == :unknown_dest
+                "leg with unknown destination,leg,instance reading,$(row.src_account),$(row.dst_account)"
+            end
+            open(anomaly_file, "a") do io
+                println(io, anomaly_message)
+            end
+        end
     end
     ignoredStr = join(pairs(ignored), ", ")
     @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
     println("Tariffs read : $(length(tariffNames))")
     return tariffNames
+end
+
+function are_commodity_data_missing(row::CSV.Row)
+    return ismissing(row.supplier_account) ||
+           ismissing(row.customer_account) ||
+           ismissing(row.delivery_time_step) ||
+           ismissing(row.size) ||
+           ismissing(row.delivery_date) ||
+           ismissing(row.part_number) ||
+           ismissing(row.quantity) ||
+           ismissing(row.lead_time_cost)
 end
 
 function bundle_hash(row::CSV.Row)
@@ -140,12 +219,22 @@ function com_weight(row::CSV.Row)
     return round(Int, max(1, weight))
 end
 
-function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
+function get_bundle!(
+    bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph, anomaly_file::String
+)
     # Get supplier and customer nodes
     if !haskey(network.graph, hash(row.supplier_account, hash(:supplier)))
         @warn "Supplier unknown in the network" :supplier = row.supplier_account :row = row
+        anomaly_message = "commodity supplier unknown in the network,commodity,instance reading,$(row.supplier_account),$(row.customer_account)"
+        open(anomaly_file, "a") do io
+            println(io, anomaly_message)
+        end
     elseif !haskey(network.graph, hash(row.customer_account, hash(:plant)))
         @warn "Customer unknown in the network" :customer = row.customer_account :row = row
+        anomaly_message = "commodity customer unknown in the network,commodity,instance reading,$(row.supplier_account),$(row.customer_account)"
+        open(anomaly_file, "a") do io
+            println(io, anomaly_message)
+        end
     else
         supplierNode = network.graph[hash(row.supplier_account, hash(:supplier))]
         customerNode = network.graph[hash(row.customer_account, hash(:plant))]
@@ -172,7 +261,9 @@ function add_date!(dateHorizon::Vector{String}, row::CSV.Row)
     end
 end
 
-function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
+function read_commodities(
+    networkGraph::NetworkGraph, commodities_file::String, anomaly_file::String
+)
     orders, bundles = Dict{UInt,Order}(), Dict{UInt,Bundle}()
     dates, partNums = Vector{String}(), Dict{UInt,String}()
     comCount, comUnique = 0, 0
@@ -190,10 +281,22 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     # println(csv_reader[1])
     firstWeek = Date(DateTime(csv_reader[1].delivery_date[1:10]))
     lastWeek = Date(DateTime(csv_reader[1].delivery_date[1:10]))
+    ignored = Dict(:unknown_bundle => 0, :missing_data => 0)
     for (i, row) in enumerate(csv_reader)
+        if are_commodity_data_missing(row)
+            ignored[:missing_data] += 1
+            anomaly_message = "missing data for the commodity,commodity,instance reading,$(row.supplier_account),$(row.customer_account)"
+            open(anomaly_file, "a") do io
+                println(io, anomaly_message)
+            end
+            continue
+        end
         # Getting bundle, order and commodity data
-        bundle = get_bundle!(bundles, row, networkGraph)
-        bundle === nothing && continue
+        bundle = get_bundle!(bundles, row, networkGraph, anomaly_file)
+        if bundle === nothing
+            ignored[:unknown_bundle] += 1
+            continue
+        end
         order = get_order!(orders, row, bundle)
         # If the order is new (no commodities) we have to add it to the bundle
         length(order.content) == 0 && push!(bundle.orders, order)
@@ -216,7 +319,9 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     end
     # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
     bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
-    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon"
+    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon" :ignored = join(
+        pairs(ignored), ", "
+    )
     timeFrame = lastWeek - firstWeek
     timeFrameDates = Dates.Day(Dates.Week(length(dates)))
     if abs(timeFrame - timeFrameDates) > Dates.Day(7)
@@ -227,11 +332,15 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
 end
 
 function read_instance(
-    node_file::String, leg_file::String, commodities_file::String; ignoreCurrent::Bool=false
+    node_file::String,
+    leg_file::String,
+    commodities_file::String,
+    anomaly_file::String;
+    ignoreCurrent::Bool=false,
 )
     networkGraph = NetworkGraph()
-    read_and_add_nodes!(networkGraph, node_file)
-    read_and_add_legs!(networkGraph, leg_file)
+    read_and_add_nodes!(networkGraph, node_file, anomaly_file)
+    tariffs = read_and_add_legs!(networkGraph, leg_file, anomaly_file)
     # Adding general properties 
     seaTime, seaNumber, maxLeg = 0, 0, 0
     netGraph = networkGraph.graph
@@ -245,18 +354,28 @@ function read_instance(
     meanOverseaTime = seaNumber == 0 ? 0 : round(Int, seaTime / seaNumber)
     netGraph[][:meanOverseaTime] = meanOverseaTime
     netGraph[][:maxLeg] = maxLeg
-    bundles, dates, partNums = read_commodities(networkGraph, commodities_file)
-    if networkGraph.graph[]["maxLeg"] > length(dates)
-        maxLeg = networkGraph.graph[]["maxLeg"]
-        horizon = length(dates)
-        @error "The longest leg is $(maxLeg) steps long, which is longer than the time horizon ($(horizon) steps), this may cause an error"
+    bundles, dates, partNums = read_commodities(
+        networkGraph, commodities_file, anomaly_file
+    )
+    horizon = length(dates)
+    if netGraph[][:maxLeg] > length(dates)
+        @warn "The longest leg is $(netGraph[][:maxLeg]) steps long, which is longer than the time horizon ($(length(dates)) steps), the new horizon will be $(netGraph[][:maxLeg]) steps"
+        anomaly_message = "longest leg is $(netGraph[][:maxLeg]) steps long but horizon is $(length(dates)) steps long,horizon,,"
+        open(anomaly_file, "a") do io
+            println(io, anomaly_message)
+        end
+        horizon = netGraph[][:maxLeg]
+        lastWeek = Date(DateTime(dates[end]))
+        for i in 1:(horizon - length(dates))
+            push!(dates, lastWeek + Dates.Week(i))
+        end
     end
     return Instance(
         networkGraph,
         TravelTimeGraph(),
         TimeSpaceGraph(),
         bundles,
-        length(dates),
+        horizon,
         dates,
         partNums,
         tariffs,

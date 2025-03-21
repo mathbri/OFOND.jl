@@ -11,6 +11,7 @@ using Random
 using JuMP
 using Gurobi
 using HiGHS
+# using CPLEX
 using SparseArrays
 using Flux
 using InferOpt
