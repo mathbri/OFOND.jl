@@ -20,11 +20,8 @@ parameters = JSON.parsefile(ARGS[1])
 
 # Launching optimization
 julia_main(;
-    inputFolder=parameters["input_folder"],
-    nodeFile=parameters["node_file"],
-    legFile=parameters["leg_file"],
-    volumeFile=parameters["volume_file"],
-    outputFolder=parameters["output_folder"],
-    useILS=parameters["algorithm"] == "LNS",
-    useWeights=parameters["use_weights"],
+    inputFolder=parameters["input"],
+    outputFolder=parameters["output"],
+    useILS=parameters["model"] == "LNS",
+    useWeights=parameters["weight"],
 )
