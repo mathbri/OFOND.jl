@@ -205,10 +205,10 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
             )
         end
         # Computing shortest path
-        shortestPath, pathCost = lower_bound_filtering_path(
+        shortestPath = lower_bound_filtering_path(
             TTGraph, TSGraph, bundle, suppNode, custNode;
         )
-        if length(shortestPath) > 0
+        if length(shortestPath) == 0
             throw(
                 ErrorException(
                     "No path found for bundle $bundle between supplier $suppNode ($(TTGraph.networkNodes[suppNode]) $(TTGraph.stepToDel[suppNode]) steps from delivery) and customer $custNode ($(TTGraph.networkNodes[custNode]) $(TTGraph.stepToDel[custNode]) steps from delivery)",

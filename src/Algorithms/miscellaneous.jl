@@ -354,7 +354,7 @@ function mix_greedy_and_lower_bound!(
         update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # Record progress
         i % 10 == 0 && print("|")
-        i % percentIdx == 0 && print(" $(round(Int, i * percentIdx))% ")
+        i % percentIdx == 0 && print(" $(round(Int, i / percentIdx))% ")
         # Checking computations
         if check
             for (src, dst) in TTGraph.bundleArcs[bundleIdx]

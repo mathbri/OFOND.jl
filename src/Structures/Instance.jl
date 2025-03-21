@@ -51,15 +51,16 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
             bundle = instance.bundles[bIdx]
             suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
             custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
-            println("Supplier : $(bundle.supplier)")
-            println("Customer : $(bundle.customer)")
-            println(
-                "Has path in network graph : $(has_path(instance.networkGraph.graph, suppNode, custNode)) ($bIdx)",
+            supplier = bundle.supplier
+            customer = bundle.customer
+            has_path_in_flat_network = has_path(
+                instance.networkGraph.graph, suppNode, custNode
             )
+            @error "Bundle $(bundle.idx) doesn't have path in the travel time graph" supplier customer has_path_in_flat_network
         end
         throw(
             ErrorException(
-                "Some bundles have no path in the travel time graph : $(join(noPaths, ", "))",
+                "Some bundles have no path in the travel time graph, see details above"
             ),
         )
     end
@@ -181,6 +182,7 @@ function extract_sub_instance2(
         timeHorizon,
         instance.dates[1:timeHorizon],
         instance.partNumbers,
+        instance.prices,
     )
 end
 

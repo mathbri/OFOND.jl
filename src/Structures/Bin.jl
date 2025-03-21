@@ -60,10 +60,14 @@ function add!(bin::Bin, commodity::Commodity)
 end
 
 function add!(bin::Bin, commodities::Vector{Commodity})
-    if bin.capacity >= sum(commodity.size for commodity in commodities; init=0)
+    totVol = sum(com -> com.size, commodities; init=0)
+    totWei = sum(com -> com.weight, commodities; init=0)
+    if bin.volumeCapacity >= totVol && bin.weightCapacity >= totWei
         append!(bin.content, commodities)
-        bin.capacity -= sum(commodity.size for commodity in commodities; init=0)
-        bin.load += sum(commodity.size for commodity in commodities; init=0)
+        bin.volumeCapacity -= totVol
+        bin.volumeLoad += totVol
+        bin.weightCapacity -= totWei
+        bin.weightLoad += totWei
         return true
     end
     return false
@@ -120,7 +124,10 @@ end
 # No more runtime dispatch but still quite a lot of garbage collecting 
 # Maybe impossible to get rid of it as the purpose is to actually copy data
 function my_deepcopy(bins::Vector{Bin})
-    newBins = [Bin(bin.capacity + bin.load) for bin in bins]
+    newBins = [
+        Bin(bin.volumeCapacity + bin.volumeLoad, bin.weightCapacity + bin.weightLoad) for
+        bin in bins
+    ]
     for (idx, bin) in enumerate(bins)
         add!(newBins[idx], bin.content) || throw(ErrorException("Couldn't deepcopy"))
     end

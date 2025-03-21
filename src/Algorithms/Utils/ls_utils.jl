@@ -54,7 +54,7 @@ function tentative_first_fit(
     CAPACITIES::Vector{Int},
 )
     return tentative_first_fit(
-        Bin[], arcData.capacity, commodities, CAPACITIES; sorted=false
+        Bin[], arcData.volumeCapacity, commodities, CAPACITIES; sorted=false
     )
 end
 
@@ -65,8 +65,10 @@ function tentative_best_fit(
     },
     CAPACITIES::Vector{Int},
 )
-    capa = arcData.capacity
-    return tentative_best_fit([Bin(capa)], capa, commodities, CAPACITIES; sorted=false) + 1
+    capa = arcData.volumeCapacity
+    return tentative_best_fit(
+        [Bin(capa, WEIGHT_CAPACITY)], capa, commodities, CAPACITIES; sorted=false
+    ) + 1
 end
 
 # Store previous bins before removing commodities from them
@@ -206,7 +208,8 @@ function fuse_bundles(instance::Instance, bundles::Vector{Bundle}, CAPACITIES::V
         add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
     ]
     supp, cust = bundles[1].supplier, bundles[1].customer
-    maxDelTime, idx = findmax(b -> b.maxDelTime, bundles)
+    maxDelTime, maxDelIdx = findmax(b -> b.maxDelTime, bundles)
     maxPackSize = maximum(b -> b.maxPackSize, bundles)
-    return Bundle(supp, cust, newOrders, idx, UInt(0), maxPackSize, maxDelTime)
+    fusedBunIdx = bundles[maxDelIdx].idx
+    return Bundle(supp, cust, newOrders, fusedBunIdx, UInt(0), maxPackSize, maxDelTime)
 end
