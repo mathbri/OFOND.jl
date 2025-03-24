@@ -4,9 +4,18 @@
 const NODE_TYPES = [:supplier, :plant, :xdock, :iln, :pol, :pod]
 const COMMON_NODE_TYPES = [:xdock, :iln, :pol, :pod]
 const ARC_TYPES = [
-    :direct, :outsource, :cross_plat, :delivery, :oversea, :port_transport, :shortcut
+    :direct,
+    :outsource,
+    :cross_plat,
+    :delivery,
+    :oversea,
+    :port_transport,
+    :shortcut,
+    :inbound_iln,
 ]
-const BP_ARC_TYPES = [:direct, :cross_plat, :delivery, :oversea, :port_transport]
+const BP_ARC_TYPES = [
+    :direct, :cross_plat, :delivery, :oversea, :port_transport, :inbound_iln
+]
 const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea, :port_transport]
 
 const EPS = 1e-5
@@ -15,7 +24,7 @@ const VOLUME_FACTOR = 100
 const WEIGHT_FACTOR = 1000
 
 const LAND_CAPACITY = 7000
-const SEA_CAPACITY = 6500
+const SEA_CAPACITY = 7000
 const WEIGHT_CAPACITY = 24000
 const SCORE_FACTOR = 7000 / 24000
 
