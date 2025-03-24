@@ -4,7 +4,7 @@ function run_heuristic(
     instance::Instance,
     heuristic::Function;
     timeLimit::Int=-1,
-    preSolve::Bool=true,
+    preSolve::Bool=false,
     startSol::Solution=Solution(instance),
 )
     @info "Running heuristic $heuristic"

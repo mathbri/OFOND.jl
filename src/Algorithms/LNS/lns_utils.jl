@@ -7,6 +7,8 @@
 # Use this new costs in all the other heuristics
 
 function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::Solution)
+    @info "Scaling costs with current solution"
+    scaled, baseFactor, adjustedFactor = 0, 0.0, 0.0
     for arc in edges(timeSpaceGraph.graph)
         arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
         # Updating current cost
@@ -15,19 +17,22 @@ function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::So
         arcData.isLinear && continue
         # Total volume on arc
         arcBins = solution.bins[src(arc), dst(arc)]
-        arcVolume = sum(bin.load for bin in arcBins; init=0)
+        arcVolume = sum(bin.volumeLoad for bin in arcBins; init=0)
         # No scaling for arcs with no volume
         arcVolume <= EPS && continue
         # costFactor = length(arcBins) * arcData.capacity / arcVolume
-        costFactor = length(arcBins) / ceil(arcVolume / arcData.capacity)
+        costFactor = length(arcBins) / ceil(arcVolume / arcData.volumeCapacity)
+        isapprox(costFactor, 1.0) && continue
+        scaled += 1
+        baseFactor += costFactor
         # Limiting cost factor to 2
         costFactor = min(2.0, costFactor)
-        # Allowing cost decrease for common arcs
-        if arcData.type in COMMON_ARC_TYPES
-            costFactor -= 0.5
-        end
+        adjustedFactor += costFactor
         timeSpaceGraph.currentCost[src(arc), dst(arc)] *= costFactor
     end
+    return println(
+        "Scaled $scaled arcs with base factor $(baseFactor / scaled) and adjusted factor $(adjustedFactor / scaled)",
+    )
 end
 
 function slope_scaling_cost_update!(instance::Instance, solution::Solution)
@@ -46,7 +51,7 @@ function compute_loads(
 )
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Computing the current load
-    loads = map(bins -> sum(bin.load for bin in bins; init=0), solution.bins)
+    loads = map(bins -> sum(bin.volumeLoad for bin in bins; init=0), solution.bins)
     # println("Loads : $loads")
     # Removing the load of bundles to be modified with the neighborhood
     for (bIdx, bPath) in zip(bundleIdxs, oldPaths)

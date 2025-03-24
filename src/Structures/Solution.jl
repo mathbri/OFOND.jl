@@ -233,14 +233,15 @@ function compute_arc_cost(
 )::Float64
     dstData, arcData = TSGraph.networkNodes[dst], TSGraph.networkArcs[src, dst]
     # Computing useful quantities
-    arcVolume = sum(bin.load for bin in bins; init=0)
+    arcVolume = sum(bin.volumeLoad for bin in bins; init=0)
     stockCost = sum(stock_cost(bin) for bin in bins; init=0.0)
     # Volume and Stock cost 
     cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
-    cost += arcData.carbonCost * arcVolume / arcData.capacity
+    cost += arcData.carbonCost * arcVolume / arcData.volumeCapacity
     cost += arcData.distance * stockCost
     # Transport cost 
-    transportUnits = arcData.isLinear ? (arcVolume / arcData.capacity) : 1.0 * length(bins)
+    transportUnits =
+        arcData.isLinear ? (arcVolume / arcData.volumeCapacity) : 1.0 * length(bins)
     transportCost = current_cost ? TSGraph.currentCost[src, dst] : arcData.unitCost
     cost += transportUnits * transportCost
     return cost
@@ -250,7 +251,7 @@ end
 function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
     totalCost = 0.0
     directCost = 0.0
-    bi, bj, bk = 0, 0, 0.0
+    bi, bj, ba, bk = 0, 0, 0, 0.0
     costj, costk = 0.0, 0.0
     # Iterate over sparse matrix
     rows = rowvals(solution.bins)
@@ -259,27 +260,73 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
         for idx in nzrange(solution.bins, j)
             i = rows[idx]
             arcBins = vals[idx]
+            arcData = instance.timeSpaceGraph.networkArcs[i, j]
             # Arc cost
             arcCost = compute_arc_cost(
                 instance.timeSpaceGraph, arcBins, i, j; current_cost=current_cost
             )
             totalCost += arcCost
             # Counters 
-            arcData = instance.timeSpaceGraph.networkArcs[i, j]
-            arcVolume = sum(bin.load for bin in arcBins; init=0)
-            bi += length(arcBins)
-            bj += ceil(arcVolume / arcData.capacity)
-            bk += arcVolume / arcData.capacity
-            if arcData.type == :direct
-                directCost += arcCost
+            arcVolume = sum(bin.volumeLoad for bin in arcBins; init=0)
+            arcWeight = sum(bin.weightLoad for bin in arcBins; init=0)
+            if arcVolume > 0
+                ba += 1
             end
-            commonCost = arcCost - length(arcBins) * arcData.unitCost
-            costj += commonCost + ceil(arcVolume / arcData.capacity) * arcData.unitCost
-            costk += commonCost + arcVolume / arcData.capacity * arcData.unitCost
+            arcCapaV = arcData.volumeCapacity
+            arcCapaW = arcData.weightCapacity
+            arcBk = max(arcVolume / arcCapaV, arcWeight / arcCapaW)
+            if arcData.isLinear
+                bi += arcBk
+                bj += arcBk
+                bk += arcBk
+                costj += arcCost
+                costk += arcCost
+                continue
+            end
+            bi += length(arcBins)
+            arcBj = max(ceil(arcVolume / arcCapaV), ceil(arcWeight / arcCapaW))
+            bj += arcBj
+            bk += arcBk
+            if arcData.type == :direct
+                if instance.timeSpaceGraph.networkNodes[i].type == :supplier &&
+                    instance.timeSpaceGraph.networkNodes[j].type == :plant
+                    directCost += arcCost
+                end
+            end
+            arcCostj = arcCost - (length(arcBins) - arcBj) * arcData.unitCost
+            costj += arcCostj
+            arcCostk = arcCost - (length(arcBins) - arcBk) * arcData.unitCost
+            costk += arcCostk
+            # if bi - bj >= 200
+            #     println("Arc $i-$j : $(instance.timeSpaceGraph.networkArcs[i, j])")
+            #     # println("Arc bins : $arcBins")
+            #     println("Arc cost : $arcCost")
+            #     println("Total cost : $totalCost")
+            #     println("Arc volume : $arcVolume")
+            #     println("Arc weight : $arcWeight")
+            #     println("Arc number : $ba")
+            #     println("Volume capacity : $arcCapaV")
+            #     println("Weight capacity : $arcCapaW")
+            #     println("Linear Number of bins : $arcBk")
+            #     println("arcBi arcBj arcBk = $(length(arcBins)) $arcBj $arcBk")
+            #     println("arcCosti arcCostj arcCostk = $arcCost $arcCostj $arcCostk")
+            #     println("bi bj bk = $bi $bj $bk")
+            #     println("costi costj costk = $totalCost $costj $costk")
+            #     println("direct cost = $directCost")
+
+            #     throw(ErrorException("debug"))
+            # end
         end
     end
-    println("Bins computed : $bi bins (BP) / $bj bins (GC) / $bk bins (LC)")
-    println("Cost computed : $(totalCost) (BP) / $(costj) bins (GC) / $(costk) bins (LC)")
+    bi = round(bi; digits=1)
+    bj = round(bj; digits=1)
+    bk = round(bk; digits=1)
+    println(
+        "Bins computed on $ba arcs : $bi bins (BP) / $bj bins (GC) (-$(round((bi - bj) * 100 / bi; digits=1))%) / $bk bins (LC) (-$(round((bi - bk) * 100 / bi; digits=1))%)",
+    )
+    println(
+        "Cost computed : $(totalCost) (BP) / $(costj) bins (GC) (-$(round((totalCost - costj) * 100 / totalCost; digits=1))%) / $(costk) bins (LC) (-$(round((totalCost - costk) * 100 / totalCost; digits=1))%)",
+    )
     println("Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%)")
     return totalCost
 end
@@ -289,8 +336,15 @@ function compute_extracted_cost(instance::Instance, solution::Solution)
     totalCost = 0.0
     for arc in edges(instance.timeSpaceGraph.graph)
         arcBins = solution.bins[src(arc), dst(arc)]
-        # If the arc is not direct, it is not extracted
-        instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)].type == :direct || continue
+        # If the arc is not true direct, it is not extracted
+        arcData = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)]
+        srcData = instance.timeSpaceGraph.networkNodes[src(arc)]
+        dstData = instance.timeSpaceGraph.networkNodes[dst(arc)]
+        trueDirect =
+            arcData.type == :direct && srcData.type == :supplier && dstData.type == :plant
+        if !trueDirect
+            continue
+        end
         # If there is no bins, skipping arc
         length(arcBins) == 0 && continue
         # Arc cost
@@ -315,7 +369,7 @@ end
 function repair_paths!(
     paths::Vector{Vector{Int}}, instance::Instance; directRepair::Bool=false
 )
-    TTGraph = instance.travelTimeGraph
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     count = length(findall(path -> length(path) == 0, paths))
     for (idx, path) in enumerate(paths)
         if length(path) == 0
@@ -329,7 +383,7 @@ function repair_paths!(
                     TTGraph.costMatrix[src, dst] = TTGraph.networkArcs[src, dst].distance
                 else
                     TTGraph.costMatrix[src, dst] = arc_lb_filtering_update_cost(
-                        travelTimeGraph, timeSpaceGraph, bundle, src, dst
+                        TTGraph, TSGraph, bundle, src, dst
                     )
                 end
             end
@@ -390,6 +444,7 @@ function extract_filtered_instance(instance::Instance, solution::Solution)
         instance.timeHorizon,
         instance.dates,
         instance.partNumbers,
+        instance.prices,
     )
 end
 

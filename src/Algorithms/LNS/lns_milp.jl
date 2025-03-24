@@ -75,7 +75,8 @@ function add_packing_constraints!(
     arcDatas = TSGraph.networkArcs
     for (src, dst) in TSGraph.commonArcs
         packConExpr[(src, dst)] = AffExpr(
-            perturbation.loads[src, dst], tau[(src, dst)] => -arcDatas[src, dst].capacity
+            perturbation.loads[src, dst],
+            tau[(src, dst)] => -arcDatas[src, dst].volumeCapacity,
         )
     end
     # Completing the expressions with the path variables
@@ -232,7 +233,7 @@ function warm_start!(model::Model, instance::Instance, perturbation::Perturbatio
     # is_attract_reduce(perturbation) && println("Loads : $(perturbation.loads)")
     # Putting packing variables to the current solution
     for (src, dst) in TSGraph.commonArcs
-        arcCapacity = TSGraph.networkArcs[src, dst].capacity
+        arcCapacity = TSGraph.networkArcs[src, dst].volumeCapacity
         arcLoad = perturbation.loads[src, dst]
         set_start_value(model[:tau][(src, dst)], ceil(arcLoad / arcCapacity))
     end

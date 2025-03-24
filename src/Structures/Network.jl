@@ -48,9 +48,13 @@ struct NetworkArc
     # Load
     volumeCapacity::Int  # transport unit volume capacity
     weightCapacity::Int  # transport unit volume capacity
+    # For easy filtering
+    isInSimulation::Bool
 end
 
-const SHORTCUT = NetworkArc(:shortcut, EPS, 1, false, EPS, false, EPS, 1_000_000, 1_000_000)
+const SHORTCUT = NetworkArc(
+    :shortcut, EPS, 1, false, EPS, false, EPS, 1_000_000, 1_000_000, true
+)
 
 # Network Graph
 struct NetworkGraph
@@ -169,11 +173,13 @@ function Base.zero(::Type{NetworkNode})
 end
 
 function Base.zero(::Type{NetworkArc})
-    return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0, 0)
+    return NetworkArc(:zero, 0.0, 0, false, 0.0, false, 0.0, 0, 0, false)
 end
 
 function Base.show(io::IO, node::NetworkNode)
-    return print(io, "Node($(node.account), $(node.type))")
+    return print(
+        io, "Node($(node.account), $(node.type), $(round(node.volumeCost; digits=2))€/m3)"
+    )
 end
 
 function is_node_in_country(networkGraph::NetworkGraph, node::Int, country::String)

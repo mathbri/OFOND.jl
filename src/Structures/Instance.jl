@@ -24,11 +24,41 @@ end
 # Methods
 
 # Computing all objects properties
-function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::Vector{Int})
+function add_properties(
+    instance::Instance, bin_packing::Function, CAPACITIES::Vector{Int}, anomaly_file::String
+)
     @info "Adding properties to instance"
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
+    newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
+    # Checking a path exists for every bundle in the travel time graph 
+    checkedBundles = Int[]
+    open(anomaly_file, "a") do anomalyIO
+        for bundle in newBundles
+            if has_path(
+                newTTGraph.graph,
+                newTTGraph.bundleSrc[bundle.idx],
+                newTTGraph.bundleDst[bundle.idx],
+            )
+                push!(checkedBundles, bundle.idx)
+            else
+                suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
+                custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
+                supplier = bundle.supplier
+                customer = bundle.customer
+                has_path_in_flat_network = has_path(
+                    instance.networkGraph.graph, suppNode, custNode
+                )
+                @error "Bundle $(bundle.idx) doesn't have path in the travel time graph" supplier customer has_path_in_flat_network
+                anomaly_message = "bundle $(bundle.idx) doesn't have path in the travel time graph,bundle,instance reading,$(bundle.supplier.account),$(bundle.customer.account)"
+                println(anomalyIO, anomaly_message)
+            end
+        end
+    end
+    @warn "$(length(newBundles) - length(checkedBundles)) bundles have no path in the travel time graph"
+    newBundles = newBundles[checkedBundles]
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
     for bundle in newBundles
         newOrders = [
             add_properties(order, bin_packing, CAPACITIES) for order in bundle.orders
@@ -36,34 +66,15 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
         empty!(bundle.orders)
         append!(bundle.orders, newOrders)
     end
+    nBun = length(newBundles)
+    nOrd = sum(length(bundle.orders) for bundle in newBundles; init=0)
+    nCom = sum(sum(length(o.content) for o in b.orders) for b in newBundles; init=0)
+    nComU = sum(
+        sum(length(unique(o.content)) for o in b.orders) for b in newBundles; init=0
+    )
+    @info "Instance has now $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique)"
     newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
     @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
-    # Checking a path exists for every bundle in the travel time graph 
-    noPaths = [
-        bundle.idx for bundle in newBundles if !has_path(
-            newTTGraph.graph,
-            newTTGraph.bundleSrc[bundle.idx],
-            newTTGraph.bundleDst[bundle.idx],
-        )
-    ]
-    if length(noPaths) > 0
-        for bIdx in noPaths
-            bundle = instance.bundles[bIdx]
-            suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
-            custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
-            supplier = bundle.supplier
-            customer = bundle.customer
-            has_path_in_flat_network = has_path(
-                instance.networkGraph.graph, suppNode, custNode
-            )
-            @error "Bundle $(bundle.idx) doesn't have path in the travel time graph" supplier customer has_path_in_flat_network
-        end
-        throw(
-            ErrorException(
-                "Some bundles have no path in the travel time graph, see details above"
-            ),
-        )
-    end
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
     @info "Time-space graph has $(nv(newTSGraph.graph)) nodes and $(ne(newTSGraph.graph)) arcs"
     return Instance(
@@ -197,6 +208,39 @@ function instance_1D(instance::Instance; mixing::Bool=false)
         newBundles,
         instance.timeHorizon,
         instance.dates,
+        instance.partNumbers,
+        instance.prices,
+    )
+end
+
+function filter_current_arcs(instance::Instance)
+    @info "Removing legs forbidden in the simulation"
+    network = instance.networkGraph.graph
+    newArcs = filter(
+        a -> network[label_for(network, a.src), label_for(network, a.dst)].isInSimulation,
+        collect(edges(network)),
+    )
+    newNetGraph, _ = induced_subgraph(network, newArcs)
+    newNetwork = NetworkGraph(newNetGraph)
+    nNode, nLeg, nBun = nv(newNetGraph), ne(newNetGraph), length(instance.bundles)
+    nOrd = sum(length(bundle.orders) for bundle in instance.bundles; init=0)
+    nCom = sum(
+        sum(length(order.content) for order in bundle.orders) for bundle in instance.bundles;
+        init=0,
+    )
+    nComU = sum(
+        sum(length(unique(order.content)) for order in bundle.orders) for
+        bundle in instance.bundles;
+        init=0,
+    )
+    @info "Extracted instance has $nNode nodes, $nLeg legs, $nBun bundles, $nOrd orders and $nCom commodities ($nComU unique) on a $(instance.timeHorizon) steps time horizon"
+    return Instance(
+        newNetwork,
+        TravelTimeGraph(newNetwork, instance.bundles),
+        TimeSpaceGraph(newNetwork, instance.timeHorizon),
+        instance.bundles,
+        instance.timeHorizon,
+        instance.dates[1:(instance.timeHorizon)],
         instance.partNumbers,
         instance.prices,
     )

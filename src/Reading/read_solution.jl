@@ -1,29 +1,25 @@
 # Check that the bundle exists in the instance and return it if found
-function check_bundle(instance::Instance, row::CSV.Row, anomaly_file::String)
+function check_bundle(instance::Instance, row::CSV.Row, anomalyIO::IOStream)
     suppNode = NetworkNode(row.supplier_account, :supplier, "", "", true, 0.0)
     custNode = NetworkNode(row.customer_account, :plant, "", "", true, 0.0)
     bundleHash = hash(suppNode, hash(custNode))
     bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
     if bundleIdx === nothing
         anomaly_message = "bundle not found in the instance,bundle,solution reading,$(row.supplier_account),$(row.customer_account)"
-        open(anomaly_file, "a") do io
-            println(io, anomaly_message)
-        end
+        println(anomalyIO, anomaly_message)
     else
         return instance.bundles[bundleIdx]
     end
 end
 
 # Check that the node exists ins the instance and return it if found
-function check_node(instance::Instance, row::CSV.Row, anomaly_file::String)
+function check_node(instance::Instance, row::CSV.Row, anomalyIO::IOStream)
     nodeHash = hash(row.point_account, hash(Symbol(row.point_type)))
     if haskey(instance.networkGraph.graph, nodeHash)
         return instance.networkGraph.graph[nodeHash]
     else
         anomaly_message = "node not found in the network,node,solution reading,$(row.point_account),"
-        open(anomaly_file, "a") do io
-            println(io, anomaly_message)
-        end
+        println(anomalyIO, anomaly_message)
     end
 end
 
@@ -59,39 +55,29 @@ function check_paths(paths::Vector{Vector{NetworkNode}})
 end
 
 # Detect whether the path already has an error or not
-function is_path_projectable(
-    path::Vector{NetworkNode}, bundle::Bundle, anomaly_file::String
-)
+function is_path_projectable(path::Vector{NetworkNode}, bundle::Bundle, anomalyIO::IOStream)
     # Is the path empty ?
     if isempty(path)
         anomaly_message = "path is empty,bundle,solution reading,$(bundle.supplier.account),$(bundle.customer.account)"
-        open(anomaly_file, "a") do io
-            println(io, anomaly_message)
-        end
+        println(anomalyIO, anomaly_message)
         return false
     end
     # Is there a missing point ?
     missingNodeIdx = findfirst(x -> x == zero(NetworkNode), path)
     if missingNodeIdx !== nothing
         anomaly_message = "path is missing point number $missingNodeIdx,bundle,solution reading,$(bundle.supplier.account),$(bundle.customer.account)"
-        open(anomaly_file, "a") do io
-            println(io, anomaly_message)
-        end
+        println(anomalyIO, anomaly_message)
         return false
     end
     # Does it start and ends at the right nodes ? (still reversed for now)
     if path[1] != bundle.customer
         anomaly_message = "path does not end at the customer,bundle,solution reading,$(bundle.supplier.account),$(bundle.customer.account)"
-        open(anomaly_file, "a") do io
-            println(io, anomaly_message)
-        end
+        println(anomalyIO, anomaly_message)
         return false
     end
     if path[end] != bundle.supplier
         anomaly_message = "path does not start at the supplier,bundle,solution reading,$(bundle.supplier.account),$(bundle.customer.account)"
-        open(anomaly_file, "a") do io
-            println(io, anomaly_message)
-        end
+        println(anomalyIO, anomaly_message)
         return false
     end
     return true
@@ -110,7 +96,7 @@ function project_path(
     TTGraph::TravelTimeGraph,
     idx::Int,
     bundle::Bundle,
-    anomaly_file::String,
+    anomalyIO::IOStream,
 )
     # The travel time path is re-created backward by searching for corresponding nodes
     ttPath = [TTGraph.bundleDst[idx]]
@@ -120,9 +106,7 @@ function project_path(
         nextNode = find_next_node(TTGraph, ttPath[end], node)
         if nextNode === nothing
             anomaly_message = "path is going out of the time horizon,bundle,solution reading,$(bundle.supplier.account),$(bundle.customer.account)"
-            open(anomaly_file, "a") do io
-                println(io, anomaly_message)
-            end
+            println(anomalyIO, anomaly_message)
             break
         end
         push!(ttPath, nextNode)
@@ -137,13 +121,15 @@ function project_all_paths(
 )
     TTGraph = instance.travelTimeGraph
     ttPaths = [Int[] for _ in 1:length(paths)]
-    for (idx, path) in enumerate(paths)
-        bundle = instance.bundles[idx]
-        # Paths with errors are skipped
-        is_path_projectable(path, bundle, anomaly_file) || continue
-        ttPath, errors = project_path(path, TTGraph, idx, bundle, anomaly_file)
-        # If not projected completly, leaving it empty, adding it otherwise 
-        errors || (ttPaths[idx] = ttPath)
+    open(anomaly_file, "a") do anomalyIO
+        for (idx, path) in enumerate(paths)
+            bundle = instance.bundles[idx]
+            # Paths with errors are skipped
+            is_path_projectable(path, bundle, anomalyIO) || continue
+            ttPath, errors = project_path(path, TTGraph, idx, bundle, anomalyIO)
+            # If not projected completly, leaving it empty, adding it otherwise 
+            errors || (ttPaths[idx] = ttPath)
+        end
     end
     return ttPaths
 end
@@ -164,20 +150,22 @@ function read_solution(instance::Instance, solution_file::String, anomaly_file::
     # Reading paths
     unknownBundles = 0
     unknownNodes = 0
-    for row in csv_reader
-        # Check bundle and node existence (warnings if not found)
-        bundle = check_bundle(instance, row, anomaly_file)
-        if bundle === nothing
-            unknownBundles += 1
-            continue
+    open(anomaly_file, "a") do anomalyIO
+        for row in csv_reader
+            # Check bundle and node existence (warnings if not found)
+            bundle = check_bundle(instance, row, anomalyIO)
+            if bundle === nothing
+                unknownBundles += 1
+                continue
+            end
+            node = check_node(instance, row, anomalyIO)
+            if node === nothing
+                unknownNodes += 1
+                continue
+            end
+            # Add node to path 
+            add_node_to_path!(paths[bundle.idx], node, row.point_number)
         end
-        node = check_node(instance, row, anomaly_file)
-        if node === nothing
-            unknownNodes += 1
-            continue
-        end
-        # Add node to path 
-        add_node_to_path!(paths[bundle.idx], node, row.point_number)
     end
     if unknownBundles + unknownNodes > 0
         @warn "$(unknownBundles + unknownNodes) lines were ignored" unknownBundles unknownNodes
@@ -198,7 +186,7 @@ function read_solution(instance::Instance, solution_file::String, anomaly_file::
         instance.partNumbers,
         instance.prices,
     )
-    newInstance = add_properties(newInstance, tentative_first_fit, Int[])
+    newInstance = add_properties(newInstance, tentative_first_fit, Int[], anomaly_file)
     @info "For $(length(instance.bundles)) bundles, read $(count(p -> length(p) >= 2, paths)) paths, kept $(length(newPaths)) paths and removed $(length(instance.bundles) - length(newPaths)) bundles with errors"
     # Creating and updating solution
     bunPaths = project_all_paths(newPaths, newInstance, anomaly_file)

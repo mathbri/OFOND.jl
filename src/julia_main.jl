@@ -1,13 +1,10 @@
 # File used to launch all kinds of scripts using OFOND package 
 
-# TODO : test the correct execution of all code on the multiple instances available
-
-# using OFOND
 using ProfileView
 using JLD2
 using Statistics
 
-INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_180325")
+INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_100325")
 OUTPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "export")
 
 NODE_FILE = "ND-MD-Geo_V5_preprocessing.csv"
@@ -57,6 +54,7 @@ function julia_main(;
     outputFolder::String=OUTPUT_FOLDER,
     useILS::Bool=true,
     useWeights::Bool=true,
+    filterCurrentArcs::Bool=true,
 )::Int
     # Read files based on arguments
     println("Launching OFOND Optimization")
@@ -73,12 +71,16 @@ function julia_main(;
     check_julia_main_input(
         inputFolder, node_file, leg_file, com_file, sol_file, outputFolder
     )
+    # Initialize anomaly file 
+    open(anomaly_file, "w") do io
+        println(io, join(ANOMALY_COLUMNS, ","))
+    end
 
     # read instance 
     instance2D = read_instance(node_file, leg_file, com_file, anomaly_file)
     # adding properties to the instance
     CAPACITIES_V, CAPACITIES_W = Int[], Int[]
-    instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
+    instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V, anomaly_file)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance2D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -98,7 +100,7 @@ function julia_main(;
     # Transform here from 2D to 1D
     CAPACITIES_V = Int[]
     instance1D = instance_1D(instance2D; mixing=useWeights)
-    instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
+    instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance2D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -116,23 +118,22 @@ function julia_main(;
         "Most expensive arc in the network : $(maximum(a -> a.unitCost, instance1D.travelTimeGraph.networkArcs))",
     )
 
-    return 0
-
     # Reading instance again but ignoring current network
-    instance2D = read_instance(node_file, leg_file, com_file; ignoreCurrent=true)
-    instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V)
+    if filterCurrentArcs
+        instance1D = filter_current_arcs(instance1D)
+        instance1D = add_properties(
+            instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file
+        )
 
-    # # Transform here from 2D to 1D
-    instance1D = instance_1D(instance2D; mixing=useWeights)
-    instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V)
+        totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
+        println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
 
-    totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
-    println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
-
-    totWei = sum(
-        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance1D.bundles
-    )
-    println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
+        totWei = sum(
+            sum(sum(c.weight for c in o.content) for o in b.orders) for
+            b in instance1D.bundles
+        )
+        println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
+    end
 
     # Filtering procedure 
     _, solution_LBF = lower_bound_filtering_heuristic(instance1D)
@@ -140,7 +141,9 @@ function julia_main(;
         "Bundles actually filtered : $(count(x -> length(x) == 2, solution_LBF.bundlePaths))",
     )
     instanceSub = extract_filtered_instance(instance1D, solution_LBF)
-    instanceSub = add_properties(instanceSub, tentative_first_fit, CAPACITIES_V)
+    instanceSub = add_properties(
+        instanceSub, tentative_first_fit, CAPACITIES_V, anomaly_file
+    )
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instanceSub.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -180,19 +183,17 @@ function julia_main(;
 
     # Applying local search 
     @info "Applying local search"
-    local_search!(solutionSub, instanceSub; timeLimit=30, stepTimeLimit=30)
-
-    return 0
+    @profview local_search!(solutionSub, instanceSub; timeLimit=120, stepTimeLimit=30)
 
     # Applying ILS 
     if useILS
         ILS!(
             solutionSub,
             instanceSub;
-            timeLimit=1800,
-            perturbTimeLimit=300,
-            lsTimeLimit=600,
-            lsStepTimeLimit=90,
+            timeLimit=60,
+            perturbTimeLimit=150,
+            lsTimeLimit=60,
+            lsStepTimeLimit=60,
         )
     end
 
@@ -205,17 +206,25 @@ function julia_main(;
     # Un-transform here from 1D to 2D
     finalSolution = Solution(instance2D)
     @info "Transforming back to explicit 2D solution"
-    update_solution!(
-        finalSolution, instance2D, instance2D.bundles, finalSolution1D.bundlePaths
+    i = 0
+    for (bundle, path) in zip(instance2D.bundles, finalSolution1D.bundlePaths)
+        projPath = project_on_sub_instance(path, instance1D, instance2D)
+        add_bundle!(finalSolution, instance2D, bundle, projPath)
+        i % 10 == 0 && print("|")
+        i += 1
+    end
+    println()
+    @info "Optimizing final packings"
+    # parallel_bin_packing_improvement!(finalSolution, instance2D; skipLinear=false)
+    bin_packing_improvement!(
+        finalSolution, instance2D, Commodity[], Int[]; skipLinear=false
     )
-    parallel_bin_packing_improvement!(
-        finalSolution, instance; sorted=true, skipLinear=false
-    )
-    clean_empty_bins!(finalSolution, instance)
+    @info "Cleaning empty bins"
+    clean_empty_bins!(finalSolution, instance2D)
     println("Cost of 2D proposed solution : $(compute_cost(instance2D, finalSolution))")
 
-    println("Exporting proposed solution to $exportDir")
-    write_solution(finalSolution, instance2D; suffix="proposed", directory=exportDir)
+    println("Exporting proposed solution to $outputFolder")
+    write_solution(finalSolution, instance2D; suffix="proposed", directory=outputFolder)
 
     return 0 # if things finished successfully
 end

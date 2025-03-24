@@ -101,7 +101,7 @@ function ILS!(
     startCost = compute_cost(instance, solution)
     threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
     println("\n")
-    @info "Starting ILS step" :start_cost = startCost :threshold = threshold
+    @info "Starting ILS" :start_cost = startCost :threshold = threshold
 
     bestSol = solution_deepcopy(solution, instance)
     bestCost = startCost
@@ -156,9 +156,10 @@ function ILS!(
     )
     finalCost = compute_cost(instance, bestSol)
     totImprov = finalCost - startCost
-    @info "Full ILS done" :time = round(time() - start; digits=2) :improvement = round(
-        totImprov
-    )
+    relImprov = round(totImprov / startCost * 100; digits=2)
+    timeTaken = round(time() - start; digits=2)
+    @info "Full ILS done" :time = timeTaken :improvement = totImprov :relative_improvement =
+        relImprov
     # Reverting if cost augmented by more than 0.75% (heuristic level)
     if totImprov > 0.0075 * startCost
         println("Reverting solution because too much cost degradation")
