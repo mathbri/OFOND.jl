@@ -13,16 +13,27 @@ function add_bundle!(
     path::Vector{Int};
     sorted::Bool=false,
     skipFill::Bool=false,
+    verbose::Bool=false,
 )
     # If nothing to do, returns nothing
+    verbose && println("Adding bundle $(bundle) on path $path")
     length(path) == 0 && return 0.0
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
     # Adding the bundle to the solution
     remove_shortcuts!(path, TTGraph)
+    verbose && println("Shortcut removed : $path")
+    verbose && println("Is path partial : $(is_path_partial(TTGraph, bundle, path))")
+    verbose && println("Path nodes : $(TTGraph.networkNodes[path])")
     add_path!(solution, bundle, path; partial=is_path_partial(TTGraph, bundle, path))
     # Updating the bins
+    verbose && println("Skip fill : $skipFill")
     skipFill && return 0.0
-    return update_bins!(solution, TSGraph, TTGraph, bundle, path; sorted=sorted)
+    verbose && println("Updating bins on path $path for bundle $bundle")
+    updateCost = update_bins!(
+        solution, TSGraph, TTGraph, bundle, path; sorted=sorted, verbose=verbose
+    )
+    verbose && println("Cost added for bundle : $updateCost")
+    return updateCost
 end
 
 # Combine all bundles paths in arguments into a sparse matrix indicating the arcs to work with
@@ -53,11 +64,13 @@ function refill_bins!(
 )
     # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
     length(bins) == 0 && return 0
-    ceil(sum(bin.volumeLoad for bin in bins; init=0) / fullCapacity) == length(bins) &&
-        return 0
-    # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
-    allCommodities = get_all_commodities(bins, ALL_COMMODITIES)
     binsBefore = length(bins)
+    if sum(bin.volumeLoad for bin in bins) == 0
+        empty!(bins)
+        return -binsBefore
+    end
+    ceil(sum(bin.volumeLoad for bin in bins) / fullCapacity) == length(bins) && return 0
+    # TODO : This get all commodities uses a global variable, which is not good for performance but it is limited for now
     allCommodities = get_all_commodities(bins, ALL_COMMODITIES)
     empty!(bins)
     # Filling it back again
@@ -82,14 +95,14 @@ function refill_bins!(
             # No need to refill bins on linear arcs
             arcData.isLinear && continue
             # Shortcut for direct arcs 
-            if arcData.type == :direct
-                costAdded -= length(solution.bins[tSrc, tDst]) * arcData.unitCost
-                empty!(solution.bins[tSrc, tDst])
-                continue
-            end
+            # if arcData.type == :direct
+            #     costAdded -= length(solution.bins[tSrc, tDst]) * arcData.unitCost
+            #     empty!(solution.bins[tSrc, tDst])
+            #     continue
+            # end
             # Adding new bins cost
             addedBins = refill_bins!(
-                solution.bins[tSrc, tDst], arcData.capacity, ALL_COMMODITIES
+                solution.bins[tSrc, tDst], arcData.volumeCapacity, ALL_COMMODITIES
             )
             costAdded += addedBins * arcData.unitCost
         end
@@ -104,30 +117,44 @@ function refill_bins!(
     TSGraph::TimeSpaceGraph,
     bundle::Bundle,
     path::Vector{Int},
-    ALL_COMMODITIES::Vector{Commodity},
+    ALL_COMMODITIES::Vector{Commodity};
+    verbose::Bool=false,
 )
     costAdded = 0.0
+    verbose && println("Refilling bins on path $path for bundle $bundle")
     # Projecting path for every order
     for order in bundle.orders
         timedPath = time_space_projector(TTGraph, TSGraph, path, order)
         # Shortcut for direct arcs 
-        if length(timedPath) == 2
-            tSrc, tDst = timedPath
-            arcData = TSGraph.networkArcs[tSrc, tDst]
-            costAdded -= length(solution.bins[tSrc, tDst]) * arcData.unitCost
-            empty!(solution.bins[tSrc, tDst])
-            continue
-        end
+        # if length(timedPath) == 2
+        #     tSrc, tDst = timedPath
+        #     arcData = TSGraph.networkArcs[tSrc, tDst]
+        #     costAdded -= length(solution.bins[tSrc, tDst]) * arcData.unitCost
+        #     empty!(solution.bins[tSrc, tDst])
+        #     continue
+        # end
+        verbose && println("Order $order and Timed Path : $timedPath")
         # Refilling all bins on this path
         for (tSrc, tDst) in partition(timedPath, 2, 1)
             arcData = TSGraph.networkArcs[tSrc, tDst]
+            verbose && println("Arc $tSrc -> $tDst : $(arcData)")
             # No need to refill bins on linear arcs
             arcData.isLinear && continue
             # Adding new bins cost
-            addedBins = refill_bins!(
-                solution.bins[tSrc, tDst], arcData.capacity, ALL_COMMODITIES
+            arcBins = solution.bins[tSrc, tDst]
+            verbose && println(
+                "Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3"
             )
+            addedBins = refill_bins!(
+                solution.bins[tSrc, tDst], arcData.volumeCapacity, ALL_COMMODITIES
+            )
+            verbose && println("Refilling")
+            verbose && println(
+                "Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3"
+            )
+            verbose && println("Bins added : $addedBins")
             costAdded += addedBins * arcData.unitCost
+            verbose && println("Total cost added : $costAdded")
         end
     end
     return costAdded
@@ -135,16 +162,30 @@ end
 
 # Remove the bundle only on the path portion provided
 function remove_bundle!(
-    solution::Solution, instance::Instance, bundle::Bundle, path::Vector{Int};
+    solution::Solution,
+    instance::Instance,
+    bundle::Bundle,
+    path::Vector{Int};
+    verbose::Bool=false,
 )
     TSGraph, TTGraph = instance.timeSpaceGraph, instance.travelTimeGraph
     oldPart = Int[]
     if length(path) == 0 || !is_path_partial(TTGraph, bundle, path)
+        verbose && println(
+            "\nRemoving full path for bundle $bundle (path = $path and sol path = $(solution.bundlePaths[bundle.idx]))",
+        )
         oldPart = remove_path!(solution, bundle)
     else
+        verbose && println(
+            "\nRemoving partial path for bundle $bundle (path = $path and sol path = $(solution.bundlePaths[bundle.idx]))",
+        )
         oldPart = remove_path!(solution, bundle; src=path[1], dst=path[end])
     end
-    costRemoved = update_bins!(solution, TSGraph, TTGraph, bundle, oldPart; remove=true)
+    verbose && println("Old part : $oldPart")
+    costRemoved = update_bins!(
+        solution, TSGraph, TTGraph, bundle, oldPart; remove=true, verbose=verbose
+    )
+    verbose && println("\nCost removed (without refilling) : $costRemoved")
     return (costRemoved, oldPart)
 end
 
@@ -200,29 +241,43 @@ function update_solution!(
     remove::Bool=false,
     sorted::Bool=false,
     skipRefill::Bool=false,
+    verbose::Bool=false,
 )
     # If remove = false, adding the bundle to the solution
     !remove && return add_bundle!(
-        solution, instance, bundle, path; sorted=sorted, skipFill=skipRefill
+        solution,
+        instance,
+        bundle,
+        path;
+        sorted=sorted,
+        skipFill=skipRefill,
+        verbose=verbose,
     )
+    verbose && println("\nRemoving bundle $bundle of path $path")
     # Otherwise, removing it from the solution
-    costRemoved, oldPart = remove_bundle!(solution, instance, bundle, path)
+    costRemoved, oldPart = remove_bundle!(solution, instance, bundle, path; verbose=verbose)
+    verbose && println("\nCost removed (without refilling) : $costRemoved")
     # If skipRefill than no recomputation
+    verbose && println("Skip refill : $skipRefill")
     skipRefill && return costRemoved
     # Than refilling the bins
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    verbose && println("Refilling bins on old part $oldPart")
     costRemoved += refill_bins!(
-        solution, TTGraph, TSGraph, bundle, oldPart, ALL_COMMODITIES
+        solution, TTGraph, TSGraph, bundle, oldPart, ALL_COMMODITIES; verbose=verbose
     )
+    verbose && println("\nCost removed (with refilling) : $costRemoved")
     return costRemoved
 end
 
 # Removing all empty bins from the linear arcs (to be used before extraction)
 function clean_empty_bins!(solution::Solution, instance::Instance)
     TSGraph = instance.timeSpaceGraph
-    for arc in edges(TSGraph.graph)
+    for (i, arc) in enumerate(edges(TSGraph.graph))
         filter!(bin -> bin.volumeLoad > 0, solution.bins[src(arc), dst(arc)])
+        i % 1000 == 0 && print("|")
     end
+    return println()
 end
 
 # TODO : to use in two node incremental
