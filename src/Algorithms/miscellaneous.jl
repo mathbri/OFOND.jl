@@ -334,6 +334,7 @@ function mix_greedy_and_lower_bound!(
     CAPA, percentIdx = Int[], ceil(Int, B / 100)
     CHANNEL = create_filled_channel()
     lowerBound = 0.0
+    greedyCostMatrix = deepcopy(TTGraph.costMatrix)
     for (i, bundleIdx) in enumerate(sortedBundleIdxs)
         bundle = instance.bundles[bundleIdx]
         # Retrieving bundle start and end nodes
@@ -347,7 +348,9 @@ function mix_greedy_and_lower_bound!(
             debug_insertion(instance, gSol, bundle, gPath, CHANNEL)
         end
         # Saving cost matrix 
-        greedyCostMatrix = deepcopy(TTGraph.costMatrix)
+        for (src, dst) in TTGraph.bundleArcs[bundleIdx]
+            greedyCostMatrix[src, dst] = TTGraph.costMatrix[src, dst]
+        end
         # Computing lower bound shortest path
         lbPath, lbCost = lower_bound_insertion(lbSol, TTGraph, TSGraph, bundle, bSrc, bDst)
         lowerBound += lbCost

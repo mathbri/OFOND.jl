@@ -103,9 +103,6 @@ end
 function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     arcType = Symbol(row.leg_type)
     haskey(counts, arcType) && (counts[arcType] += 1)
-    if ismissing(row.distance)
-        println(row)
-    end
     if row.shipment_cost > 1e6
         @warn "Verye huge cost : Shipment cost exceeds 1M€ per unit of shipment" :arcType =
             arcType :row = row
@@ -122,7 +119,7 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         row.distance,
         floor(Int, row.travel_time + 0.5),
         isCommon,
-        min(row.shipment_cost, 2.5e5),
+        min(row.shipment_cost, 3e5),
         row.is_linear,
         row.carbon_cost,
         volumeCapacity,
@@ -174,11 +171,10 @@ function read_and_add_legs!(
                     "leg with unknown destination,leg,instance reading,$(row.src_account),$(row.dst_account)"
                 end
                 println(anomalyIO, anomaly_message)
-
             else
-                minCost = min(minCost, arc.unitCost)
-                maxCost = max(maxCost, arc.unitCost)
-                meanCost += arc.unitCost
+                minCost = min(minCost, row.shipment_cost)
+                maxCost = max(maxCost, row.shipment_cost)
+                meanCost += row.shipment_cost
             end
         end
     end
@@ -282,8 +278,8 @@ function read_commodities(
     @info "Reading commodity orders from CSV file $(basename(commodities_file)) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
     # println(csv_reader[1])
-    firstWeek = Date(DateTime(csv_reader[1].delivery_date[1:10]))
-    lastWeek = Date(DateTime(csv_reader[1].delivery_date[1:10]))
+    firstWeek = Date(Dates.now())
+    lastWeek = Date(Dates.now())
     ignored = Dict(:unknown_bundle => 0, :missing_data => 0)
     open(anomaly_file, "a") do anomalyIO
         for (i, row) in enumerate(csv_reader)
@@ -293,6 +289,9 @@ function read_commodities(
                 println(anomalyIO, anomaly_message)
                 continue
             end
+            # if row.delivery_time_step + 1 >= 7
+            #     continue
+            # end
             # Getting bundle, order and commodity data
             bundle = get_bundle!(bundles, row, networkGraph, anomalyIO)
             if bundle === nothing
@@ -330,6 +329,24 @@ function read_commodities(
     if abs(timeFrame - timeFrameDates) > Dates.Day(7)
         @warn "Time frame computed with dates don't match the number of weeks in the time horizon, this may cause an error" :dates =
             timeFrameDates :timeFrame = timeFrame
+        # println("Collected dates : $dates")
+        # println("First week : $firstWeek")
+        # println("Last week : $lastWeek")
+        # println("Time frame : $timeFrame")
+        # knownDates = [Date(DateTime(dateString[1:10])) for dateString in dates]
+        # println(knownDates)
+        # sort!(knownDates)
+        # println(knownDates)
+        # for (i, knownDate) in enumerate(knownDates)
+        #     println("\nDate $i : $knownDate")
+        #     println("Date $(i+1) : $(knownDates[i+1])")
+        #     println("Delay between them : $(knownDate + Dates.Week(1) - knownDates[i + 1])")
+        #     if knownDate + Dates.Week(1) != knownDates[i + 1]
+        #         println("Added date : $(knownDate + Dates.Week(1))")
+        #         push!(dates, string(knownDate + Dates.Week(1)))
+        #     end
+        # end
+        # throw(ErrorException("Horizon reconstructed"))
     end
     return bundleVector, dates, partNums
 end
@@ -343,30 +360,41 @@ function read_instance(
     # Adding general properties 
     seaTime, seaNumber, maxLeg = 0, 0, 0
     netGraph = networkGraph.graph
+    trueDirects = 0
     for (srcHash, dstHash) in edge_labels(netGraph)
         if netGraph[srcHash, dstHash].type == :oversea
             seaTime += netGraph[srcHash, dstHash].travelTime
             seaNumber += 1
+        elseif netGraph[srcHash, dstHash].type == :direct
+            if netGraph[srcHash].type == :supplier && netGraph[dstHash].type == :plant
+                trueDirects += 1
+            else
+                println(netGraph[srcHash])
+                println(netGraph[dstHash])
+                println(netGraph[srcHash, dstHash])
+                throw(ErrorException("False direct"))
+            end
         end
         maxLeg = max(maxLeg, netGraph[srcHash, dstHash].travelTime)
     end
     meanOverseaTime = seaNumber == 0 ? 0 : round(Int, seaTime / seaNumber)
     netGraph[][:meanOverseaTime] = meanOverseaTime
     netGraph[][:maxLeg] = maxLeg
+    println("True directs : $(trueDirects)")
     bundles, dates, partNums = read_commodities(
         networkGraph, commodities_file, anomaly_file
     )
     horizon = length(dates)
     if netGraph[][:maxLeg] > length(dates)
-        @warn "The longest leg is $(netGraph[][:maxLeg]) steps long, which is longer than the time horizon ($(length(dates)) steps), the new horizon will be $(netGraph[][:maxLeg]) steps"
+        @warn "The longest leg is $(netGraph[][:maxLeg]) steps long, which is longer than the time horizon ($(length(dates)) steps), the new horizon will be $(netGraph[][:maxLeg] + 1) steps"
         anomaly_message = "longest leg is $(netGraph[][:maxLeg]) steps long but horizon is $(length(dates)) steps long,horizon,,"
         open(anomaly_file, "a") do io
             println(io, anomaly_message)
         end
-        horizon = netGraph[][:maxLeg]
-        lastWeek = Date(DateTime(dates[end]))
+        horizon = netGraph[][:maxLeg] + 1
+        lastWeek = Date(DateTime(dates[end][1:10]))
         for i in 1:(horizon - length(dates))
-            push!(dates, lastWeek + Dates.Week(i))
+            push!(dates, string(lastWeek + Dates.Week(i)))
         end
     end
     return Instance(

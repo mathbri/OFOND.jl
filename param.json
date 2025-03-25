@@ -1,0 +1,6 @@
+{
+    "input": "input_data/",
+    "output": "output/",
+    "model": "LNS",
+    "weight": false
+}

@@ -1,10 +1,12 @@
 # File used to launch all kinds of scripts using OFOND package 
 
+# TODO : test OFOND app and data from 2203
+
 using ProfileView
 using JLD2
 using Statistics
 
-INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_100325")
+INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_220325")
 OUTPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "export")
 
 NODE_FILE = "ND-MD-Geo_V5_preprocessing.csv"
@@ -102,10 +104,10 @@ function julia_main(;
     instance1D = instance_1D(instance2D; mixing=useWeights)
     instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file)
 
-    totVol = sum(sum(o.volume for o in b.orders) for b in instance2D.bundles)
+    totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
     totWei = sum(
-        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance2D.bundles
+        sum(sum(c.weight for c in o.content) for o in b.orders) for b in instance1D.bundles
     )
     println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
 
@@ -183,7 +185,7 @@ function julia_main(;
 
     # Applying local search 
     @info "Applying local search"
-    @profview local_search!(solutionSub, instanceSub; timeLimit=120, stepTimeLimit=30)
+    # @profview local_search!(solutionSub, instanceSub; timeLimit=120, stepTimeLimit=30)
 
     # Applying ILS 
     if useILS

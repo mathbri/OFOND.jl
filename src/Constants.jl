@@ -16,7 +16,7 @@ const ARC_TYPES = [
 const BP_ARC_TYPES = [
     :direct, :cross_plat, :delivery, :oversea, :port_transport, :inbound_iln
 ]
-const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea, :port_transport]
+const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea, :port_transport, :inbound_iln]
 
 const EPS = 1e-5
 const INFINITY = 1e9

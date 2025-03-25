@@ -344,8 +344,7 @@ function two_node_common_incremental!(
     CHANNEL::Channel{Vector{Int}};
     costThreshold::Float64=EPS,
 )
-    startingFeasible = is_feasible(instance, solution)
-
+    # startingFeasible = is_feasible(instance, solution)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     twoNodeBundleIdxs = get_bundles_to_update(TTGraph, solution, src, dst)
     twoNodeBundles = instance.bundles[twoNodeBundleIdxs]

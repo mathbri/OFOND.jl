@@ -273,8 +273,8 @@ function enforce_strict_admissibility!(solution::Solution, instance::Instance)
         # Recomputing if not admissible
         if !is_path_admissible(TTGraph, bunPath)
             # Retrieving bundle start and end nodes
-            suppNode = TTGraph.bundleSrc[bundleIdx]
-            custNode = TTGraph.bundleDst[bundleIdx]
+            suppNode = TTGraph.bundleSrc[bundle.idx]
+            custNode = TTGraph.bundleDst[bundle.idx]
             # Computing shortest path
             shortestPath, pathCost = greedy_insertion(
                 solution, TTGraph, TSGraph, bundle, suppNode, custNode, CHANNEL
