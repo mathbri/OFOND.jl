@@ -135,6 +135,7 @@ function project_all_paths(
 end
 
 function read_solution(instance::Instance, solution_file::String, anomaly_file::String)
+    start = time()
     # Reading .csv file
     csv_reader = CSV.File(
         solution_file;
@@ -187,13 +188,19 @@ function read_solution(instance::Instance, solution_file::String, anomaly_file::
         instance.prices,
     )
     newInstance = add_properties(newInstance, tentative_first_fit, Int[], anomaly_file)
-    @info "For $(length(instance.bundles)) bundles, read $(count(p -> length(p) >= 2, paths)) paths, kept $(length(newPaths)) paths and removed $(length(instance.bundles) - length(newPaths)) bundles with errors"
+    timeTaken = round(time() - start; digits=1)
+    @info "For $(length(instance.bundles)) bundles, read $(count(p -> length(p) >= 2, paths)) paths, kept $(length(newPaths)) paths and removed $(length(instance.bundles) - length(newPaths)) bundles with errors" :time =
+        timeTaken
     # Creating and updating solution
+    @info "Building current solution"
+    start = time()
     bunPaths = project_all_paths(newPaths, newInstance, anomaly_file)
     solution = Solution(newInstance)
     update_solution!(solution, newInstance, newBundles, bunPaths)
     feasible = is_feasible(newInstance, solution; verbose=true)
     totalCost = compute_cost(newInstance, solution)
-    @info "Current solution properties" :feasible = feasible :total_cost = totalCost
+    timeTaken = round(time() - start; digits=1)
+    @info "Current solution properties" :feasible = feasible :total_cost = totalCost :time =
+        timeTaken
     return newInstance, solution
 end

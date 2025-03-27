@@ -28,6 +28,7 @@ function add_properties(
     instance::Instance, bin_packing::Function, CAPACITIES::Vector{Int}, anomaly_file::String
 )
     @info "Adding properties to instance"
+    start = time()
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
@@ -77,6 +78,8 @@ function add_properties(
     @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
     @info "Time-space graph has $(nv(newTSGraph.graph)) nodes and $(ne(newTSGraph.graph)) arcs"
+    timeTaken = round(time() - start; digits=1)
+    @info "Full properties added" :time = timeTaken
     return Instance(
         instance.networkGraph,
         newTTGraph,

@@ -6,7 +6,7 @@
 using JLD2
 using Statistics
 
-INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_220325")
+INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_270325_global")
 OUTPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "export")
 
 NODE_FILE = "ND-MD-Geo_V5_preprocessing.csv"
@@ -112,10 +112,12 @@ function julia_main(;
     println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
 
     # Computing current solution in 1D to get a reference also
+    start = time()
     solution1D = Solution(instance1D)
     update_solution!(solution1D, instance1D, instance1D.bundles, solution2D.bundlePaths)
-    println("Cost of current solution (1D) : $(compute_cost(instance1D, solution1D))")
-
+    totalCost = compute_cost(instance1D, solution1D)
+    timeTaken = round(time() - start; digits=1)
+    @info "Solution 1D constructed" :total_cost = totalCost :time = timeTaken
     println(
         "Most expensive arc in the network : $(maximum(a -> a.unitCost, instance1D.travelTimeGraph.networkArcs))",
     )

@@ -1,6 +1,6 @@
 {
     "input": "input_data/",
     "output": "output/",
-    "model": "LNS",
+    "model": "Greedy",
     "weight": false
 }

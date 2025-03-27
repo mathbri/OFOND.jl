@@ -134,6 +134,7 @@ function write_solution(
     solution::Solution, instance::Instance; suffix::String, directory::String
 )
     @info "Writing solution to CSV files (suffix: $suffix, directory: $directory)"
+    start = time()
     # network design file 
     nLines = 0
     open(joinpath(directory, "network_design_$suffix.csv"), "w") do io
@@ -153,4 +154,6 @@ function write_solution(
         nLines = write_shipment_content(io, solution, instance)
     end
     @info "Shipment content file done ($nLines lines x $(length(SHIPMENT_CONTENT_COLUMNS)) columns)"
+    timeTaken = round(time() - start; digits=1)
+    @info "Full solution exported" :time = timeTaken
 end

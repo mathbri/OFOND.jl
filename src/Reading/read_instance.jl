@@ -27,6 +27,7 @@ end
 function read_and_add_nodes!(
     network::NetworkGraph, node_file::String, anomaly_file::String; verbose::Bool=false
 )
+    start = time()
     counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     # Reading .csv file
     csv_reader = CSV.File(
@@ -56,7 +57,9 @@ function read_and_add_nodes!(
         end
     end
     ignoredStr = join(pairs(ignored), ", ")
-    @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr :time =
+        timeTaken
 end
 
 function are_leg_data_missing(row::CSV.Row)
@@ -131,6 +134,7 @@ end
 function read_and_add_legs!(
     network::NetworkGraph, leg_file::String, anomaly_file::String; verbose::Bool=false
 )
+    start = time()
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
@@ -179,7 +183,8 @@ function read_and_add_legs!(
         end
     end
     ignoredStr = join(pairs(ignored), ", ")
-    @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr :time = timeTaken
     println("Tariffs read : $(length(tariffNames))")
     println("Min arc cost : $minCost")
     println("Max arc cost : $maxCost")
@@ -263,6 +268,7 @@ end
 function read_commodities(
     networkGraph::NetworkGraph, commodities_file::String, anomaly_file::String
 )
+    start = time()
     orders, bundles = Dict{UInt,Order}(), Dict{UInt,Bundle}()
     dates, partNums = Vector{String}(), Dict{UInt,String}()
     comCount, comUnique = 0, 0
@@ -321,9 +327,10 @@ function read_commodities(
     end
     # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
     bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
-    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon" :ignored = join(
-        pairs(ignored), ", "
-    )
+    ignoreStr = join(pairs(ignored), ", ")
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon" :ignored =
+        ignoreStr :time = timeTaken
     timeFrame = lastWeek - firstWeek
     timeFrameDates = Dates.Day(Dates.Week(length(dates)))
     if abs(timeFrame - timeFrameDates) > Dates.Day(7)
