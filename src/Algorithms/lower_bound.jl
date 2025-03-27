@@ -197,13 +197,13 @@ function lower_bound_filtering!(solution::Solution, instance::Instance)
         # Retrieving bundle start and end nodes
         suppNode = TTGraph.bundleSrc[bundle.idx]
         custNode = TTGraph.bundleDst[bundle.idx]
-        if !has_path(TTGraph.graph, suppNode, custNode)
-            throw(
-                ErrorException(
-                    "Bundle $bundle does not have a path between supplier $suppNode ($(TTGraph.networkNodes[suppNode]) $(TTGraph.stepToDel[suppNode]) steps from delivery) and customer $custNode ($(TTGraph.networkNodes[custNode]) $(TTGraph.stepToDel[custNode]) steps from delivery)",
-                ),
-            )
-        end
+        # if !has_path(TTGraph.graph, suppNode, custNode)
+        #     throw(
+        #         ErrorException(
+        #             "Bundle $bundle does not have a path between supplier $suppNode ($(TTGraph.networkNodes[suppNode]) $(TTGraph.stepToDel[suppNode]) steps from delivery) and customer $custNode ($(TTGraph.networkNodes[custNode]) $(TTGraph.stepToDel[custNode]) steps from delivery)",
+        #         ),
+        #     )
+        # end
         # Computing shortest path
         shortestPath = lower_bound_filtering_path(
             TTGraph, TSGraph, bundle, suppNode, custNode;

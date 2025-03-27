@@ -32,7 +32,7 @@ function add_properties(
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
-    newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles)
+    newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles; reachability=false)
     # Checking a path exists for every bundle in the travel time graph 
     checkedBundles = Int[]
     open(anomaly_file, "a") do anomalyIO

@@ -1,7 +1,5 @@
 # File used to launch all kinds of scripts using OFOND package 
 
-# TODO : test OFOND app and data from 2203
-
 # using ProfileView
 using JLD2
 using Statistics
@@ -54,8 +52,8 @@ function julia_main(;
     volumeFile::String=VOLUME_FILE,
     routeFile::String=ROUTE_FILE,
     outputFolder::String=OUTPUT_FOLDER,
-    useILS::Bool=true,
-    useWeights::Bool=true,
+    useILS::Bool=false,
+    useWeights::Bool=false,
     filterCurrentArcs::Bool=true,
 )::Int
     # Read files based on arguments
@@ -103,6 +101,7 @@ function julia_main(;
     CAPACITIES_V = Int[]
     instance1D = instance_1D(instance2D; mixing=useWeights)
     instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file)
+    sort_order_content!(instance1D)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
     println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")
@@ -114,7 +113,9 @@ function julia_main(;
     # Computing current solution in 1D to get a reference also
     start = time()
     solution1D = Solution(instance1D)
-    update_solution!(solution1D, instance1D, instance1D.bundles, solution2D.bundlePaths)
+    update_solution!(
+        solution1D, instance1D, instance1D.bundles, solution2D.bundlePaths; sorted=true
+    )
     totalCost = compute_cost(instance1D, solution1D)
     timeTaken = round(time() - start; digits=1)
     @info "Solution 1D constructed" :total_cost = totalCost :time = timeTaken
@@ -128,6 +129,7 @@ function julia_main(;
         instance1D = add_properties(
             instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file
         )
+        sort_order_content!(instance1D)
 
         totVol = sum(sum(o.volume for o in b.orders) for b in instance1D.bundles)
         println("Instance volume : $(round(Int, totVol / VOLUME_FACTOR)) m3")

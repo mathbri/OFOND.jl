@@ -244,7 +244,9 @@ function add_bundle_arcs!(
     return travelTimeGraph.bundleArcs[bundle.idx] = bunArcs
 end
 
-function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
+function TravelTimeGraph(
+    network::NetworkGraph, bundles::Vector{Bundle}; reachability::Bool=true
+)
     # Computing for each node which bundles starts and which bundles end at this node 
     bundlesOnNodes = get_bundle_on_nodes(bundles)
     maxTime = maximum(bundle -> bundle.maxDelTime, bundles)
@@ -267,25 +269,27 @@ function TravelTimeGraph(network::NetworkGraph, bundles::Vector{Bundle})
         "Common arcs : $((count(arc -> arc.type in COMMON_ARC_TYPES, arcs))) (travel time graph)",
     )
     # Computing common network reach
-    println("Reachbility properties : ")
-    plantNodes = findall(node -> node.type == :plant, travelTimeGraph.networkNodes)
-    commonNetworkReach = Dict{Tuple{Int,Int},Bool}()
-    for node in travelTimeGraph.commonNodes
-        for plant in plantNodes
-            if has_path(travelTimeGraph.graph, node, plant)
-                commonNetworkReach[(node, plant)] = true
+    if reachability
+        println("Reachability properties : ")
+        plantNodes = findall(node -> node.type == :plant, travelTimeGraph.networkNodes)
+        commonNetworkReach = Dict{Tuple{Int,Int},Bool}()
+        for node in travelTimeGraph.commonNodes
+            for plant in plantNodes
+                if has_path(travelTimeGraph.graph, node, plant)
+                    commonNetworkReach[(node, plant)] = true
+                end
             end
         end
+        print("Common network done, bundles ")
+        # Computing bundle arcs
+        for bundle in bundles
+            add_bundle_arcs!(travelTimeGraph, bundle, commonNetworkReach)
+            bundle.idx % 100 == 0 && print("|")
+        end
+        println()
+        meanArcs = mean(length.(travelTimeGraph.bundleArcs))
+        println("Mean bundle arcs : $(round(meanArcs; digits=1))")
     end
-    print("Common network done, bundles ")
-    # Computing bundle arcs
-    for bundle in bundles
-        add_bundle_arcs!(travelTimeGraph, bundle, commonNetworkReach)
-        bundle.idx % 100 == 0 && print("|")
-    end
-    println()
-    meanArcs = mean(length.(travelTimeGraph.bundleArcs))
-    println("Mean bundle arcs : $(round(meanArcs; digits=1))")
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)
 end
