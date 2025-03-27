@@ -41,10 +41,11 @@ function update_bundle_path!(
         srcIdx = findfirst(node -> node == path[1], oldPath)
         dstIdx = findlast(node -> node == path[end], oldPath)
         if srcIdx === nothing || dstIdx === nothing
-            println("Error : src or dst not found in path")
-            println("Bundle : $bundle")
-            println("Path : $path (partial = $partial)")
-            println("Old path : $oldPath")
+            @error "Error : src or dst not found in path" bundle path oldPath
+            # println("Error : src or dst not found in path")
+            # println("Bundle : $bundle")
+            # println("Path : $path (partial = $partial)")
+            # println("Old path : $oldPath")
         end
         path = vcat(oldPath[1:srcIdx], path[2:(end - 1)], oldPath[dstIdx:end])
         oldPath = oldPath[srcIdx:dstIdx]
