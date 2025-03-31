@@ -125,6 +125,10 @@ function julia_main(;
 
     # Reading instance again but ignoring current network
     if filterCurrentArcs
+        instance2D = filter_current_arcs(instance2D)
+        instance2D = add_properties(
+            instance2D, tentative_first_fit, CAPACITIES_V, anomaly_file
+        )
         instance1D = filter_current_arcs(instance1D)
         instance1D = add_properties(
             instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file
@@ -212,16 +216,23 @@ function julia_main(;
     # Un-transform here from 1D to 2D
     finalSolution = Solution(instance2D)
     @info "Transforming back to explicit 2D solution"
-    i = 0
-    for (bundle, path) in zip(instance2D.bundles, finalSolution1D.bundlePaths)
-        projPath = project_on_sub_instance(path, instance1D, instance2D)
-        add_bundle!(finalSolution, instance2D, bundle, projPath)
+    for (i, bundle) in enumerate(instance2D.bundles)
+        # Getting bundle idx
+        bundelIdx1D = if bundle == instance1D.bundles[bundle.idx]
+            bundle.idx
+        else
+            findfirst(b -> b == bundle, instance1D.bundles)
+        end
+        if isnothing(bundleIdx1D)
+            @error "Bundle in 2D instance not found in 1D instance" bundle
+        end
+        bundlePath1D = finalSolution1D.bundlePaths[bundelIdx1D]
+        bundlePath2D = project_on_sub_instance(bundlePath1D, instance1D, instance2D)
+        add_bundle!(finalSolution, instance2D, bundle, bundlePath2D)
         i % 10 == 0 && print("|")
-        i += 1
     end
     println()
     @info "Optimizing final packings"
-    # parallel_bin_packing_improvement!(finalSolution, instance2D; skipLinear=false)
     bin_packing_improvement!(
         finalSolution, instance2D, Commodity[], Int[]; skipLinear=false
     )
