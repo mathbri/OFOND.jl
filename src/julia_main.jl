@@ -4,7 +4,7 @@
 using JLD2
 using Statistics
 
-INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_270325_global")
+INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_270325")
 OUTPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "export")
 
 NODE_FILE = "ND-MD-Geo_V5_preprocessing.csv"
@@ -218,7 +218,7 @@ function julia_main(;
     @info "Transforming back to explicit 2D solution"
     for (i, bundle) in enumerate(instance2D.bundles)
         # Getting bundle idx
-        bundelIdx1D = if bundle == instance1D.bundles[bundle.idx]
+        bundleIdx1D = if bundle == instance1D.bundles[bundle.idx]
             bundle.idx
         else
             findfirst(b -> b == bundle, instance1D.bundles)
@@ -226,7 +226,7 @@ function julia_main(;
         if isnothing(bundleIdx1D)
             @error "Bundle in 2D instance not found in 1D instance" bundle
         end
-        bundlePath1D = finalSolution1D.bundlePaths[bundelIdx1D]
+        bundlePath1D = finalSolution1D.bundlePaths[bundleIdx1D]
         bundlePath2D = project_on_sub_instance(bundlePath1D, instance1D, instance2D)
         add_bundle!(finalSolution, instance2D, bundle, bundlePath2D)
         i % 10 == 0 && print("|")
