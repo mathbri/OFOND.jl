@@ -295,7 +295,7 @@ function read_commodities(
                 println(anomalyIO, anomaly_message)
                 continue
             end
-            # if row.delivery_time_step + 1 >= 7
+            # if row.delivery_time_step + 1 > 26
             #     continue
             # end
             # Getting bundle, order and commodity data

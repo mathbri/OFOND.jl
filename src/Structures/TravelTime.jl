@@ -281,14 +281,28 @@ function TravelTimeGraph(
             end
         end
         print("Common network done, bundles ")
+        # TODO : 
+        # The number of paths grow exponentially with the cutoff (FR-ES : 4 = 1500, 5 = 20000)
+        # Need to think about sensible criterias to filter them out if we go down this road
+        # numPaths = 0.0
         # Computing bundle arcs
-        for bundle in bundles
+        for (i, bundle) in enumerate(bundles)
             add_bundle_arcs!(travelTimeGraph, bundle, commonNetworkReach)
+            # bunPaths = all_simple_paths(
+            #     travelTimeGraph.graph,
+            #     travelTimeGraph.bundleSrc[bundle.idx],
+            #     travelTimeGraph.bundleDst[bundle.idx];
+            #     cutoff=5,
+            # )
+            # numPaths += length(collect(bunPaths))
             bundle.idx % 100 == 0 && print("|")
+            # print(" $(round(numPaths / i; digits=1)) ")
         end
         println()
         meanArcs = mean(length.(travelTimeGraph.bundleArcs))
         println("Mean bundle arcs : $(round(meanArcs; digits=1))")
+        # meanPaths = numPaths / length(bundles)
+        # println("Mean bundle paths : $(round(meanPaths; digits=1))")
     end
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)

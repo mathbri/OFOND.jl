@@ -301,7 +301,8 @@ function reintroduce_bundles!(
     end
     println()
     feasible = is_feasible(instance, solution)
-    timeTaken = round((time() - start) * 1000) / 1000
+    timeTaken = round(time() - start; digits=1)
+    totImpro = round(totImpro; digits=1)
     @info "Total bundle re-introduction improvement" :bundles_updated = count :improvement =
         totImpro :time = timeTaken :feasible = feasible
     return totImpro
@@ -463,37 +464,73 @@ function local_search!(
     dstNodes = vcat(srcNodes, plantNodes)
     # Looping while there is time
     startTime = time()
-    while (time() - startTime < timeLimit) && (i <= 150_000) && (noImprov < 5000)
-        startLoopImprov = totImprov
-        # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
-        if rand() < 0.5
-            # Bundle reintroduction
-            bundle = instance.bundles[rand(1:length(instance.bundles))]
-            totImprov += bundle_reintroduction!(
-                solution, instance, bundle, CHANNEL; costThreshold=threshold
-            )
-        else
-            # Two node common incremental
-            src, dst = rand(srcNodes), rand(dstNodes)
-            # src, dst = 150, 352
-            while !are_nodes_candidate(TTGraph, src, dst)
+    # while (time() - startTime < timeLimit) && (i <= 150_000) && (noImprov < 5000)
+    #     startLoopImprov = totImprov
+    #     # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
+    #     if rand() < 0.5
+    #         # Bundle reintroduction
+    #         bundle = instance.bundles[rand(1:length(instance.bundles))]
+    #         totImprov += bundle_reintroduction!(
+    #             solution, instance, bundle, CHANNEL; costThreshold=threshold
+    #         )
+    #     else
+    #         # Two node common incremental
+    #         src, dst = rand(srcNodes), rand(dstNodes)
+    #         # src, dst = 150, 352
+    #         while !are_nodes_candidate(TTGraph, src, dst)
+    #             src, dst = rand(srcNodes), rand(dstNodes)
+    #         end
+    #         improvement, count = two_node_common_incremental!(
+    #             solution, instance, src, dst, CAPA, CHANNEL; costThreshold=threshold
+    #         )
+    #         totImprov += improvement
+    #     end
+    #     # Recording useless step
+    #     if isapprox(totImprov, startLoopImprov; atol=1.0)
+    #         noImprov += 1
+    #     else
+    #         noImprov = 0
+    #     end
+    #     # Printing progress
+    #     i += 1
+    #     i % 100 == 0 && print("|")
+    #     i % 1000 == 0 && print(" $i ")
+    # end
+    while (time() - startTime < timeLimit)
+        noImprov, i = 0, 0
+        bundleIdxs = randperm(length(instance.bundles))
+        remainingTime = timeLimit - (time() - startTime)
+        totImprov += reintroduce_bundles!(
+            solution, instance, bundleIdxs; timeLimit=remainingTime
+        )
+        while (noImprov < 1000) && (time() - startTime < timeLimit)
+            startLoopImprov = totImprov
+            # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
+            if rand() < 0.5
+                # Bundle reintroduction
+                bundle = instance.bundles[bundleIdxs[i % length(bundleIdxs) + 1]]
+                totImprov += bundle_reintroduction!(
+                    solution, instance, bundle, CHANNEL; costThreshold=threshold
+                )
+            else
+                # Two node common incremental
                 src, dst = rand(srcNodes), rand(dstNodes)
+                # src, dst = 150, 352
+                while !are_nodes_candidate(TTGraph, src, dst)
+                    src, dst = rand(srcNodes), rand(dstNodes)
+                end
+                improvement, count = two_node_common_incremental!(
+                    solution, instance, src, dst, CAPA, CHANNEL; costThreshold=threshold
+                )
+                totImprov += improvement
             end
-            improvement, count = two_node_common_incremental!(
-                solution, instance, src, dst, CAPA, CHANNEL; costThreshold=threshold
-            )
-            totImprov += improvement
+            # Recording non improving step
+            noImprov = isapprox(totImprov, startLoopImprov; atol=1.0) ? noImprov + 1 : 0
+            # Printing progress
+            i += 1
+            i % 100 == 0 && print("|")
+            i % 1000 == 0 && print(" $i ")
         end
-        # Recording useless step
-        if isapprox(totImprov, startLoopImprov; atol=1.0)
-            noImprov += 1
-        else
-            noImprov = 0
-        end
-        # Printing progress
-        i += 1
-        i % 100 == 0 && print("|")
-        i % 1000 == 0 && print(" $i ")
     end
     println(
         "\nLoop Break : time = $(round(time() - startTime; digits=1)), i = $i, noImprov = $noImprov",
@@ -513,8 +550,9 @@ function local_search!(
     end
     relImprov = round(totImprov / startCost * 100; digits=2)
     timeTaken = round(time() - startTime; digits=2)
+    feasible = is_feasible(instance, solution)
     @info "Full local search done" :total_improvement = totImprov :relative_improvement =
-        relImprov :time = timeTaken
+        relImprov :time = timeTaken :feasible = feasible
     return totImprov
 end
 
