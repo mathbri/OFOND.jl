@@ -211,6 +211,7 @@ end
 
 # Check whether a solution is feasible or not 
 function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     check_enough_paths(instance, solution; verbose=verbose) || return false
     askedQuantities, routedQuantities = create_asked_routed_quantities(instance)
     # All paths starts from supplier, end at customer, and are continuous on the graph
@@ -222,6 +223,26 @@ function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false
         check_path_continuity(instance, bundlePath; verbose=verbose) || return false
         # Updating quantities
         update_asked_quantities!(askedQuantities, bundle)
+        for order in bundle.orders
+            timedPath = time_space_projector(TTGraph, TSGraph, bundlePath, order)
+            for (src, dst) in partition(timedPath, 2, 1)
+                # Path continuity
+                if !has_edge(TSGraph.graph, src, dst)
+                    @warn "Infeasible solution : edge $src-$dst doesn't exist in path $timedPath"
+                    throw(ErrorException("Infeasible"))
+                end
+                # Commodities on timed arcs
+                arcBins = solution.bins[src, dst]
+                allCommodities = get_all_commodities(arcBins, Commodity[])
+                # TODO : add quantity check here
+                for com in order.content
+                    if !(com in allCommodities)
+                        @warn "Infeasible solution : commodity $com doesn't exist in path $timedPath"
+                        throw(ErrorException("Infeasible"))
+                    end
+                end
+            end
+        end
     end
     # Getting routed quantities to plants
     update_routed_quantities!(routedQuantities, instance, solution)
@@ -251,7 +272,7 @@ end
 # Compute the cost of a solution : node cost + arc cost + commodity cost
 function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
     totalCost = 0.0
-    directCost = 0.0
+    directCost, directVolume = 0.0, 0.0
     bi, bj, ba, bk = 0, 0, 0, 0.0
     costj, costk = 0.0, 0.0
     # Iterate over sparse matrix
@@ -292,6 +313,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
                 if instance.timeSpaceGraph.networkNodes[i].type == :supplier &&
                     instance.timeSpaceGraph.networkNodes[j].type == :plant
                     directCost += arcCost
+                    directVolume += arcVolume
                 end
             end
             arcCostj = arcCost - (length(arcBins) - arcBj) * arcData.unitCost
@@ -329,6 +351,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
         "Cost computed : $(totalCost) (BP) / $(costj) bins (GC) (-$(round((totalCost - costj) * 100 / totalCost; digits=1))%) / $(costk) bins (LC) (-$(round((totalCost - costk) * 100 / totalCost; digits=1))%)",
     )
     println("Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%)")
+    println("Direct volume : $(round(Int, directVolume / VOLUME_FACTOR))m3")
     return totalCost
 end
 

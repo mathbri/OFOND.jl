@@ -9,9 +9,7 @@ function get_shipments_ids(
 end
 
 function write_network_design(io::IO, solution::Solution, instance::Instance)
-    # push data into a vector 
-    nLines = 0
-    routeId = 1
+    nLines, routeId = 0, 1
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     for bundle in instance.bundles
         path = solution.bundlePaths[bundle.idx]
@@ -25,6 +23,13 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                 for (idx, node) in enumerate(timedPath)
                     # TODO : all the time is lost in this function, by the findall
                     shipments_ids = get_shipments_ids(solution, timedPath, node, idx, com)
+                    if length(shipments_ids) == 0
+                        throw(
+                            ErrorException(
+                                "No shipment found for order $(order) and commodity $(com) of bundle $(bundle)",
+                            ),
+                        )
+                    end
                     for id in shipments_ids
                         # writing data in csv formatted string
                         print(io, routeId, ",") # route_id
@@ -77,7 +82,7 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, get(instance.prices, price_hash(instance, arc), ""), ",") # tariff_name (if available)
             print(io, transportCost, ",") # unit_cost
             print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
-            println(io, dstData.volumeCost * fillingRate) # platform_cost
+            println(io, dstData.volumeCost * bin.volumeLoad / VOLUME_FACTOR) # platform_cost
             nLines += 1
         end
     end

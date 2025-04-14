@@ -4,7 +4,7 @@
 using JLD2
 using Statistics
 
-INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_270325")
+INPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "data_100425")
 OUTPUT_FOLDER = joinpath(Base.dirname(@__DIR__), "scripts", "export")
 
 NODE_FILE = "ND-MD-Geo_V5_preprocessing.csv"
@@ -56,6 +56,8 @@ function julia_main(;
     useWeights::Bool=false,
     filterCurrentArcs::Bool=true,
 )::Int
+    juliaMainStart = time()
+
     # Read files based on arguments
     println("Launching OFOND Optimization")
     println("Reading data from $inputFolder")
@@ -79,7 +81,7 @@ function julia_main(;
     # read instance 
     instance2D = read_instance(node_file, leg_file, com_file, anomaly_file)
     # adding properties to the instance
-    CAPACITIES_V, CAPACITIES_W = Int[], Int[]
+    CAPACITIES_V = Int[]
     instance2D = add_properties(instance2D, tentative_first_fit, CAPACITIES_V, anomaly_file)
 
     totVol = sum(sum(o.volume for o in b.orders) for b in instance2D.bundles)
@@ -98,7 +100,7 @@ function julia_main(;
     write_solution(solution2D, instance2D; suffix="current", directory=outputFolder)
 
     # Transform here from 2D to 1D
-    CAPACITIES_V = Int[]
+    # CAPACITIES_V = Int[]
     instance1D = instance_1D(instance2D; mixing=useWeights)
     instance1D = add_properties(instance1D, tentative_first_fit, CAPACITIES_V, anomaly_file)
     sort_order_content!(instance1D)
@@ -167,7 +169,9 @@ function julia_main(;
 
     @info "Constructing greedy, lower bound and mixed solution"
     solution_Mix = Solution(instanceSub)
+    start = time()
     solution_G, solution_LB = mix_greedy_and_lower_bound!(solution_Mix, instanceSub)
+    timeTaken = round(time() - start; digits=1)
     feasibles = [
         is_feasible(instanceSub, sol) for sol in [solution_Mix, solution_G, solution_LB]
     ]
@@ -176,7 +180,7 @@ function julia_main(;
     gCost = compute_cost(instanceSub, solution_G)
     lbCost = compute_cost(instanceSub, solution_LB)
     @info "Mixed heuristic results" :mixed_cost = mixCost :greedy_cost = gCost :lower_bound_cost =
-        lbCost
+        lbCost :time = timeTaken
 
     # Choosing the best solution as the starting solution
     solutionSub = solution_G
@@ -193,7 +197,7 @@ function julia_main(;
 
     # Applying local search 
     @info "Applying local search"
-    local_search!(solutionSub, instanceSub; timeLimit=900, stepTimeLimit=30)
+    local_search!(solutionSub, instanceSub; timeLimit=90, stepTimeLimit=30)
 
     # Applying ILS 
     if useILS
@@ -209,9 +213,11 @@ function julia_main(;
 
     @info "Enforcing strict admissibility before extraction"
     enforce_strict_admissibility!(solutionSub, instanceSub)
+    println("Is feasible : $(is_feasible(instanceSub, solutionSub))")
 
     # Fusing solutions
     finalSolution1D = fuse_solutions(solutionSub, solution_LBF, instance1D, instanceSub)
+    println("Is feasible : $(is_feasible(instance1D, finalSolution1D))")
 
     # Un-transform here from 1D to 2D
     finalSolution = Solution(instance2D)
@@ -232,16 +238,25 @@ function julia_main(;
         i % 10 == 0 && print("|")
     end
     println()
-    @info "Optimizing final packings"
-    bin_packing_improvement!(
-        finalSolution, instance2D, Commodity[], Int[]; skipLinear=false
-    )
+    println("Is feasible : $(is_feasible(instance2D, finalSolution))")
+
+    # TODO : add explicit 2D bin packing improvement, this was made for 1D instances
+    # @info "Optimizing final packings"
+    # COMMO = Commodity[]
+    # bin_packing_improvement!(finalSolution, instance2D, COMMO, CAPACITIES_V)
+    # println("Is feasible : $(is_feasible(instance2D, finalSolution))")
+
     @info "Cleaning empty bins"
     clean_empty_bins!(finalSolution, instance2D)
+    println("Is feasible : $(is_feasible(instance2D, finalSolution))")
+
     println("Cost of 2D proposed solution : $(compute_cost(instance2D, finalSolution))")
 
     println("Exporting proposed solution to $outputFolder")
     write_solution(finalSolution, instance2D; suffix="proposed", directory=outputFolder)
+
+    juliaMainTime = round(time() - juliaMainStart; digits=1)
+    @info "Total Julia Main time : $juliaMainTime"
 
     return 0 # if things finished successfully
 end
