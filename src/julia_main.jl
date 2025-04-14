@@ -197,7 +197,7 @@ function julia_main(;
 
     # Applying local search 
     @info "Applying local search"
-    local_search!(solutionSub, instanceSub; timeLimit=90, stepTimeLimit=30)
+    local_search!(solutionSub, instanceSub; timeLimit=900, stepTimeLimit=30)
 
     # Applying ILS 
     if useILS
