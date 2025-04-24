@@ -54,6 +54,9 @@ function read_and_add_nodes!(
                 end
                 println(anomalyIO, anomaly_message)
             end
+            if node.volumeCost > EPS
+                println(node)
+            end
         end
     end
     ignoredStr = join(pairs(ignored), ", ")

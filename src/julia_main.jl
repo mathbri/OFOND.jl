@@ -95,9 +95,17 @@ function julia_main(;
     instance2D, solution2D = read_solution(instance2D, sol_file, anomaly_file)
     println("Cost of current solution (2D) : $(compute_cost(instance2D, solution2D))")
 
+    # Creating hash to routeId dict 
+    hashToRouteId = Dict{UInt,Int}()
+    for (i, bundle) in enumerate(instance2D.bundles)
+        hashToRouteId[bundle.hash] = i
+    end
+
     # Exporting current solution
     println("Exporting current solution")
-    write_solution(solution2D, instance2D; suffix="current", directory=outputFolder)
+    write_solution(
+        solution2D, instance2D, hashToRouteId; suffix="current", directory=outputFolder
+    )
 
     # Transform here from 2D to 1D
     # CAPACITIES_V = Int[]
@@ -145,6 +153,13 @@ function julia_main(;
             b in instance1D.bundles
         )
         println("Instance weight : $(round(Int, totWei / WEIGHT_FACTOR)) tons")
+    end
+
+    for node_label in labels(instance1D.networkGraph.graph)
+        node = instance1D.networkGraph.graph[node_label]
+        if node.volumeCost > EPS
+            println(node)
+        end
     end
 
     # Filtering procedure 

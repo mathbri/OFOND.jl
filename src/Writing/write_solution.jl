@@ -8,8 +8,10 @@ function get_shipments_ids(
     return string.([bin.idx for bin in bins[binIdxs]])
 end
 
-function write_network_design(io::IO, solution::Solution, instance::Instance)
-    nLines, routeId = 0, 1
+function write_network_design(
+    io::IO, solution::Solution, instance::Instance, hashToRouteId::Dict{UInt,Int}
+)
+    nLines = 0
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     for bundle in instance.bundles
         path = solution.bundlePaths[bundle.idx]
@@ -32,7 +34,7 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                     end
                     for id in shipments_ids
                         # writing data in csv formatted string
-                        print(io, routeId, ",") # route_id
+                        print(io, hashToRouteId[bundle.hash], ",") # route_id
                         print(io, bundle.supplier.account, ",") # supplier_account
                         print(io, bundle.customer.account, ",") # customer_account
                         print(io, instance.partNumbers[com.partNumHash], ",") # part_number
@@ -48,7 +50,6 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                     end
                 end
             end
-            routeId += 1  # route_id
         end
     end
     return nLines
@@ -81,8 +82,21 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, bin.weightLoad / WEIGHT_FACTOR, ",") # weight
             print(io, get(instance.prices, price_hash(instance, arc), ""), ",") # tariff_name (if available)
             print(io, transportCost, ",") # unit_cost
-            print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
-            println(io, dstData.volumeCost * bin.volumeLoad / VOLUME_FACTOR) # platform_cost
+            carbonCost = arcData.carbonCost * fillingRate
+            print(io, carbonCost, ",") # carbon_cost
+            platformCost = dstData.volumeCost * bin.volumeLoad / VOLUME_FACTOR
+            println(io, platformCost) # platform_cost
+            if dstData.volumeCost > EPS
+                println(dstData)
+                println(arcData)
+                println("Bin volume : $(bin.volumeLoad)")
+                println("Bin weight : $(bin.weightLoad)")
+                println("Filling rate : $(fillingRate)")
+                println("Transport cost : $(transportCost)")
+                println("Carbon cost : $(carbonCost)")
+                println("Platform cost : $(platformCost)")
+                throw(ErrorException("debug"))
+            end
             nLines += 1
         end
     end
@@ -136,7 +150,11 @@ function write_shipment_content(io::IO, solution::Solution, instance::Instance)
 end
 
 function write_solution(
-    solution::Solution, instance::Instance; suffix::String, directory::String
+    solution::Solution,
+    instance::Instance,
+    hashToRouteId::Dict{UInt,Int};
+    suffix::String,
+    directory::String,
 )
     @info "Writing solution to CSV files (suffix: $suffix, directory: $directory)"
     start = time()
@@ -144,7 +162,7 @@ function write_solution(
     nLines = 0
     open(joinpath(directory, "network_design_$suffix.csv"), "w") do io
         println(io, join(NETWORK_DESIGN_COLUMNS, ","))
-        nLines = write_network_design(io, solution, instance)
+        nLines = write_network_design(io, solution, instance, hashToRouteId)
     end
     @info "Network design file done ($nLines lines x $(length(NETWORK_DESIGN_COLUMNS)) columns)"
     # shipment info file
