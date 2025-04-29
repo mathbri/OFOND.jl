@@ -260,7 +260,7 @@ function compute_arc_cost(
     # Volume and Stock cost 
     cost = dstData.volumeCost * arcVolume / VOLUME_FACTOR
     cost += arcData.carbonCost * arcVolume / arcData.volumeCapacity
-    cost += arcData.distance * stockCost
+    # cost += arcData.distance * stockCost
     # Transport cost 
     transportUnits =
         arcData.isLinear ? (arcVolume / arcData.volumeCapacity) : 1.0 * length(bins)
@@ -275,6 +275,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
     directCost, directVolume = 0.0, 0.0
     bi, bj, ba, bk = 0, 0, 0, 0.0
     costj, costk = 0.0, 0.0
+    transCost, carbCost, platCost = 0.0, 0.0, 0.0
     # Iterate over sparse matrix
     rows = rowvals(solution.bins)
     vals = nonzeros(solution.bins)
@@ -283,6 +284,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
             i = rows[idx]
             arcBins = vals[idx]
             arcData = instance.timeSpaceGraph.networkArcs[i, j]
+            dstData = instance.timeSpaceGraph.networkNodes[j]
             # Arc cost
             arcCost = compute_arc_cost(
                 instance.timeSpaceGraph, arcBins, i, j; current_cost=current_cost
@@ -303,18 +305,24 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
                 bk += arcBk
                 costj += arcCost
                 costk += arcCost
+                transCost += arcData.unitCost * arcVolume / arcCapaV
+                carbCost += arcData.carbonCost * arcVolume / arcCapaV
+                platCost += dstData.volumeCost * arcVolume / VOLUME_FACTOR
                 continue
             end
             bi += length(arcBins)
             arcBj = max(ceil(arcVolume / arcCapaV), ceil(arcWeight / arcCapaW))
             bj += arcBj
             bk += arcBk
-            if arcData.type == :direct
-                if instance.timeSpaceGraph.networkNodes[i].type == :supplier &&
-                    instance.timeSpaceGraph.networkNodes[j].type == :plant
-                    directCost += arcCost
-                    directVolume += arcVolume
-                end
+            if arcData.type == :direct &&
+                instance.timeSpaceGraph.networkNodes[i].type == :supplier &&
+                instance.timeSpaceGraph.networkNodes[j].type == :plant
+                directCost += arcCost
+                directVolume += arcVolume
+            else
+                transCost += length(arcBins) * arcData.unitCost
+                carbCost += arcData.carbonCost * arcVolume / arcCapaV
+                platCost += dstData.volumeCost * arcVolume / VOLUME_FACTOR
             end
             arcCostj = arcCost - (length(arcBins) - arcBj) * arcData.unitCost
             costj += arcCostj
@@ -351,6 +359,13 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
         "Cost computed : $(totalCost) (BP) / $(costj) bins (GC) (-$(round((totalCost - costj) * 100 / totalCost; digits=1))%) / $(costk) bins (LC) (-$(round((totalCost - costk) * 100 / totalCost; digits=1))%)",
     )
     println("Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%)")
+    nonDirectCost = totalCost - directCost
+    println(
+        "Non-direct costs : $nonDirectCost ($(round(nonDirectCost * 100 / totalCost; digits=1))%)",
+    )
+    println(
+        "Repartition : $transCost ($(round(transCost * 100 / nonDirectCost; digits=1))%) (transport) / $carbCost ($(round(carbCost * 100 / nonDirectCost; digits=1))%) (carbon) / $platCost ($(round(platCost * 100 / nonDirectCost; digits=1))%) (platforms)",
+    )
     println("Direct volume : $(round(Int, directVolume / VOLUME_FACTOR))m3")
     return totalCost
 end

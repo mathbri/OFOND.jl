@@ -5,3 +5,5 @@ scripts/data_*
 scripts/export/*
 *.jld2
 debug.txt
+.CondaPkg/*
+debug*

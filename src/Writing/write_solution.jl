@@ -63,7 +63,8 @@ function price_hash(instance::Instance, arc::Edge{Int})
 end
 
 function write_shipment_info(io::IO, solution::Solution, instance::Instance)
-    nLines = 0
+    nLines, i = 0, 0
+    extractedCost = 0.0
     TSGraph = instance.timeSpaceGraph
     for arc in edges(TSGraph.graph)
         arcData = TSGraph.networkArcs[src(arc), dst(arc)]
@@ -86,20 +87,26 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, carbonCost, ",") # carbon_cost
             platformCost = dstData.volumeCost * bin.volumeLoad / VOLUME_FACTOR
             println(io, platformCost) # platform_cost
-            if dstData.volumeCost > EPS
-                println(dstData)
-                println(arcData)
-                println("Bin volume : $(bin.volumeLoad)")
-                println("Bin weight : $(bin.weightLoad)")
-                println("Filling rate : $(fillingRate)")
-                println("Transport cost : $(transportCost)")
-                println("Carbon cost : $(carbonCost)")
-                println("Platform cost : $(platformCost)")
-                throw(ErrorException("debug"))
-            end
+            # if dstData.volumeCost > EPS
+            #     open("debug_plat_cost.txt", "a") do file
+            #         redirect_stdout(file) do
+            #             println(dstData)
+            #             println(arcData)
+            #             println("Bin volume : $(bin.volumeLoad)")
+            #             println("Bin weight : $(bin.weightLoad)")
+            #             println("Filling rate : $(fillingRate)")
+            #             println("Transport cost : $(transportCost)")
+            #             println("Carbon cost : $(carbonCost)")
+            #             println("Platform cost : $(platformCost)\n")
+            #         end
+            #     end
+            #     i += 1
+            # end
             nLines += 1
+            extractedCost += transportCost + carbonCost + platformCost
         end
     end
+    println("Extracted cost : $extractedCost")
     return nLines
 end
 

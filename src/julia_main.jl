@@ -268,7 +268,9 @@ function julia_main(;
     println("Cost of 2D proposed solution : $(compute_cost(instance2D, finalSolution))")
 
     println("Exporting proposed solution to $outputFolder")
-    write_solution(finalSolution, instance2D; suffix="proposed", directory=outputFolder)
+    write_solution(
+        finalSolution, instance2D, hashToRouteId; suffix="proposed", directory=outputFolder
+    )
 
     juliaMainTime = round(time() - juliaMainStart; digits=1)
     @info "Total Julia Main time : $juliaMainTime"

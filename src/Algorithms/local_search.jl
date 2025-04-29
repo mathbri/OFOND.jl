@@ -499,11 +499,11 @@ function local_search!(
     while (time() - startTime < timeLimit)
         noImprov, i = 0, 0
         bundleIdxs = randperm(length(instance.bundles))
-        remainingTime = timeLimit - (time() - startTime)
+        remainingTime = round(Int, timeLimit - (time() - startTime))
         totImprov += reintroduce_bundles!(
             solution, instance, bundleIdxs; timeLimit=remainingTime
         )
-        while (noImprov < 1000) && (time() - startTime < timeLimit)
+        while (noImprov < 2500) && (time() - startTime < timeLimit)
             startLoopImprov = totImprov
             # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
             if rand() < 0.5
