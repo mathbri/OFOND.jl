@@ -61,6 +61,7 @@ function tentative_best_fit(
 end
 
 # TODO : can be done in parallel ?
+# TODO : the problem with this function is not the number of operations but that it is called often enough to trigger a lot of garbage collecting
 # Store previous bins before removing commodities from them
 function save_previous_bins(solution::Solution, workingArcs::SparseMatrixCSC{Bool,Int})
     I, J, _ = findnz(workingArcs)
@@ -326,7 +327,8 @@ function fuse_bundles(instance::Instance, bundles::Vector{Bundle}, CAPACITIES::V
         add_properties(order, tentative_first_fit, CAPACITIES) for order in newOrders
     ]
     supp, cust = bundles[1].supplier, bundles[1].customer
-    maxDelTime, idx = findmax(b -> b.maxDelTime, bundles)
+    maxDelTime, maxDelIdx = findmax(b -> b.maxDelTime, bundles)
     maxPackSize = maximum(b -> b.maxPackSize, bundles)
-    return Bundle(supp, cust, newOrders, idx, UInt(0), maxPackSize, maxDelTime)
+    fusedBunIdx = bundles[maxDelIdx].idx
+    return Bundle(supp, cust, newOrders, fusedBunIdx, UInt(0), maxPackSize, maxDelTime)
 end

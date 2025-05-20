@@ -2,15 +2,16 @@
 
 # TODO : carbon cost for direct arcs are not linear
 
+# With the pre-processing, we only have to check the shortcut type now
 # Check whether the arc is fit for a cost update
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]
     # If it is a shortcut leg, cost alredy set to EPS
-    arcData.type == :shortcut && return false
-    bundleDst = TTGraph.bundleDst[bundle.idx]
+    # arcData.type == :shortcut && return false
+    # bundleDst = TTGraph.bundleDst[bundle.idx]
     # If the destination is not the right plant, not updating cost
-    toPlantArc = arcData.type == :delivery || arcData.type == :direct
-    (toPlantArc && dst != bundleDst) && return false
+    # toPlantArc = arcData.type == :delivery || arcData.type == :direct
+    # (toPlantArc && dst != bundleDst) && return false
     return true
 end
 
@@ -22,8 +23,17 @@ function is_forbidden(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bund
 end
 
 # Computes volume and lead time costs for an order
-function volume_stock_cost(TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order)
+function volume_stock_cost(
+    TTGraph::TravelTimeGraph, src::Int, dst::Int, order::Order; verbose::Bool=false
+)
     dstData, arcData = TTGraph.networkNodes[dst], TTGraph.networkArcs[src, dst]
+    verbose && println(
+        "Dst $dstData cost : $(dstData.volumeCost) * $(order.volume) / $VOLUME_FACTOR = $(dstData.volumeCost * order.volume / VOLUME_FACTOR)",
+    )
+    verbose && println(
+        "Arc $arcData cost : $(arcData.carbonCost) * $(order.volume) / $(arcData.volumeCapacity) = $(arcData.carbonCost * order.volume / arcData.volumeCapacity)",
+    )
+    verbose && println("Order : $order $(order.volume) $(order.stockCost)")
     # Node volume cost + Arc carbon cost + Commodity stock cost
     return dstData.volumeCost * order.volume / VOLUME_FACTOR +
            arcData.carbonCost * order.volume / arcData.capacity +
@@ -40,13 +50,18 @@ function transport_units(
     CAPACITIES::Vector{Int};
     sorted::Bool,
     use_bins::Bool,
+    verbose::Bool=false,
 )
     arcData = TSGraph.networkArcs[timedSrc, timedDst]
     # Transport cost 
     orderTrucks = get_transport_units(order, arcData)
+    verbose && println("Empty transport units for order : $orderTrucks")
     # If we take into account the current solution
     if use_bins && !arcData.isLinear
         bins = solution.bins[timedSrc, timedDst]
+        verbose && println(
+            "Bins on $timedSrc -> $timedDst : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3",
+        )
         # If the arc is not empty, computing a tentative first fit 
         if length(bins) > 0
             # TODO : uncomment for tests with real instances
@@ -54,6 +69,7 @@ function transport_units(
             orderTrucks = tentative_first_fit(
                 bins, arcData, order, CAPACITIES; sorted=sorted
             )
+            verbose && println("Tentative first fit for order : $orderTrucks")
             # computeTime = time() - startTime
             # startTime = time()
             # orderTrucks2 = tentative_first_fit2(
@@ -69,7 +85,7 @@ end
 
 # Returns the corresponding transport costs to be used
 function transport_cost(
-    TSGraph::TimeSpaceGraph, timedSrc::Int, timedDst::Int; current_cost::Bool
+    TSGraph::TimeSpaceGraph, timedSrc::Int, timedDst::Int; current_cost::Bool=false
 )
     current_cost && return TSGraph.currentCost[timedSrc, timedDst]
     return TSGraph.networkArcs[timedSrc, timedDst].unitCost
@@ -88,62 +104,51 @@ function arc_update_cost(
     use_bins::Bool=true,
     opening_factor::Float64=1.0,
     current_cost::Bool=false,
+    verbose::Bool=false,
 )
     # If the arc is forbidden for the bundle, returning INF
     # is_forbidden(TTGraph, src, dst, bundle) && return INFINITY
-    # arcsToCheck = partition(
-    #     [
-    #         11548,
-    #         8978,
-    #         8966,
-    #         16033,
-    #         16119,
-    #         16382,
-    #         15993,
-    #         16394,
-    #         16105,
-    #         16031,
-    #         16117,
-    #         16152,
-    #         256,
-    #     ],
-    #     2,
-    #     1,
-    # )
-    # if bundle.idx == 6309 && (src, dst) in arcsToCheck
-    #     println("Arc $(src)-$(dst)")
-    # end
     # Otherwise, computing the new cost
     arcBundleCost = EPS
+    verbose && println(
+        "\nComputing tentative cost of bundle $bundle for arc $src -> $dst (sorted = $sorted, use_bins = $use_bins, current_cost = $current_cost, opening_factor = $opening_factor)",
+    )
+    verbose && println("arcBundleCost = $arcBundleCost")
     for order in bundle.orders
+        costBefore = arcBundleCost
         # Getting time space projection
         tSrc, tDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
+        verbose && println("\nComputing for order $order")
+        verbose && println("Timed projection $tSrc -> $tDst")
         # Node volume cost 
-        arcBundleCost += volume_stock_cost(TTGraph, src, dst, order)
+        arcBundleCost += volume_stock_cost(TTGraph, src, dst, order; verbose=verbose)
+        verbose && println(
+            "Volume cost added for order : $(volume_stock_cost(TTGraph, src, dst, order))",
+        )
         # Arc transport cost 
         units = transport_units(
-            sol, TSGraph, tSrc, tDst, order, CAPACITIES; sorted=sorted, use_bins=use_bins
+            sol,
+            TSGraph,
+            tSrc,
+            tDst,
+            order,
+            CAPACITIES;
+            sorted=sorted,
+            use_bins=use_bins,
+            verbose=verbose,
         )
-        # if units == 0
-        #     println("Bundle $bundle")
-        #     println("Src $src -> $tSrc and dst $dst -> $tDst")
-        #     println(
-        #         "Bundle src $(TTGraph.bundleSrc[bundle.idx]) and dst $(TTGraph.bundleDst[bundle.idx])",
-        #     )
-        #     @assert units > 0
-        # end
+        verbose && println("Transport units added for order : $units")
+        verbose && println("Transport cost : $(transport_cost(TSGraph, tSrc, tDst))")
+        verbose && println(
+            "Transport cost added : $(units * transport_cost(TSGraph, tSrc, tDst) * opening_factor)",
+        )
         arcBundleCost +=
             units *
             transport_cost(TSGraph, tSrc, tDst; current_cost=current_cost) *
             opening_factor
-        # if bundle.idx == 6309 && (src, dst) in arcsToCheck
-        #     println(order)
-        #     println("Cost added after order : $arcBundleCost")
-        # end
+        verbose && println("Cost added for order : $(arcBundleCost - costBefore)")
+        verbose && println("\narcBundleCost = $arcBundleCost")
     end
-    # if bundle.idx == 6309 && (src, dst) in arcsToCheck
-    #     println()
-    # end
     return arcBundleCost
 end
 
