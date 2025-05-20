@@ -173,7 +173,7 @@ function lns_heuristic!(
     # Initialize start time
     startTime = time()
 
-    improvement = LNS!(
+    improvement = ILS!(
         solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit, resetCost=true
     )
     unfruitful = 0
@@ -187,7 +187,7 @@ function lns_heuristic!(
             bestSol = solution_deepcopy(solution, instance)
             # TODO : restart with greedy and random insertion order
         end
-        improvement = LNS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
+        improvement = ILS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
         if improvement > improvThreshold
             unfruitful += 1
         else

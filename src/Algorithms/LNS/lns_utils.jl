@@ -7,6 +7,8 @@
 # Use this new costs in all the other heuristics
 
 function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::Solution)
+    @info "Scaling costs with current solution"
+    scaled, baseFactor, adjustedFactor = 0, 0.0, 0.0
     for arc in edges(timeSpaceGraph.graph)
         arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
         # Updating current cost
@@ -20,14 +22,17 @@ function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::So
         arcVolume <= EPS && continue
         # costFactor = length(arcBins) * arcData.capacity / arcVolume
         costFactor = length(arcBins) / ceil(arcVolume / arcData.capacity)
+        isapprox(costFactor, 1.0) && continue
+        scaled += 1
+        baseFactor += costFactor
         # Limiting cost factor to 2
         costFactor = min(2.0, costFactor)
-        # Allowing cost decrease for common arcs
-        if arcData.type in COMMON_ARC_TYPES
-            costFactor -= 0.5
-        end
+        adjustedFactor += costFactor
         timeSpaceGraph.currentCost[src(arc), dst(arc)] *= costFactor
     end
+    return println(
+        "Scaled $scaled arcs with base factor $(baseFactor / scaled) and adjusted factor $(adjustedFactor / scaled)",
+    )
 end
 
 function slope_scaling_cost_update!(instance::Instance, solution::Solution)
@@ -47,7 +52,6 @@ function compute_loads(
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Computing the current load
     loads = map(bins -> sum(bin.load for bin in bins; init=0), solution.bins)
-    # println("Loads : $loads")
     # Removing the load of bundles to be modified with the neighborhood
     for (bIdx, bPath) in zip(bundleIdxs, oldPaths)
         bundle = instance.bundles[bIdx]
@@ -56,11 +60,9 @@ function compute_loads(
             for order in bundle.orders
                 tSrc, tDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
                 loads[tSrc, tDst] -= order.volume
-                # println("Removed $(order.volume) from ($tSrc, $tDst)")
             end
         end
     end
-    # println("New loads : $loads")
     return loads
 end
 
@@ -87,6 +89,11 @@ end
 # TODO : if no attract path possible propose direct ?
 # or filtering bundles for which new paths don't make sense ?
 # proposing a reduce path meaning a classical lower bound insertion path
+
+# TODO : 
+# New path generation ideas : 
+# - an attract / reduce path per common arc in the bundle arcs (+ with or without current solution) 
+# - an attract / reduce path per platform (+ with or without current solution)
 
 # Generate an attract path for arc src-dst and bundle
 function generate_attract_path(

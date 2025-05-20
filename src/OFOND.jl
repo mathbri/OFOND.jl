@@ -78,7 +78,7 @@ export shortest_delivery_heuristic, average_delivery_heuristic
 export greedy_heuristic
 export local_search_heuristic, greedy_then_ls_heuristic
 export lower_bound_heuristic, greedy_or_lb_then_ls_heuristic
-export perturbate!, LNS!, slope_scaling_cost_update!, local_search!
+export perturbate!, ILS!, slope_scaling_cost_update!, local_search!
 # export lns_heuristic
 export write_solution
 export julia_main, julia_main_test

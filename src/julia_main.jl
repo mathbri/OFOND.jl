@@ -204,7 +204,7 @@ function julia_main_test()
     local_search3!(solutionSub, instanceSubSub)
 
     # Applying ILS 
-    LNS2!(solutionSub, instanceSubSub)
+    ILS!(solutionSub, instanceSubSub)
 
     return 0
 

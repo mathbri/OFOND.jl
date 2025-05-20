@@ -119,76 +119,76 @@ end
 
 # Combine the large perturbations and the small neighborhoods
 # By default small instance time limits for test purposes, but should be used with time limit = 12h = 43200s
-function LNS!(
-    solution::Solution,
-    instance::Instance;
-    timeLimit::Int=1800,
-    perturbTimeLimit::Int=300,
-    lsTimeLimit::Int=300,
-    lsStepTimeLimit::Int=60,
-    resetCost::Bool=false,
-    verbose::Bool=true,
-)
-    startCost = compute_cost(instance, solution)
-    threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
-    println("\n")
-    @info "Starting LNS step" :start_cost = startCost :threshold = threshold
-    println("Saving starting solution (in case of too much degradation)")
-    prevSol = solution_deepcopy(solution, instance)
-    # Slope scaling cost update  
-    if resetCost
-        slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
-    else
-        slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
-    end
-    # Apply perturbations in random order
-    for neighborhood in shuffle(PERTURBATIONS)
-        # Apply perturbation and get correponding solution (1 time for arc flows, multiple time for path flows)
-        perturbStartTime, improvement, changed = time(), 0.0, 0
-        while time() - perturbStartTime < perturbTimeLimit
-            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
-            improvement += improv
-            changed += change
-        end
-        @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
-            improvement :changed = changed
-        # If no path changed, trying one more time the perturbation 
-        if changed == 0
-            @warn "No path changed by $neighborhood perturbation, trying one more time"
-            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
-            improvement += improv
-            changed += change
-            if changed == 0
-                @warn "No path changed by $neighborhood perturbation, trying another perturbation"
-            end
-        end
-        # Apply local search 
-        improvement += local_search3!(
-            solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
-        )
-        totImprov += improvement
-        time() - start > timeLimit && break
-    end
-    println("\n")
-    # Final local search : applying large one
-    lsImprovement = large_local_search!(
-        solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
-    )
-    totImprov += lsImprovement
-    @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
-        totImprov
-    )
-    # Reverting if cost augmented by more than 0.75% (heuristic level)
-    if totImprov > 0.0075 * startCost
-        println("Reverting solution because too much cost degradation")
-        revert_solution!(solution, instance, prevSol)
-        return 0.0
-    else
-        return totImprov
-    end
-end
+# function ILS!(
+#     solution::Solution,
+#     instance::Instance;
+#     timeLimit::Int=1800,
+#     perturbTimeLimit::Int=300,
+#     lsTimeLimit::Int=300,
+#     lsStepTimeLimit::Int=60,
+#     resetCost::Bool=false,
+#     verbose::Bool=true,
+# )
+#     startCost = compute_cost(instance, solution)
+#     threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
+#     println("\n")
+#     @info "Starting ILS" :start_cost = startCost :threshold = threshold
+#     println("Saving starting solution (in case of too much degradation)")
+#     prevSol = solution_deepcopy(solution, instance)
+#     # Slope scaling cost update  
+#     if resetCost
+#         slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
+#     else
+#         slope_scaling_cost_update!(instance.timeSpaceGraph, solution)
+#     end
+#     # Apply perturbations in random order
+#     for neighborhood in shuffle(PERTURBATIONS)
+#         # Apply perturbation and get correponding solution (1 time for arc flows, multiple time for path flows)
+#         perturbStartTime, improvement, changed = time(), 0.0, 0
+#         while time() - perturbStartTime < perturbTimeLimit
+#             improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
+#             improvement += improv
+#             changed += change
+#         end
+#         @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
+#             improvement :changed = changed
+#         # If no path changed, trying one more time the perturbation 
+#         if changed == 0
+#             @warn "No path changed by $neighborhood perturbation, trying one more time"
+#             improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
+#             improvement += improv
+#             changed += change
+#             if changed == 0
+#                 @warn "No path changed by $neighborhood perturbation, trying another perturbation"
+#             end
+#         end
+#         # Apply local search 
+#         improvement += local_search3!(
+#             solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+#         )
+#         totImprov += improvement
+#         time() - start > timeLimit && break
+#     end
+#     println("\n")
+#     # Final local search : applying large one
+#     lsImprovement = large_local_search!(
+#         solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+#     )
+#     totImprov += lsImprovement
+#     @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
+#         totImprov
+#     )
+#     # Reverting if cost augmented by more than 0.75% (heuristic level)
+#     if totImprov > 0.0075 * startCost
+#         println("Reverting solution because too much cost degradation")
+#         revert_solution!(solution, instance, prevSol)
+#         return 0.0
+#     else
+#         return totImprov
+#     end
+# end
 
-function LNS2!(
+function ILS!(
     solution::Solution,
     instance::Instance;
     timeLimit::Int=1800,
@@ -201,7 +201,7 @@ function LNS2!(
     startCost = compute_cost(instance, solution)
     threshold, totImprov, start = 1e-3 * startCost, 0.0, time()
     println("\n")
-    @info "Starting LNS step" :start_cost = startCost :threshold = threshold
+    @info "Starting ILS" :start_cost = startCost :threshold = threshold
 
     bestSol = solution_deepcopy(solution, instance)
     bestCost = startCost
@@ -221,8 +221,9 @@ function LNS2!(
         @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
             improv :change = change
         changed += change
-        # If enough path changed, applying local search 
+        # If enough path changed
         if changed >= changeThreshold
+            # Applying local search 
             local_search3!(
                 solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
             )
@@ -235,6 +236,8 @@ function LNS2!(
                     time() - start
                 )
             end
+            # Applying cost scaling
+            slope_scaling_cost_update!(instance, solution)
         else
             println("Change threshold : $(change * 100 / changeThreshold)%")
         end
@@ -244,8 +247,12 @@ function LNS2!(
         else
             noChange = 0
         end
+        # Resetting if multiple times no change
+        if noChange == 3
+            slope_scaling_cost_update!(instance, Solution(instance))
+        end
         # Breaking if multiple times no change
-        if noChange >= 5
+        if noChange >= 6
             break
         end
         throw(ErrorException("debug"))
@@ -256,10 +263,8 @@ function LNS2!(
         bestSol, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
     )
     finalCost = compute_cost(instance, bestSol)
-    totImprov = finalCost - startCost
-    @info "Full LNS step done" :time = round(time() - start; digits=2) :improvement = round(
-        totImprov
-    )
+    totImprov = round(Int, finalCost - startCost)
+    @info "Full ILS done" :time = round(time() - start; digits=2) :improvement = totImprov
     # Reverting if cost augmented by more than 0.75% (heuristic level)
     if totImprov > 0.0075 * startCost
         println("Reverting solution because too much cost degradation")
