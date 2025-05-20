@@ -26,35 +26,40 @@ function bin_packing_improvement!(
     costImprov, computedNoImprov, computable, candidate = 0.0, 0, 0, 0
     # TODO : use the following if edges(...) is a bottleneck
     # Efficient iteration over sparse matrices
-    # rows = rowvals(workingArcs)
-    # for timedDst in 1:Base.size(workingArcs, 2)
-    #     for srcIdx in nzrange(workingArcs, timedDst)
-    #         timedSrc = rows[srcIdx]
-    for arc in edges(instance.timeSpaceGraph.graph)
-        arcBins = solution.bins[src(arc), dst(arc)]
-        arcData = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)]
-        length(arcBins) > 1 && (computable += 1)
-        # If no improvement possible
-        is_bin_candidate(arcBins, arcData; skipLinear=skipLinear) || continue
-        candidate += 1
-        # Gathering all commodities
-        allCommodities = get_all_commodities(arcBins, ALL_COMMODITIES)
-        # Computing tentative new bins
-        ffdBins = tentative_first_fit(arcData, allCommodities, CAPACITIES)
-        bfdBins = tentative_best_fit(arcData, allCommodities, CAPACITIES)
-        # If the number of bins did not change, skipping next
-        lengthBefore = length(arcBins)
-        if min(ffdBins, bfdBins) >= lengthBefore
-            computedNoImprov += 1
-            continue
+    rows = rowvals(solution.bins)
+    vals = nonzeros(solution.bins)
+    for j in 1:size(solution.bins, 2)
+        for idx in nzrange(solution.bins, j)
+            i = rows[idx]
+            arcBins = solution.bins[i, j]
+            arcData = instance.timeSpaceGraph.networkArcs[i, j]
+            length(arcBins) > 1 && (computable += 1)
+            # If no improvement possible
+            is_bin_candidate(arcBins, arcData; skipLinear=skipLinear) || continue
+            candidate += 1
+            # Gathering all commodities
+            allCommodities = get_all_commodities(arcBins, ALL_COMMODITIES)
+            # Computing tentative new bins
+            ffdBins = tentative_first_fit(arcData, allCommodities, CAPACITIES)
+            bfdBins = tentative_best_fit(arcData, allCommodities, CAPACITIES)
+            # If the number of bins did not change, skipping next
+            lengthBefore = length(arcBins)
+            if min(ffdBins, bfdBins) >= lengthBefore
+                computedNoImprov += 1
+                continue
+            end
+            # Computing new bins
+            empty!(arcBins)
+            capaV = arcData.capacity
+            if ffdBins < bfdBins
+                first_fit_decreasing!(arcBins, capaV, allCommodities)
+            else
+                best_fit_decreasing!(arcBins, capaV, allCommodities)
+            end
+            # Computing cost improvement (unless linear arc)
+            arcData.isLinear && continue
+            costImprov -= arcData.unitCost * (lengthBefore - min(ffdBins, bfdBins))
         end
-        # Computing new bins
-        bin_packing = ffdBins < bfdBins ? first_fit_decreasing! : best_fit_decreasing!
-        empty!(arcBins)
-        bin_packing(arcBins, arcData.capacity, allCommodities)
-        # Computing cost improvement (unless linear arc)
-        arcData.isLinear && continue
-        costImprov -= arcData.unitCost * (lengthBefore - min(ffdBins, bfdBins))
     end
     println("All packings computable : $computable")
     println("Computed packings (lower bound not reached) : $candidate")
@@ -79,43 +84,55 @@ function parallel_bin_packing_improvement!(
     foreach(1:Threads.nthreads()) do _
         put!(chnlCapa, Vector{Int}(undef, 0))
     end
-    counts = tmapreduce(.+, collect(edges(instance.timeSpaceGraph.graph))) do arc
-        arcBins = solution.bins[src(arc), dst(arc)]
-        arcData = instance.timeSpaceGraph.networkArcs[src(arc), dst(arc)]
-        # If no improvement possible
-        if !is_bin_candidate(arcBins, arcData; skipLinear=skipLinear)
-            # Returning if the bin was computable
-            0.0, 0, length(arcBins) > 1, 0
+    # Filtering things to compute
+    computables = Tuple{Int,Int}[]
+    rows = rowvals(solution.bins)
+    vals = nonzeros(solution.bins)
+    for j in 1:size(solution.bins, 2)
+        for idx in nzrange(solution.bins, j)
+            i = rows[idx]
+            arcData = instance.timeSpaceGraph.networkArcs[i, j]
+            arcBins = solution.bins[i, j]
+            if is_bin_candidate(arcBins, arcData; skipLinear=skipLinear)
+                push!(computables, (i, j))
+            end
+        end
+    end
+    println("All packings computable : $(length(computables))")
+    # Parallelizing actual computations
+    counts = tmapreduce(.+, computables) do (aSrc, aDst)
+        arcBins = solution.bins[aSrc, aDst]
+        arcData = instance.timeSpaceGraph.networkArcs[aSrc, aDst]
+        ALL_COMMODITIES = take!(chnlCom)
+        CAPACITIES = take!(chnlCapa)
+        # Gathering all commodities
+        allCommodities = get_all_commodities(arcBins, ALL_COMMODITIES)
+        # Computing tentative new bins
+        ffdBins = tentative_first_fit(arcData, allCommodities, CAPACITIES)
+        bfdBins = tentative_best_fit(arcData, allCommodities, CAPACITIES)
+        # If the number of bins did not change, skipping next
+        lengthBefore = length(arcBins)
+        if min(ffdBins, bfdBins) >= length(arcBins)
+            # Returning that the bin was computable but no improvement found
+            0.0, 1, true, 1
         else
-            ALL_COMMODITIES = take!(chnlCom)
-            CAPACITIES = take!(chnlCapa)
-            # Gathering all commodities
-            allCommodities = get_all_commodities(arcBins, ALL_COMMODITIES)
-            # Computing tentative new bins
-            ffdBins = tentative_first_fit(arcData, allCommodities, CAPACITIES)
-            bfdBins = tentative_best_fit(arcData, allCommodities, CAPACITIES)
-            # If the number of bins did not change, skipping next
-            lengthBefore = length(arcBins)
-            if min(ffdBins, bfdBins) >= length(arcBins)
-                # Returning that the bin was computable but no improvement found
-                0.0, 1, true, 1
+            # Computing new bins
+            empty!(arcBins)
+            capaV = arcData.capacity
+            if ffdBins < bfdBins
+                first_fit_decreasing!(arcBins, capaV, allCommodities; sorted=true)
             else
-                # Computing new bins
-                bin_packing =
-                    ffdBins < bfdBins ? first_fit_decreasing! : best_fit_decreasing!
-                empty!(arcBins)
-                bin_packing(arcBins, arcData.capacity, allCommodities; sorted=true)
-                # Computing cost improvement (unless linear arc)
-                if arcData.isLinear
-                    0.0, 0, true, 1
-                else
-                    -arcData.unitCost * (lengthBefore - min(ffdBins, bfdBins)), 0, true, 1
-                end
+                best_fit_decreasing!(arcBins, capaV, allCommodities; sorted=true)
+            end
+            # Computing cost improvement (unless linear arc)
+            if arcData.isLinear
+                0.0, 0, true, 1
+            else
+                -arcData.unitCost * (lengthBefore - min(ffdBins, bfdBins)), 0, true, 1
             end
         end
     end
     costImprov, computedNoImprov, computable, candidate = counts
-    println("All packings computable : $computable")
     println("Computed packings (lower bound not reached) : $candidate")
     println("Computed packings with no improvement : $computedNoImprov")
     # @assert is_feasible(instance, solution; verbose=true)
@@ -162,6 +179,73 @@ function revert_solution!(
     end
     update_solution!(solution, instance, bundle, oldPath; skipRefill=true)
     return revert_bins!(solution, oldBins)
+end
+
+function debug_reinsertion(
+    instance::Instance,
+    solution::Solution,
+    bundle::Bundle,
+    shortestPath::Vector{Int},
+    CHANNEL::Channel{Vector{Int}},
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Reverting solution 
+    revert_solution!(solution, instance, bundle, oldPath, oldBins)
+    # Re-doing the bundle removal, cost computation and updating 
+    file = open("debug.txt", "w")
+    redirect_stdout(file)
+    costRemoved = update_solution!(
+        solution, instance, bundle, oldPath; remove=true, verbose=true
+    )
+    println("#############################################################")
+    println("\n\nFull cost removed : $costRemoved\n\n")
+    println("#############################################################")
+
+    # Inserting it back
+    suppNode = TTGraph.bundleSrc[bundle.idx]
+    custNode = TTGraph.bundleDst[bundle.idx]
+    newPath, pathCost = greedy_insertion2(
+        solution, TTGraph, TSGraph, bundle, suppNode, custNode, CHANNEL; verbose=true
+    )
+    println("#############################################################")
+    println("\n\nNew path : $newPath with cost $pathCost\n\n")
+    println("#############################################################")
+
+    fullTentativeCost = 0.0
+    for (aSrc, aDst) in partition(newPath, 2, 1)
+        println(
+            "\nIs update candidate : $(is_update_candidate(TTGraph, aSrc, aDst, bundle))"
+        )
+        println("Computing tenetaive cost for arc $aSrc -> $aDst")
+        arcUpdateCost = arc_update_cost(
+            solution, TTGraph, TSGraph, bundle, aSrc, aDst, Int[]; sorted=true, verbose=true
+        )
+        fullTentativeCost += arcUpdateCost
+        println("\nComputed cost for arc $aSrc -> $aDst : $arcUpdateCost")
+        println("Reference cost for arc $aSrc -> $aDst : $(TTGraph.costMatrix[aSrc, aDst])")
+
+        actualUpdateCost = update_arc_bins!(
+            solution2, TSGraph, TTGraph, bundle, aSrc, aDst; verbose=true
+        )
+        fullActualCost += actualUpdateCost
+        println("\nActual Computed cost for arc $aSrc -> $aDst : $actualUpdateCost")
+    end
+
+    println("#############################################################")
+    println("\n\n Full recomputed path cost : $fullTentativeCost \n\n")
+    println("#############################################################")
+
+    updateCost = update_solution!(
+        solution, instance, bundle, newPath; sorted=true, verbose=true
+    )
+
+    println("#############################################################")
+    println("\n\nFull Update cost : $updateCost\n\n")
+    println("#############################################################")
+
+    close(file)
+    # Throwing error
+    throw("Computed path cost and update cost don't match")
 end
 
 # TODO : profile again because it seems too slow for what it has done in the past
@@ -264,7 +348,10 @@ function bundle_reintroduction2!(
     # Updating path if it improves the cost (accounting for EPS cost on arcs)
     if pathCost + costRemoved < -1e-3 || directReIntro
         # Adding to solution
-        update_solution!(solution, instance, bundle, newPath; sorted=true)
+        updateCost = update_solution!(solution, instance, bundle, newPath; sorted=true)
+        if !isapprox(updateCost, pathCost; atol=1.0)
+            debug_reinsertion(instance, solution, bundle, newPath, CHANNEL)
+        end
         return pathCost + costRemoved
     else
         revert_solution!(solution, instance, bundle, oldPath, oldBins)
@@ -303,7 +390,8 @@ function reintroduce_bundles!(
     end
     println()
     feasible = is_feasible(instance, solution)
-    timeTaken = round((time() - start) * 1000) / 1000
+    timeTaken = round(time() - start; digits=1)
+    totImpro = round(totImpro; digits=1)
     @info "Total bundle re-introduction improvement" :bundles_updated = count :improvement =
         totImpro :time = timeTaken :feasible = feasible
     return totImpro
@@ -591,6 +679,7 @@ function two_node_common_incremental2!(
     CHANNEL::Channel{Vector{Int}};
     costThreshold::Float64=EPS,
 )
+    # startingFeasible = is_feasible(instance, solution)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     twoNodeBundleIdxs = get_bundles_to_update(TTGraph, solution, src, dst)
     twoNodeBundles = instance.bundles[twoNodeBundleIdxs]
@@ -625,6 +714,7 @@ function two_node_common_incremental2!(
     # Updating solution for the next step
     newPaths = [newPath for _ in 1:length(twoNodeBundles)]
     updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
+    # WARNING : Cost increase can happen after removal and re-introduction
     improvement = updateCost + costRemoved
     bunCounter = length(twoNodeBundles)
     # Inserting back concerned bundles
@@ -655,6 +745,8 @@ function two_node_common_incremental2!(
     else
         if improvement < -1e3
             print("o ($(round(Int, improvement)))")
+        elseif improvement < -1
+            print("o")
         end
         return improvement, bunCounter
     end
@@ -1084,20 +1176,102 @@ function local_search3!(
         "\nLoop Break : time = $(round(time() - startTime; digits=1)), i = $i, noImprov = $noImprov",
     )
     # Finally, bin packing improvement to optimize packings
-    startTime = time()
+    bpStartTime = time()
     improvement = bin_packing_improvement!(solution, instance, COMMO, CAPA; sorted=true)
     @info "Bin packing improvement" :improvement = improvement :time = round(
-        (time() - startTime); digits=2
+        (time() - bpStartTime); digits=2
     )
     totImprov += improvement
     finalCost = compute_cost(instance, solution)
     if !isapprox(totImprov, finalCost - startCost; atol=1.0)
         @warn "Improvement computed inside local search is different from the one computed outside" :totImprov =
             totImprov :realImprov = (finalCost - startCost)
+        totImprov = finalCost - startCost
     end
-    @info "Full local search done" :total_improvement = totImprov :time = round(
-        (time() - startTime); digits=2
+    relImprov = round(totImprov / startCost * 100; digits=2)
+    timeTaken = round(time() - startTime; digits=2)
+    feasible = is_feasible(instance, solution)
+    @info "Full local search done" :total_improvement = totImprov :relative_improvement =
+        relImprov :time = timeTaken :feasible = feasible
+    return totImprov
+end
+
+function local_search4!(
+    solution::Solution, instance::Instance; timeLimit::Int=300, stepTimeLimit::Int=60
+)
+    sort_order_content!(instance)
+    startCost = compute_cost(instance, solution)
+    threshold = 5e-5 * startCost
+    CAPA, COMMO = Int[], Commodity[]
+    CHANNEL = create_filled_channel()
+    totImprov, noImprov, i = 0.0, 0, 0
+    TTGraph = instance.travelTimeGraph
+    srcNodes = TTGraph.commonNodes
+    plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
+    dstNodes = vcat(srcNodes, plantNodes)
+    # Looping while there is time
+    startTime, restarts = time(), 0
+    noImprovLimit = length(instance.bundles)
+    I = Int[]
+    while (time() - startTime < timeLimit) && (restarts < 3)
+        noImprov, i = 0, 0
+        bundleIdxs = randperm(length(instance.bundles))
+        remainingTime = round(Int, timeLimit - (time() - startTime))
+        totImprov += reintroduce_bundles!(
+            solution, instance, bundleIdxs; timeLimit=remainingTime
+        )
+        while (noImprov < noImprovLimit) && (time() - startTime < timeLimit)
+            startLoopImprov = totImprov
+            # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
+            if rand() < 0.5
+                # Bundle reintroduction
+                bundle = instance.bundles[bundleIdxs[i % length(bundleIdxs) + 1]]
+                totImprov += bundle_reintroduction!(
+                    solution, instance, bundle, CHANNEL; costThreshold=threshold
+                )
+            else
+                # Two node common incremental
+                src, dst = rand(srcNodes), rand(dstNodes)
+                # src, dst = 150, 352
+                while !are_nodes_candidate(TTGraph, src, dst)
+                    src, dst = rand(srcNodes), rand(dstNodes)
+                end
+                improvement, count = two_node_common_incremental2!(
+                    solution, instance, src, dst, CAPA, CHANNEL; costThreshold=threshold
+                )
+                totImprov += improvement
+            end
+            # Recording non improving step
+            noImprov = isapprox(totImprov, startLoopImprov; atol=1.0) ? noImprov + 1 : 0
+            # Printing progress
+            i += 1
+            i % 100 == 0 && print("|")
+            i % 1000 == 0 && print(" $i ")
+        end
+        restarts += 1
+        push!(I, i)
+    end
+    println(
+        "\nLoop Break : time = $(round(time() - startTime; digits=1)), i = $I, noImprov = $noImprov",
     )
+    # Finally, bin packing improvement to optimize packings
+    bpStartTime = time()
+    improvement = bin_packing_improvement!(solution, instance, COMMO, CAPA)
+    @info "Bin packing improvement" :improvement = improvement :time = round(
+        (time() - bpStartTime); digits=2
+    )
+    totImprov += improvement
+    finalCost = compute_cost(instance, solution)
+    if !isapprox(totImprov, finalCost - startCost; atol=1.0)
+        @warn "Improvement computed inside local search is different from the one computed outside" :totImprov =
+            totImprov :realImprov = (finalCost - startCost)
+        totImprov = finalCost - startCost
+    end
+    relImprov = round(totImprov / startCost * 100; digits=2)
+    timeTaken = round(time() - startTime; digits=2)
+    feasible = is_feasible(instance, solution)
+    @info "Full local search done" :total_improvement = totImprov :relative_improvement =
+        relImprov :time = timeTaken :feasible = feasible
     return totImprov
 end
 

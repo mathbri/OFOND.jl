@@ -112,11 +112,15 @@ function greedy_insertion2(
     bundle::Bundle,
     src::Int,
     dst::Int,
-    CHANNEL::Channel{Vector{Int}},
+    CHANNEL::Channel{Vector{Int}};
+    verbose::Bool=false,
 )
+    verbose && println("Greedy insertion for bundle $bundle between src $src and dst $dst")
+    verbose && println("Bundle arcs : $(TTGraph.bundleArcs[bundle.idx])")
     shortestPath, pathCost = greedy_path3(
         solution, TTGraph, TSGraph, bundle, src, dst, CHANNEL, true, 1.0
     )
+    verbose && println("Initial path : $shortestPath for cost $pathCost")
     # If the path is not admissible, re-computing it
     if !is_path_admissible(TTGraph, shortestPath)
         # TODO : store this path cost matrix in travel time graph if the recomputation is needed numerous times 
@@ -257,6 +261,97 @@ function greedy_insertion(
     return shortestPath, pathCost
 end
 
+function debug_insertion(
+    instance::Instance,
+    solution::Solution,
+    bundle::Bundle,
+    shortestPath::Vector{Int},
+    CHANNEL::Channel{Vector{Int}},
+)
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Reverting solution 
+    update_solution!(solution, instance, bundle, shortestPath; remove=true)
+    solution2 = solution_deepcopy(solution, instance)
+    # Re-doing the cost computation and updating 
+    open("debug.txt", "w") do file
+        redirect_stdout(file) do
+
+            # Inserting it back
+            suppNode = TTGraph.bundleSrc[bundle.idx]
+            custNode = TTGraph.bundleDst[bundle.idx]
+            newPath, pathCost = greedy_insertion2(
+                solution,
+                TTGraph,
+                TSGraph,
+                bundle,
+                suppNode,
+                custNode,
+                CHANNEL;
+                verbose=true,
+            )
+            println("#############################################################")
+            println("\n\nNew path : $newPath with cost $pathCost\n\n")
+            println("#############################################################")
+
+            # TODO : mettre en parallèle ici le cout d'update en version 2 pour voir direct les différences
+            fullTentativeCost = 0.0
+            fullActualCost = 0.0
+            for (aSrc, aDst) in partition(newPath, 2, 1)
+                println(
+                    "\nIs update candidate : $(is_update_candidate(TTGraph, aSrc, aDst, bundle))",
+                )
+                println("Computing tenetaive cost for arc $aSrc -> $aDst")
+                arcUpdateCost = arc_update_cost(
+                    solution,
+                    TTGraph,
+                    TSGraph,
+                    bundle,
+                    aSrc,
+                    aDst,
+                    Int[];
+                    sorted=true,
+                    verbose=true,
+                )
+                fullTentativeCost += arcUpdateCost
+                println("\nComputed cost for arc $aSrc -> $aDst : $arcUpdateCost")
+                println(
+                    "Reference cost for arc $aSrc -> $aDst : $(TTGraph.costMatrix[aSrc, aDst])",
+                )
+
+                actualUpdateCost = update_arc_bins!(
+                    solution2, TSGraph, TTGraph, bundle, aSrc, aDst; verbose=true
+                )
+                fullActualCost += actualUpdateCost
+                println("\nActual Computed cost for arc $aSrc -> $aDst : $actualUpdateCost")
+            end
+
+            println("#############################################################")
+            println(
+                "\n\n Full recomputed path cost : $fullTentativeCost \nFull recomputed actual cost : $fullActualCost \n\n",
+            )
+            println("#############################################################")
+
+            updateCost = update_solution!(
+                solution, instance, bundle, newPath; sorted=true, verbose=true
+            )
+
+            println("#############################################################")
+            println("\n\nFull Update cost : $updateCost\n\n")
+            println("#############################################################")
+
+            updateCost2 = update_bins2!(
+                solution2, TSGraph, TTGraph, bundle, newPath; sorted=true, verbose=true
+            )
+
+            println("#############################################################")
+            println("\n\nFull Update cost 2 : $updateCost2\n\n")
+            println("#############################################################")
+        end
+    end
+    # Throwing error
+    throw("Computed path cost and update cost don't match")
+end
+
 function greedy!(solution::Solution, instance::Instance; mode::Int=1)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     # Sorting commodities in orders and bundles between them
@@ -281,6 +376,9 @@ function greedy!(solution::Solution, instance::Instance; mode::Int=1)
         # Adding to solution
         updateCost = update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         # verification
+        if !isapprox(updateCost, pathCost; atol=1.0)
+            debug_insertion(instance, solution, bundle, shortestPath, CHANNEL)
+        end
         # @assert isapprox(pathCost, updateCost; atol=50 * EPS) "Path cost ($pathCost) and Update cost ($updateCost) don't match \n bundle : $bundle ($suppNode - $custNode) \n shortestPath : $shortestPath \n bundleIdx : $bundleIdx"
         totalCost += updateCost
         i % 10 == 0 && print("|")
@@ -294,13 +392,33 @@ function greedy!(solution::Solution, instance::Instance; mode::Int=1)
 end
 
 function enforce_strict_admissibility!(solution::Solution, instance::Instance)
-    # TODO : like clean_bins but for strict admissibility of paths, to be used at the end of the optimization, just before extraction
-    # For all paths that are not strictly admissible, recomputing a greedy path 
-
-    # if !is_path_admissible(instance.travelTimeGraph, path)
-    #     if verbose
-    #         @warn "Infeasible solution : path $path is not admissible"
-    #     end
-    #     return false
-    # end
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
+    # Computing the greedy delivery possible for each bundle
+    print("Enforcing strict admissibility : ")
+    CHANNEL = create_filled_channel()
+    percentIdx = ceil(Int, length(instance.bundles) / 100)
+    for (i, bundle) in enumerate(instance.bundles)
+        bunPath = solution.bundlePaths[bundle.idx]
+        # Recomputing if not admissible
+        if !is_path_admissible(TTGraph, bunPath)
+            # Retrieving bundle start and end nodes
+            suppNode = TTGraph.bundleSrc[bundle.idx]
+            custNode = TTGraph.bundleDst[bundle.idx]
+            # Computing shortest path
+            shortestPath, pathCost = greedy_insertion(
+                solution, TTGraph, TSGraph, bundle, suppNode, custNode, CHANNEL
+            )
+            # Adding to solution
+            updateCost = update_solution!(
+                solution, instance, bundle, shortestPath; sorted=true
+            )
+            # verification
+            if !isapprox(updateCost, pathCost; atol=1.0)
+                debug_insertion(instance, solution, bundle, shortestPath, CHANNEL)
+            end
+        end
+        i % 10 == 0 && print("|")
+        i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
+    end
+    return println()
 end
