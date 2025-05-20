@@ -1,12 +1,6 @@
 # Bin packing functions
 
-global FFD_TIME = 0.0
-global FFD_NUM = 0
-
-global TFFD_TIME = 0.0
-global TFFD_NUM = 0
-
-# As expected, this functions remains the bottleneck
+# As expected, this functions remains a bottleneck
 # Raises a question : is there a way to avoid garbage collecting and push! operation ?
 function first_fit_decreasing!(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
@@ -29,8 +23,6 @@ function first_fit_decreasing!(
         # pre-allocate empty bins ? maybe not a good idea
         idxB === nothing && push!(bins, Bin(fullCapacity, commodity))
     end
-    global FFD_TIME += time() - start
-    global FFD_NUM += 1
     return length(bins) - lengthBefore
 end
 
@@ -62,6 +54,19 @@ end
 # First fit decreasing but returns a copy of the bins instead of modifying it
 function first_fit_decreasing(
     bins::Vector{Bin}, fullCapacity::Int, commodities::Vector{Commodity}; sorted::Bool=false
+)
+    newBins = deepcopy(bins)
+    first_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
+    return newBins
+end
+
+function first_fit_decreasing(
+    bins::Vector{Bin},
+    fullCapacity::Int,
+    commodities::SubArray{
+        OFOND.Commodity,1,Vector{OFOND.Commodity},Tuple{UnitRange{Int64}},true
+    };
+    sorted::Bool=false,
 )
     newBins = deepcopy(bins)
     first_fit_decreasing!(newBins, fullCapacity, commodities; sorted=sorted)
@@ -121,14 +126,11 @@ function tentative_first_fit(
     else
         eachindex(commodities)
     end
-    # nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
-    nBinsBef, nBinsAft = 0, 0
-    CAPACITIES = Int[0 for i in 1:50]
+    nBinsBef, nBinsAft = get_capacities(bins, CAPACITIES)
     # Adding commodities on top of others
     for idxC in comIdxs
         commodity = commodities[idxC]
         idxB = findfirstbin(CAPACITIES, commodity.size, nBinsAft)
-        # idxB = findfirst(cap -> cap >= commodity.size, CAPACITIES[1:nBinsAft])
         if idxB != -1
             CAPACITIES[idxB] -= commodity.size
         else
@@ -136,8 +138,6 @@ function tentative_first_fit(
             add_capacity(CAPACITIES, nBinsAft, fullCapacity - commodity.size)
         end
     end
-    global TFFD_TIME += time() - start
-    global TFFD_NUM += 1
     return nBinsAft - nBinsBef
 end
 
@@ -161,7 +161,6 @@ function tentative_first_fit(
     for idxC in comIdxs
         commodity = commodities[idxC]
         idxB = findfirstbin(CAPACITIES, commodity.size, nBinsAft)
-        # idxB = findfirst(cap -> cap >= commodity.size, CAPACITIES[1:nBinsAft])
         if idxB != -1
             CAPACITIES[idxB] -= commodity.size
         else

@@ -29,7 +29,11 @@ function add_order!(
     timedPath::Vector{Int},
     order::Order;
     sorted::Bool=false,
+    verbose::Bool=false,
 )
+    if verbose
+        return add_order_verbosed!(solution, TSGraph, timedPath, order; sorted=sorted)
+    end
     costAdded = 0.0
     for (timedSrc, timedDst) in partition(timedPath, 2, 1)
         bins = solution.bins[timedSrc, timedDst]
@@ -43,10 +47,53 @@ function add_order!(
     return costAdded
 end
 
+function add_order_verbosed!(
+    solution::Solution,
+    TSGraph::TimeSpaceGraph,
+    timedPath::Vector{Int},
+    order::Order;
+    sorted::Bool=false,
+)
+    costAdded = 0.0
+    println("\nAdding order $(order) on timed path $timedPath")
+    for (timedSrc, timedDst) in partition(timedPath, 2, 1)
+        println("\nAdding on arc $timedSrc -> $timedDst")
+        bins = solution.bins[timedSrc, timedDst]
+        dstData = TSGraph.networkNodes[timedDst]
+        arcData = TSGraph.networkArcs[timedSrc, timedDst]
+        println("Dst node $timedDst : $(dstData)")
+        println("Arc $timedSrc -> $timedDst : $(arcData)")
+        previousLoads = [bin.volumeLoad for bin in bins]
+        println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        # Updating bins
+        addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
+        println("Order added : $addedBins new bins")
+        if length(previousLoads) < length(bins)
+            append!(previousLoads, zeros(length(bins) - length(previousLoads)))
+        end
+        println(
+            "Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins] .- previousLoads) m3",
+        )
+        println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        # Updating cost
+        costAddedForOrder = compute_new_cost(arcData, dstData, addedBins, order.content)
+        println("Cost added for order : $costAddedForOrder")
+        costAdded += compute_new_cost(arcData, dstData, addedBins, order.content)
+    end
+    return costAdded
+end
+
 # Remove order content from solution truck loads, does not refill bins
 function remove_order!(
-    solution::Solution, TSGraph::TimeSpaceGraph, timedPath::Vector{Int}, order::Order;
+    solution::Solution,
+    TSGraph::TimeSpaceGraph,
+    timedPath::Vector{Int},
+    order::Order;
+    verbose::Bool=false,
 )
+    if verbose
+        return remove_order_verbosed!(solution, TSGraph, timedPath, order)
+    end
     costAdded, orderUniqueCom = 0.0, unique(order.content)
     # For all arcs in the path, updating the right bins
     for (timedSrc, timedDst) in partition(timedPath, 2, 1)
@@ -60,6 +107,37 @@ function remove_order!(
     return costAdded
 end
 
+function remove_order_verbosed!(
+    solution::Solution, TSGraph::TimeSpaceGraph, timedPath::Vector{Int}, order::Order
+)
+    costAdded, orderUniqueCom = 0.0, unique(order.content)
+    println("\nRemoving order $(order) on timed path $timedPath")
+    # For all arcs in the path, updating the right bins
+    for (timedSrc, timedDst) in partition(timedPath, 2, 1)
+        println("\nRemoving on arc $timedSrc -> $timedDst")
+        arcBins = solution.bins[timedSrc, timedDst]
+        previousLoads = [bin.volumeLoad for bin in arcBins]
+        println("Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3")
+        for bin in solution.bins[timedSrc, timedDst]
+            remove!(bin, orderUniqueCom)
+        end
+        println("Order removed")
+        println(
+            "Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins] .- previousLoads) m3",
+        )
+        println("Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3")
+        dstData = TSGraph.networkNodes[timedDst]
+        println("Dst Node $timedDst : $(dstData)")
+        arcData = TSGraph.networkArcs[timedSrc, timedDst]
+        println("Arc $timedSrc -> $timedDst : $(arcData)")
+        costRemoved = compute_new_cost(arcData, dstData, 0, order.content)
+        println("Cost removed : $costRemoved")
+        costAdded -= compute_new_cost(arcData, dstData, 0, order.content)
+        println("Total cost added : $costAdded")
+    end
+    return costAdded
+end
+
 # TODO : a lot of garbage collecting for the projection
 function update_bins!(
     solution::Solution,
@@ -69,11 +147,17 @@ function update_bins!(
     path::Vector{Int};
     sorted::Bool=false,
     remove::Bool=false,
+    verbose::Bool=false,
 )
     costAdded = 0.0
+    verbose && println(
+        "\nUpdating bins for bundle $bundle (bunH = $(bundle.hash) on path travel time path $path",
+    )
     for order in bundle.orders
+        verbose && println("Updating order $order")
         # Projecting path
         timedPath = time_space_projector(TTGraph, TSGraph, path, order)
+        verbose && println("Timed path : $timedPath")
         if -1 in timedPath
             bundleSrcDst = (TTGraph.bundleSrc[bundle.idx], TTGraph.bundleDst[bundle.idx])
             pathStr = join(path, ", ")
@@ -86,13 +170,115 @@ function update_bins!(
         end
         # Add or Remove order
         if remove
+            verbose && println("\nRemoving order $(order)")
+            costAdded += remove_order!(solution, TSGraph, timedPath, order; verbose=verbose)
+            verbose && println("Cost removed : $costAdded")
             costAdded += remove_order!(solution, TSGraph, timedPath, order)
         else
-            costAdded += add_order!(solution, TSGraph, timedPath, order; sorted=sorted)
-            # if bundle.idx == 6309
-            #     println(order)
-            #     println("Cost added after order : $costAdded")
-            # end
+            verbose && println("\nAdding order $(order)")
+            costAdded += add_order!(
+                solution, TSGraph, timedPath, order; sorted=sorted, verbose=verbose
+            )
+            verbose && println("Cost added for order : $costAdded")
+        end
+    end
+    return costAdded
+end
+
+function update_arc_bins!(
+    solution::Solution,
+    TSGraph::TimeSpaceGraph,
+    TTGraph::TravelTimeGraph,
+    bundle::Bundle,
+    src::Int,
+    dst::Int;
+    sorted::Bool=true,
+    verbose::Bool=false,
+)
+    arcUpdateCost = 0.0
+    verbose && println("\nAdding on arc $src -> $dst")
+    for order in bundle.orders
+        verbose && println("\nUpdating order $order")
+        # Projecting path
+        timedSrc, timedDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
+        verbose && println("Timed projection $timedSrc -> $timedDst")
+        # Add order (only add for now)
+        bins = solution.bins[timedSrc, timedDst]
+        dstData = TSGraph.networkNodes[timedDst]
+        arcData = TSGraph.networkArcs[timedSrc, timedDst]
+        verbose && println("Dst node $timedDst : $(dstData)")
+        verbose && println("Arc $timedSrc -> $timedDst : $(arcData)")
+        previousLoads = [bin.volumeLoad for bin in bins]
+        verbose &&
+            println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        # Updating bins
+        addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
+        verbose && println("Order added : $addedBins new bins")
+        if length(previousLoads) < length(bins)
+            append!(previousLoads, zeros(length(bins) - length(previousLoads)))
+        end
+        verbose && println(
+            "Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins] .- previousLoads) m3",
+        )
+        verbose &&
+            println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        # Updating cost
+        costAddedForOrder = compute_new_cost(arcData, dstData, addedBins, order.content)
+        verbose && println("Cost added for order : $costAddedForOrder")
+        arcUpdateCost += costAddedForOrder
+        verbose && println("arcUpdateCost = $arcUpdateCost")
+    end
+    return arcUpdateCost
+end
+
+function update_bins2!(
+    solution::Solution,
+    TSGraph::TimeSpaceGraph,
+    TTGraph::TravelTimeGraph,
+    bundle::Bundle,
+    path::Vector{Int};
+    sorted::Bool=false,
+    remove::Bool=false,
+    verbose::Bool=false,
+)
+    costAdded = 0.0
+    verbose && println(
+        "\nUpdating bins for bundle $bundle (bunH = $(bundle.hash) on path travel time path $path",
+    )
+    for (src, dst) in partition(path, 2, 1)
+        arcUpdateCost = 0.0
+        verbose && println("\nAdding on arc $src -> $dst")
+        for order in bundle.orders
+            verbose && println("\nUpdating order $order")
+            # Projecting path
+            timedSrc, timedDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
+            verbose && println("Timed projection $timedSrc -> $timedDst")
+            # Add order (only add for now)
+            bins = solution.bins[timedSrc, timedDst]
+            dstData = TSGraph.networkNodes[timedDst]
+            arcData = TSGraph.networkArcs[timedSrc, timedDst]
+            verbose && println("Dst node $timedDst : $(dstData)")
+            verbose && println("Arc $timedSrc -> $timedDst : $(arcData)")
+            previousLoads = [bin.volumeLoad for bin in bins]
+            verbose &&
+                println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+            # Updating bins
+            addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
+            verbose && println("Order added : $addedBins new bins")
+            if length(previousLoads) < length(bins)
+                append!(previousLoads, zeros(length(bins) - length(previousLoads)))
+            end
+            verbose && println(
+                "Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins] .- previousLoads) m3",
+            )
+            verbose &&
+                println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+            # Updating cost
+            costAddedForOrder = compute_new_cost(arcData, dstData, addedBins, order.content)
+            verbose && println("Cost added for order : $costAddedForOrder")
+            arcUpdateCost += costAddedForOrder
+            verbose && println("\n Arc update cost : $arcUpdateCost")
+            costAdded += costAddedForOrder
         end
     end
     return costAdded
