@@ -24,6 +24,13 @@ function write_network_design(io::IO, solution::Solution, instance::Instance)
                 for (idx, node) in enumerate(timedPath)
                     # TODO : all the time is lost in this function, by the findall
                     shipments_ids = get_shipments_ids(solution, timedPath, node, idx, com)
+                    if length(shipments_ids) == 0
+                        throw(
+                            ErrorException(
+                                "No shipment found for order $(order) and commodity $(com) of bundle $(bundle)",
+                            ),
+                        )
+                    end
                     for id in shipments_ids
                         # writing data in csv formatted string
                         print(io, routeId, ",") # route_id
@@ -49,6 +56,7 @@ end
 
 function write_shipment_info(io::IO, solution::Solution, instance::Instance)
     nLines = 0
+    extractedCost = 0.0
     TSGraph = instance.timeSpaceGraph
     for arc in edges(TSGraph.graph)
         arcData = TSGraph.networkArcs[src(arc), dst(arc)]
@@ -65,11 +73,16 @@ function write_shipment_info(io::IO, solution::Solution, instance::Instance)
             print(io, arcData.type, ",") # type
             print(io, bin.load / VOLUME_FACTOR, ",") # volume
             print(io, transportCost, ",") # unit_cost
-            print(io, arcData.carbonCost * fillingRate, ",") # carbon_cost
-            println(io, dstData.volumeCost * fillingRate) # platform_cost
+            carbonCost = arcData.carbonCost * fillingRate
+            print(io, carbonCost, ",") # carbon_cost
+            platformCost = dstData.volumeCost * bin.volumeLoad / VOLUME_FACTOR
+            println(io, platformCost) # platform_cost
             nLines += 1
+            extractedCost += transportCost + carbonCost + platformCost
+            # TODO : add lead time cost
         end
     end
+    println("Extracted cost : $extractedCost")
     return nLines
 end
 
@@ -121,6 +134,7 @@ function write_solution(
     solution::Solution, instance::Instance; suffix::String, directory::String
 )
     @info "Writing solution to CSV files (suffix: $suffix, directory: $directory)"
+    start = time()
     # network design file 
     nLines = 0
     open(joinpath(directory, "network_design_$suffix.csv"), "w") do io
@@ -140,4 +154,36 @@ function write_solution(
         nLines = write_shipment_content(io, solution, instance)
     end
     @info "Shipment content file done ($nLines lines x $(length(SHIPMENT_CONTENT_COLUMNS)) columns)"
+    timeTaken = round(time() - start; digits=1)
+    @info "Full solution exported" :time = timeTaken
+end
+
+function write_compact_solution(
+    solution::Solution, instance::Instance; suffix::String, directory::String
+)
+    @info "Writing solution to CSV files (suffix: $suffix, directory: $directory)"
+    start = time()
+    # route file 
+    nLines = 0
+    routeId = 1
+    open(joinpath(directory, "route_$suffix.csv"), "w") do io
+        println(io, join(ROUTE_COLUMNS, ","))
+        for bundle in instance.bundles
+            bundlePath = solution.bundlePaths[bundle.idx]
+            for (idx, node) in enumerate(bundlePath)
+                print(io, routeId, ",") # route_id
+                print(io, bundle.supplier.account, ",") # supplier_account
+                print(io, bundle.customer.account, ",") # customer_account
+                nodeData = instance.travelTimeGraph.networkNodes[node]
+                print(io, nodeData.account, ",") # point_account
+                print(io, idx, ",") # point_number
+                println(io, nodeData.type) # point_type
+                nLines += 1
+            end
+            routeId += 1
+        end
+    end
+    @info "Route file done ($nLines lines x $(length(ROUTE_COLUMNS)) columns)"
+    timeTaken = round(time() - start; digits=1)
+    @info "Full solution exported" :time = timeTaken
 end

@@ -1,5 +1,11 @@
 # File containing all functions to read an instance
 
+function are_node_data_missing(row::CSV.Row)
+    return ismissing(row.point_account) ||
+           ismissing(row.point_type) ||
+           ismissing(row.point_m3_cost)
+end
+
 function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     nodeType = Symbol(row.point_type)
     haskey(counts, nodeType) && (counts[nodeType] += 1)
@@ -18,26 +24,40 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
 end
 
 function read_and_add_nodes!(network::NetworkGraph, node_file::String; verbose::Bool=false)
+    start = time()
     counts = Dict([(nodeType, 0) for nodeType in OFOND.NODE_TYPES])
     # Reading .csv file
     csv_reader = CSV.File(
         node_file; types=Dict("point_account" => String, "point_type" => String)
     )
     @info "Reading nodes from CSV file $(basename(node_file)) ($(length(csv_reader)) lines)"
-    ignored = Dict(:same_node => 0, :unknown_type => 0)
+    ignored = Dict(:same_node => 0, :unknown_type => 0, :missing_data => 0)
     for row in csv_reader
+        if are_node_data_missing(row)
+            ignored[:missing_data] += 1
+            continue
+        end
         node = read_node!(counts, row)
         added, ignore_type = add_node!(network, node; verbose=verbose)
         added || (ignored[ignore_type] += 1)
-        if node.volumeCost < EPS && node.type in [:xdock, :iln]
-            # println(row)
-            # println(node)
-            # @error "No volume cost on this platform"
-            # throw(ErrorException("No volume cost on this platform"))
-        end
     end
     ignoredStr = join(pairs(ignored), ", ")
-    @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(nv(network.graph)) nodes : $counts" :ignored = ignoredStr :time =
+        timeTaken
+end
+
+function are_leg_data_missing(row::CSV.Row)
+    return ismissing(row.src_account) ||
+           ismissing(row.dst_account) ||
+           ismissing(row.src_type) ||
+           ismissing(row.dst_type) ||
+           ismissing(row.leg_type) ||
+           ismissing(row.distance) ||
+           ismissing(row.travel_time) ||
+           ismissing(row.shipment_cost) ||
+           ismissing(row.capacity) ||
+           ismissing(row.carbon_cost)
 end
 
 function src_dst_hash(row::CSV.Row)
@@ -69,11 +89,11 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
     return NetworkArc(
         arcType,
         row.distance,
-        # floor(Int, row.travel_time + 0.5),
-        min(floor(Int, row.travel_time), 7),
+        floor(Int, row.travel_time),
+        # min(floor(Int, row.travel_time), 7),
         isCommon,
-        # row.shipment_cost * shipmentFactor / 5,
-        shipCost,
+        row.shipment_cost,
+        # shipCost,
         row.is_linear,
         # false,
         row.carbon_cost,
@@ -83,30 +103,51 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
 end
 
 function read_and_add_legs!(network::NetworkGraph, leg_file::String; verbose::Bool=false)
+    start = time()
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
     csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
     @info "Reading legs from CSV file $(basename(leg_file)) ($(length(csv_reader)) lines)"
     ignored = Dict(
-        :same_arc => 0, :unknown_type => 0, :unknown_source => 0, :unknown_dest => 0
+        :same_arc => 0,
+        :unknown_type => 0,
+        :unknown_source => 0,
+        :unknown_dest => 0,
+        :missing_data => 0,
     )
+    minCost, maxCost, meanCost = INFINITY, 0.0, 0.0
     for row in csv_reader
+        if are_leg_data_missing(row)
+            ignored[:missing_data] += 1
+            continue
+        end
         src, dst = src_dst_hash(row)
         arc = read_leg!(counts, row, is_common_arc(row))
         added, ignore_type = add_arc!(network, src, dst, arc; verbose=verbose)
         added || (ignored[ignore_type] += 1)
-        # if arc.carbonCost < EPS
-        # println(row)
-        # println(network.graph[src])
-        # println(network.graph[dst])
-        # println(arc)
-        # @error "No carbon cost on this arc"
-        # throw(ErrorException("No carbon cost on this arc"))
-        # end
+        if added
+            minCost = min(minCost, row.shipment_cost)
+            maxCost = max(maxCost, row.shipment_cost)
+            meanCost += row.shipment_cost
+        end
     end
     ignoredStr = join(pairs(ignored), ", ")
-    @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr
+    meanCost = meanCost / ne(network.graph)
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(ne(network.graph)) legs : $counts" :ignored = ignoredStr :time = timeTaken :min_cost =
+        minCost :max_cost = maxCost :mean_cost = meanCost
+end
+
+function are_commodity_data_missing(row::CSV.Row)
+    return ismissing(row.supplier_account) ||
+           ismissing(row.customer_account) ||
+           ismissing(row.delivery_time_step) ||
+           ismissing(row.size) ||
+           ismissing(row.delivery_date) ||
+           ismissing(row.part_number) ||
+           ismissing(row.quantity) ||
+           ismissing(row.lead_time_cost)
 end
 
 function bundle_hash(row::CSV.Row)
@@ -169,6 +210,7 @@ function add_date!(dateHorizon::Vector{String}, row::CSV.Row)
 end
 
 function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
+    start = time()
     orders, bundles = Dict{UInt,Order}(), Dict{UInt,Bundle}()
     dates, partNums = Vector{String}(), Dict{UInt,String}()
     comCount, comUnique = 0, 0
@@ -183,10 +225,18 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     )
     @info "Reading commodity orders from CSV file $(basename(commodities_file)) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
+    ignored = Dict(:unknown_bundle => 0, :missing_data => 0)
     for row in csv_reader
+        if are_commodity_data_missing(row)
+            ignored[:missing_data] += 1
+            continue
+        end
         # Getting bundle, order and commodity data
         bundle = get_bundle!(bundles, row, networkGraph)
-        bundle === nothing && continue
+        if bundle === nothing
+            ignored[:unknown_bundle] += 1
+            continue
+        end
         order = get_order!(orders, row, bundle)
         # If the order is new (no commodities) we have to add it to the bundle
         length(order.content) == 0 && push!(bundle.orders, order)
@@ -195,15 +245,6 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         partNums[partNumHash] = row.part_number
         commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
         rowQuantity = round(Int, row.quantity)
-        # if rowQuantity < 3
-        #     rowQuantity *= 5
-        # elseif rowQuantity < 5
-        #     rowQuantity *= 4
-        # elseif rowQuantity < 10
-        #     rowQuantity *= 3
-        # elseif rowQuantity < 20
-        #     rowQuantity *= 2
-        # end
         append!(order.content, [commodity for _ in 1:(rowQuantity)])
         comCount += rowQuantity
         comUnique += 1
@@ -212,7 +253,10 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     end
     # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
     bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
-    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon"
+    ignoreStr = join(pairs(ignored), ", ")
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(length(bundles)) bundles, $(length(orders)) orders and $comCount commodities ($comUnique without quantities) on a $(length(dates)) steps time horizon" :ignored =
+        ignoreStr :time = timeTaken
     return bundleVector, dates, partNums
 end
 
@@ -234,13 +278,16 @@ function read_instance(node_file::String, leg_file::String, commodities_file::St
     netGraph[][:meanOverseaTime] = meanOverseaTime
     netGraph[][:maxLeg] = maxLeg
     bundles, dates, partNums = read_commodities(networkGraph, commodities_file)
+    horizon = length(dates)
+    if netGraph[][:maxLeg] > length(dates)
+        @warn "The longest leg is $(netGraph[][:maxLeg]) steps long, which is longer than the time horizon ($(length(dates)) steps), the new horizon will be $(netGraph[][:maxLeg] + 1) steps"
+        horizon = netGraph[][:maxLeg] + 1
+        lastWeek = Date(DateTime(dates[end][1:10]))
+        for i in 1:(horizon - length(dates))
+            push!(dates, string(lastWeek + Dates.Week(i)))
+        end
+    end
     return Instance(
-        networkGraph,
-        TravelTimeGraph(),
-        TimeSpaceGraph(),
-        bundles,
-        length(dates),
-        dates,
-        partNums,
+        networkGraph, TravelTimeGraph(), TimeSpaceGraph(), bundles, horizon, dates, partNums
     )
 end

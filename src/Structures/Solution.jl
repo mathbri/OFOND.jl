@@ -318,11 +318,13 @@ function repair_paths!(
     paths::Vector{Vector{Int}}, instance::Instance; directRepair::Bool=false
 )
     TTGraph = instance.travelTimeGraph
-    count = length(findall(path -> length(path) == 0, paths))
+    repaired, fullrepair = 0, 0
     for (idx, path) in enumerate(paths)
-        if length(path) == 0
+        startNode = TTGraph.networkNodes[path[1]]
+        bundleStart = TTGraph.networkNodes[TTGraph.bundleSrc[idx]]
+        if startNode != bundleStart
+            repaired += 1
             bundle = instance.bundles[idx]
-            suppNode, custNode = TTGraph.bundleSrc[idx], TTGraph.bundleDst[idx]
             for (src, dst) in TTGraph.bundleArcs[bundle.idx]
                 # If the arc doesn't need an update, skipping
                 is_update_candidate(TTGraph, src, dst, bundle) || continue
@@ -335,10 +337,20 @@ function repair_paths!(
                     )
                 end
             end
+            # Starting with partial repair
+            suppNode, custNode = TTGraph.bundleSrc[idx], path[1]
             shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
+            if length(shortestPath) == 0
+                # Doing full repair if it didn't work 
+                custNode = TTGraph.bundleDst[idx]
+                shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
+                fullrepair += 1
+            end
             append!(path, shortestPath)
+            paths[idx] = vcat(shortestPath[1:(end - 1)], path)
         end
     end
+    @info "Repaired $(repaired) paths, with full repair for $(fullrepair) paths"
     return count
 end
 

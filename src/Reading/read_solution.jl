@@ -5,7 +5,8 @@ function check_bundle(instance::Instance, row::CSV.Row)
     bundleHash = hash(suppNode, hash(custNode))
     bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
     if bundleIdx === nothing
-        # @warn "Bundle unknown in the instance" :bundle = bundleHash :row = row
+        @warn "Bundle unknown in the instance" :supplier = suppNode :customer = custNode :row =
+            row
     else
         return instance.bundles[bundleIdx]
     end
@@ -17,7 +18,8 @@ function check_node(instance::Instance, row::CSV.Row)
     if haskey(instance.networkGraph.graph, nodeHash)
         return instance.networkGraph.graph[nodeHash]
     else
-        # @warn "Node unknown in the network" :node = nodeHash :row = row
+        @warn "Node unknown in the network" :account = row.point_account :type =
+            row.point_type :row = row
     end
 end
 
@@ -49,9 +51,18 @@ function check_paths(paths::Vector{Vector{NetworkNode}})
             missingPointBundles = join(missingPointPaths, ", ")
             @warn "Missing points in $(length(missingPointPaths)) paths for bundles $missingPointBundles"
         end
-        # missingPointBundles = join(missingPointPaths[1:10], ", ", ", ")
-        # @warn "Missing points in $(length(missingPointPaths)) paths for bundles $missingPointBundles ..."
-        # @warn "Missing points in $(length(missingPointPaths)) paths for bundles"
+    end
+end
+
+# TODO : this is where the dynamic change, we want to project what we can and repair the rest of the path
+# - read path nodes 
+# - filter zero nodes to try to skip missing points (to be later changed to a constrained path witht he number of missiong points)
+# - project what we can 
+# - repair by computing shortest lower bound path from supplier to last known node
+
+function filter_missing_nodes!(paths::Vector{Vector{NetworkNode}})
+    for (i, path) in enumerate(paths)
+        paths[i] = filter(x -> x != zero(NetworkNode), path)
     end
 end
 
@@ -79,26 +90,29 @@ function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::
         if nextNode === nothing
             pathStr = join(string.(path), ", ")
             prev_node = TTGraph.networkNodes[ttPath[end]]
-            # @warn "Next node not found, path not projectable for bundle $(idx) (either the node doesn't exist or the maximum delivery time is exceeded)" :node =
-            #     node :prev_node = prev_node :path = pathStr
+            @warn "Full path not projectable for bundle $(idx)" :node = node :prev_node =
+                prev_node :path = pathStr
             break
         end
         push!(ttPath, nextNode)
     end
-    errors = length(ttPath) < length(path)
-    return reverse(ttPath), errors
+    error = length(ttPath) < length(path)
+    return reverse(ttPath), error
 end
 
 # Paths read on the network needs to be projected on the travel-time graph
 function project_all_paths(paths::Vector{Vector{NetworkNode}}, TTGraph::TravelTimeGraph)
     ttPaths = [Int[] for _ in 1:length(paths)]
+    errors = 0
     for (idx, path) in enumerate(paths)
-        # Paths with errors are skipped
+        # Paths with errors are skipped (only empty paths now)
         is_path_projectable(path) || continue
-        ttPath, errors = project_path(path, TTGraph, idx)
+        ttPath, error = project_path(path, TTGraph, idx)
+        ttPaths[idx] = ttPath
         # If not projected completly, leaving it empty, adding it otherwise 
-        errors || (ttPaths[idx] = ttPath)
+        errors += error
     end
+    @info "Projected $(length(ttPaths)) paths, encoutered errors for $(errors) paths"
     return ttPaths
 end
 
@@ -115,19 +129,28 @@ function read_solution(instance::Instance, solution_file::String)
     )
     @info "Reading solution from CSV file $(basename(solution_file)) ($(length(csv_reader)) lines)"
     paths = [NetworkNode[] for _ in 1:length(instance.bundles)]
+    ignored = Dict(:unknown_bundle => 0, :unknown_node => 0)
     # Reading paths
     for row in csv_reader
         # Check bundle and node existence (warnings if not found)
         bundle = check_bundle(instance, row)
+        if bundle === nothing
+            ignored[:unknown_bundle] += 1
+            continue
+        end
         node = check_node(instance, row)
-        (bundle === nothing || node === nothing) && continue
+        if node === nothing
+            ignored[:unknown_node] += 1
+            continue
+        end
         # Add node to path 
         add_node_to_path!(paths[bundle.idx], node, row.point_number)
     end
     check_paths(paths)
+    # Filtering missing nodes 
+    filter_missing_nodes!(paths)
     allPaths = project_all_paths(paths, instance.travelTimeGraph)
-    repaired = repair_paths!(allPaths, instance)
-    @info "Read $(length(paths)) paths, repaired $(repaired) paths for bundles with errors"
+    repair_paths!(allPaths, instance)
     # Creating and updating solution
     solution = Solution(instance)
     update_solution!(solution, instance, instance.bundles, allPaths)

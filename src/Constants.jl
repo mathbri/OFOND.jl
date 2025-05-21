@@ -59,3 +59,12 @@ const SHIPMENT_CONTENT_COLUMNS = [
     "packaging_size",
     "volume",
 ]
+
+const ROUTE_COLUMNS = [
+    "route_id",
+    "supplier_account",
+    "customer_account",
+    "point_account",
+    "point_number",
+    "point_type",
+]
