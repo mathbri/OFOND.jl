@@ -1,5 +1,6 @@
 # Commodity structure to store corresponding metadata
 
+# TODO : maybe switch from m3 / 100 to dm3 (m3 / 1000)
 # The idea to mutualize the partNumber, size and stock cost was not a good idea because result in x2 space taken because of new object layer 
 
 struct Commodity

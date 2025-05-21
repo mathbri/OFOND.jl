@@ -43,10 +43,11 @@ function add!(bin::Bin, commodity::Commodity)
 end
 
 function add!(bin::Bin, commodities::Vector{Commodity})
-    if bin.capacity >= sum(commodity.size for commodity in commodities; init=0)
+    totVol = sum(commodity.size for commodity in commodities; init=0)
+    if bin.capacity >= totVol
         append!(bin.content, commodities)
-        bin.capacity -= sum(commodity.size for commodity in commodities; init=0)
-        bin.load += sum(commodity.size for commodity in commodities; init=0)
+        bin.capacity -= totVol
+        bin.load += totVol
         return true
     end
     return false

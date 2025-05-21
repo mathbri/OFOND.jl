@@ -1,5 +1,9 @@
 # Instance structure to store problem metadata
 
+# TODO : think about the following
+# A lot of metadata of the problem are superfluous to solve the problem (dates, coordinates, ...)
+# The instance could be reduced to only the data needed with the metadata needed for extraction stored somewhere else
+
 struct Instance
     # Network 
     networkGraph::NetworkGraph
@@ -21,9 +25,34 @@ end
 # Computing all objects properties
 function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::Vector{Int})
     @info "Adding properties to instance"
+    start = time()
     newBundles = Bundle[
         add_properties(bundle, instance.networkGraph) for bundle in instance.bundles
     ]
+    newTTGraph = TravelTimeGraph(instance.networkGraph, newBundles; reachability=false)
+    # Checking a path exists for every bundle in the travel time graph
+    checkedBundles = Int[]
+    for bundle in newBundles
+        if has_path(
+            newTTGraph.graph,
+            newTTGraph.bundleSrc[bundle.idx],
+            newTTGraph.bundleDst[bundle.idx],
+        )
+            push!(checkedBundles, bundle.idx)
+        else
+            suppNode = code_for(instance.networkGraph.graph, bundle.supplier.hash)
+            custNode = code_for(instance.networkGraph.graph, bundle.customer.hash)
+            supplier = bundle.supplier
+            customer = bundle.customer
+            has_path_in_flat_network = has_path(
+                instance.networkGraph.graph, suppNode, custNode
+            )
+            @error "Bundle $(bundle.idx) doesn't have path in the travel time graph" supplier customer has_path_in_flat_network
+        end
+    end
+    @warn "$(length(newBundles) - length(checkedBundles)) bundles have no path in the travel time graph"
+    newBundles = newBundles[checkedBundles]
+    newBundles = [change_idx(bundle, idx) for (idx, bundle) in enumerate(newBundles)]
     println("Properties added to bundles")
     for bundle in newBundles
         newOrders = [
@@ -37,6 +66,8 @@ function add_properties(instance::Instance, bin_packing::Function, CAPACITIES::V
     @info "Travel-time graph has $(nv(newTTGraph.graph)) nodes and $(ne(newTTGraph.graph)) arcs"
     newTSGraph = TimeSpaceGraph(instance.networkGraph, instance.timeHorizon)
     @info "Time-space graph has $(nv(newTSGraph.graph)) nodes and $(ne(newTSGraph.graph)) arcs"
+    timeTaken = round(time() - start; digits=1)
+    @info "Full properties added" :time = timeTaken
     return Instance(
         instance.networkGraph,
         newTTGraph,

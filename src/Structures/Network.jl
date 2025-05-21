@@ -172,7 +172,9 @@ function Base.zero(::Type{NetworkArc})
 end
 
 function Base.show(io::IO, node::NetworkNode)
-    return print(io, "Node($(node.account), $(node.type))")
+    return print(
+        io, "Node($(node.account), $(node.type)), $(round(node.volumeCost; digits=2))€/m3)"
+    )
 end
 
 function is_node_in_country(networkGraph::NetworkGraph, node::Int, country::String)

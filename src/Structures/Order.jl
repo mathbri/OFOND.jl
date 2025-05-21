@@ -44,6 +44,7 @@ end
 function add_properties(order::Order, bin_packing::Function, CAPACITIES::Vector{Int})
     volume = sum(com -> com.size, order.content)
     for arcType in BP_ARC_TYPES
+        # WARNING : if the constants are not eaqual to the capacity in the instance, the tentative cost computed for the path and the actual update cost when the bins are filled will differ
         capacity = arcType == :oversea ? SEA_CAPACITY : LAND_CAPACITY
         order.bpUnits[arcType] = bin_packing(Bin[], capacity, order.content, CAPACITIES)
         # first_fit_decreasing!(Bin[], capacity, order.content)
@@ -59,5 +60,12 @@ function add_properties(order::Order, bin_packing::Function, CAPACITIES::Vector{
         order.bpUnits,
         minPackSize,
         stockCost,
+    )
+end
+
+function Base.show(io::IO, order::Order)
+    return print(
+        io,
+        "Order(bundle $(order.bundleHash), due time step $(order.deliveryDate), $(length(order.content)) com, $(order.volume)dm3)",
     )
 end
