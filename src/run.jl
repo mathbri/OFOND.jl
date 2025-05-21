@@ -4,7 +4,7 @@ function run_heuristic(
     instance::Instance,
     heuristic::Function;
     timeLimit::Int=-1,
-    preSolve::Bool=true,
+    preSolve::Bool=false,
     startSol::Solution=Solution(instance),
 )
     @info "Running heuristic $heuristic"
@@ -117,9 +117,10 @@ function greedy_or_lb_then_ls_heuristic(instance::Instance; timeLimit::Int=-1)
         @info "Choosing greedy solution as initial solution"
     end
     # Applying local search at least once
-    improvement, lsLoops = 1.0, 0
-    while (get_elapsed_time(startTime) < timeLimit || lsLoops < 1) && improvement > 1e-3
-        improvement = local_search!(solution, instance; timeLimit=timeLimit, twoNode=true)
+    improvement, lsLoops = -1e4, 0
+    while (get_elapsed_time(startTime) < timeLimit || lsLoops < 1) && improvement < -1e-3
+        improvement = local_search3!(solution, instance; timeLimit=timeLimit)
+        lsLoops += 1
     end
     # If local search stops because of time limit, applying bundle reintroduction one last time 
     if get_elapsed_time(startTime) > timeLimit && improvement < -1e3
@@ -202,4 +203,17 @@ function lns_heuristic!(
     println()
     @info "Final results" :solve_time = solveTime :feasible = feasible :total_cost = solCost
     return println()
+end
+
+function run_simple_heursitic(
+    instance::Instance, heuristic::Function, solution::Solution=Solution(instance)
+)
+    @info "Running heuristic $heuristic"
+    startTime = time()
+    heuristic(solution, instance)
+    println("Cost after heuristic: $(compute_cost(instance, solution))")
+    solveTime = get_elapsed_time(startTime)
+    feasible = is_feasible(instance, solution)
+    totalCost = compute_cost(instance, solution)
+    @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
 end
