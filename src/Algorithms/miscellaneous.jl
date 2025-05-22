@@ -519,7 +519,7 @@ end
 
 # To compute it exaclty, for each bundle groups, they need to choose whether direct or lower bound path which makes it way more easier to solve
 
-function is_direct(arcData::NetorkArc)
+function is_direct(arcData::NetworkArc)
     return arcData.type == :direct
 end
 

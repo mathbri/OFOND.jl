@@ -104,7 +104,9 @@ end
 
 function read_and_add_legs!(network::NetworkGraph, leg_file::String; verbose::Bool=false)
     start = time()
+    neShortcut = ne(network.graph)
     counts = Dict([(arcType, 0) for arcType in OFOND.ARC_TYPES])
+    counts[:shortcut] = neShortcut
     # Reading .csv file
     columns = ["src_account", "dst_account", "src_type", "dst_type", "leg_type"]
     csv_reader = CSV.File(leg_file; types=Dict([(column, String) for column in columns]))
@@ -160,21 +162,18 @@ end
 
 function com_size(row::CSV.Row)
     baseSize = min(round(Int, max(1, row.size * 100)), SEA_CAPACITY)
-    # if baseSize > 0.5 * SEA_CAPACITY
-    #     return baseSize
-    # elseif baseSize > 0.25 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 2)
-    # elseif baseSize > 0.1 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 3)
-    # elseif baseSize > 0.05 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 4)
-    # elseif baseSize > 0.025 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 5)
-    # elseif baseSize > 0.01 * SEA_CAPACITY
-    #     return min(SEA_CAPACITY, baseSize * 6)
-    # end
-    # return min(SEA_CAPACITY, baseSize * 7)
     return baseSize
+end
+
+function com_stock_cost(row::CSV.Row)
+    baseCost = row.lead_time_cost
+    if baseCost > 0.01
+        baseCost = baseCost / 10
+        while baseCost > 0.05
+            baseCost = baseCost / 10
+        end
+    end
+    return baseCost
 end
 
 function get_bundle!(bundles::Dict{UInt,Bundle}, row::CSV.Row, network::NetworkGraph)
@@ -226,6 +225,8 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
     @info "Reading commodity orders from CSV file $(basename(commodities_file)) ($(length(csv_reader)) lines)"
     # Creating objects : each line is a commodity order
     ignored = Dict(:unknown_bundle => 0, :missing_data => 0)
+    maxStockCost = 0.0
+    maxAdjustedCost = 0.0
     for row in csv_reader
         if are_commodity_data_missing(row)
             ignored[:missing_data] += 1
@@ -242,8 +243,10 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         length(order.content) == 0 && push!(bundle.orders, order)
         # Creating (and Duplicating) commodity
         partNumHash = hash(row.part_number)
-        partNums[partNumHash] = row.part_number
-        commodity = Commodity(order.hash, partNumHash, com_size(row), row.lead_time_cost)
+        partNums[partNumHash] = string(row.part_number)
+        commodity = Commodity(order.hash, partNumHash, com_size(row), com_stock_cost(row))
+        maxStockCost = max(maxStockCost, row.lead_time_cost)
+        maxAdjustedCost = max(maxAdjustedCost, commodity.stockCost)
         rowQuantity = round(Int, row.quantity)
         append!(order.content, [commodity for _ in 1:(rowQuantity)])
         comCount += rowQuantity
@@ -251,6 +254,8 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         # Is it a new time step ?
         add_date!(dates, row)
     end
+    println("Max Stock Cost : $maxStockCost €/km")
+    println("Max Adjusted Cost : $maxAdjustedCost €/km")
     # Transforming dictionnaries into vectors (sorting the vector so that the idx field correspond to the actual idx in the vector)
     bundleVector = sort(collect(values(bundles)); by=bundle -> bundle.idx)
     ignoreStr = join(pairs(ignored), ", ")

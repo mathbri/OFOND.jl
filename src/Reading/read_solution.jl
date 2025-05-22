@@ -5,8 +5,8 @@ function check_bundle(instance::Instance, row::CSV.Row)
     bundleHash = hash(suppNode, hash(custNode))
     bundleIdx = findfirst(b -> b.hash == bundleHash, instance.bundles)
     if bundleIdx === nothing
-        @warn "Bundle unknown in the instance" :supplier = suppNode :customer = custNode :row =
-            row
+        # @warn "Bundle unknown in the instance" :supplier = suppNode :customer = custNode :row =
+        #     row
     else
         return instance.bundles[bundleIdx]
     end
@@ -18,8 +18,8 @@ function check_node(instance::Instance, row::CSV.Row)
     if haskey(instance.networkGraph.graph, nodeHash)
         return instance.networkGraph.graph[nodeHash]
     else
-        @warn "Node unknown in the network" :account = row.point_account :type =
-            row.point_type :row = row
+        # @warn "Node unknown in the network" :account = row.point_account :type =
+        #     row.point_type :row = row
     end
 end
 
@@ -83,6 +83,9 @@ end
 function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::Int)
     # The travel time path is re-created backward by searching for corresponding nodes
     ttPath = [TTGraph.bundleDst[idx]]
+    if length(path) <= 1
+        return ttPath, true
+    end
     # Paths in data files are already backwards
     for node in path[2:end]
         # For each node of the path, we search its inneighbor having the same information
@@ -90,8 +93,8 @@ function project_path(path::Vector{NetworkNode}, TTGraph::TravelTimeGraph, idx::
         if nextNode === nothing
             pathStr = join(string.(path), ", ")
             prev_node = TTGraph.networkNodes[ttPath[end]]
-            @warn "Full path not projectable for bundle $(idx)" :node = node :prev_node =
-                prev_node :path = pathStr
+            # @warn "Full path not projectable for bundle $(idx)" :node = node :prev_node =
+            #     prev_node :path = pathStr
             break
         end
         push!(ttPath, nextNode)
@@ -106,7 +109,7 @@ function project_all_paths(paths::Vector{Vector{NetworkNode}}, TTGraph::TravelTi
     errors = 0
     for (idx, path) in enumerate(paths)
         # Paths with errors are skipped (only empty paths now)
-        is_path_projectable(path) || continue
+        # is_path_projectable(path) || continue
         ttPath, error = project_path(path, TTGraph, idx)
         ttPaths[idx] = ttPath
         # If not projected completly, leaving it empty, adding it otherwise 
@@ -117,6 +120,7 @@ function project_all_paths(paths::Vector{Vector{NetworkNode}}, TTGraph::TravelTi
 end
 
 function read_solution(instance::Instance, solution_file::String)
+    start = time()
     # Reading .csv file
     csv_reader = CSV.File(
         solution_file;
@@ -147,15 +151,26 @@ function read_solution(instance::Instance, solution_file::String)
         add_node_to_path!(paths[bundle.idx], node, row.point_number)
     end
     check_paths(paths)
+    ignoredStr = join(pairs(ignored), ", ")
+    timeTaken = round(time() - start; digits=1)
+    @info "Read $(sum(length.(paths))) nodes in $(length(paths)) paths" :ignored =
+        ignoredStr :time = timeTaken
     # Filtering missing nodes 
     filter_missing_nodes!(paths)
     allPaths = project_all_paths(paths, instance.travelTimeGraph)
     repair_paths!(allPaths, instance)
     # Creating and updating solution
+    print("Constructing current solution : ")
     solution = Solution(instance)
-    update_solution!(solution, instance, instance.bundles, allPaths)
+    for (path, bundle) in zip(allPaths, instance.bundles)
+        update_solution!(solution, instance, bundle, path; sorted=true)
+        bundle.idx % 100 == 0 && print("|")
+    end
+    println()
     feasible = is_feasible(instance, solution; verbose=true)
     totalCost = compute_cost(instance, solution)
-    @info "Current solution properties" :feasible = feasible :total_cost = totalCost
+    timeTaken = round(time() - start; digits=1)
+    @info "Current solution properties" :feasible = feasible :total_cost = totalCost :time =
+        timeTaken
     return solution
 end

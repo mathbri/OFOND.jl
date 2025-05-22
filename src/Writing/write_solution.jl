@@ -166,10 +166,11 @@ function write_compact_solution(
     # route file 
     nLines = 0
     routeId = 1
-    open(joinpath(directory, "route_$suffix.csv"), "w") do io
+    open(joinpath(directory, "$(suffix)_routes2.csv"), "w") do io
         println(io, join(ROUTE_COLUMNS, ","))
         for bundle in instance.bundles
-            bundlePath = solution.bundlePaths[bundle.idx]
+            # Reverse the path because reversed in original route files
+            bundlePath = reverse(solution.bundlePaths[bundle.idx])
             for (idx, node) in enumerate(bundlePath)
                 print(io, routeId, ",") # route_id
                 print(io, bundle.supplier.account, ",") # supplier_account
@@ -185,5 +186,5 @@ function write_compact_solution(
     end
     @info "Route file done ($nLines lines x $(length(ROUTE_COLUMNS)) columns)"
     timeTaken = round(time() - start; digits=1)
-    @info "Full solution exported" :time = timeTaken
+    @info "Compact solution exported" :time = timeTaken
 end

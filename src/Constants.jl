@@ -3,7 +3,7 @@
 # Actual values are Symbol, those list are here for verification
 const NODE_TYPES = [:supplier, :plant, :platform, :pol, :pod]
 const COMMON_NODE_TYPES = [:platform, :pol, :pod]
-const ARC_TYPES = [:direct, :outsource, :cross_plat, :delivery, :oversea]
+const ARC_TYPES = [:direct, :outsource, :cross_plat, :delivery, :oversea, :shortcut]
 const BP_ARC_TYPES = [:direct, :cross_plat, :delivery, :oversea]
 const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea]
 

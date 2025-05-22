@@ -208,7 +208,9 @@ function check_quantities(
 end
 
 # Check whether a solution is feasible or not 
-function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false)
+function is_feasible(
+    instance::Instance, solution::Solution; deep::Bool=false, verbose::Bool=false
+)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     check_enough_paths(instance, solution; verbose=verbose) || return false
     askedQuantities, routedQuantities = create_asked_routed_quantities(instance)
@@ -221,22 +223,24 @@ function is_feasible(instance::Instance, solution::Solution; verbose::Bool=false
         check_path_continuity(instance, bundlePath; verbose=verbose) || return false
         # Updating quantities
         update_asked_quantities!(askedQuantities, bundle)
-        for order in bundle.orders
-            timedPath = time_space_projector(TTGraph, TSGraph, bundlePath, order)
-            for (src, dst) in partition(timedPath, 2, 1)
-                # Path continuity
-                if !has_edge(TSGraph.graph, src, dst)
-                    @warn "Infeasible solution : edge $src-$dst doesn't exist in path $timedPath"
-                    throw(ErrorException("Infeasible"))
-                end
-                # Commodities on timed arcs
-                arcBins = solution.bins[src, dst]
-                allCommodities = get_all_commodities(arcBins, Commodity[])
-                # TODO : add quantity check here
-                for com in order.content
-                    if !(com in allCommodities)
-                        @warn "Infeasible solution : commodity $com doesn't exist in path $timedPath"
+        if deep
+            for order in bundle.orders
+                timedPath = time_space_projector(TTGraph, TSGraph, bundlePath, order)
+                for (src, dst) in partition(timedPath, 2, 1)
+                    # Path continuity
+                    if !has_edge(TSGraph.graph, src, dst)
+                        @warn "Infeasible solution : edge $src-$dst doesn't exist in path $timedPath"
                         throw(ErrorException("Infeasible"))
+                    end
+                    # Commodities on timed arcs
+                    arcBins = solution.bins[src, dst]
+                    allCommodities = get_all_commodities(arcBins, Commodity[])
+                    # TODO : add quantity check here
+                    for com in order.content
+                        if !(com in allCommodities)
+                            @warn "Infeasible solution : commodity $com doesn't exist in path $timedPath"
+                            throw(ErrorException("Infeasible"))
+                        end
                     end
                 end
             end
@@ -272,7 +276,8 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
     directCost, directVolume = 0.0, 0.0
     bi, bj, ba, bk = 0, 0, 0, 0.0
     costj, costk = 0.0, 0.0
-    transCost, carbCost, platCost = 0.0, 0.0, 0.0
+    dirTransCost, dirCarbCost, dirStockCost = 0.0, 0.0, 0.0
+    transCost, carbCost, platCost, stockCost = 0.0, 0.0, 0.0, 0.0
     # Iterate over sparse matrix
     rows = rowvals(solution.bins)
     vals = nonzeros(solution.bins)
@@ -288,11 +293,12 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
             )
             totalCost += arcCost
             # Counters 
-            arcVolume = sum(bin.volumeLoad for bin in arcBins; init=0)
+            arcVolume = sum(bin.load for bin in arcBins; init=0)
+            arcStockCost = sum(stock_cost(bin) for bin in arcBins; init=0.0)
             if arcVolume > 0
                 ba += 1
             end
-            arcCapaV = arcData.volumeCapacity
+            arcCapaV = arcData.capacity
             arcBk = arcVolume / arcCapaV
             if arcData.isLinear
                 bi += arcBk
@@ -303,6 +309,7 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
                 transCost += arcData.unitCost * arcVolume / arcCapaV
                 carbCost += arcData.carbonCost * arcVolume / arcCapaV
                 platCost += dstData.volumeCost * arcVolume / VOLUME_FACTOR
+                stockCost += arcData.distance * arcStockCost
                 continue
             end
             bi += length(arcBins)
@@ -314,10 +321,14 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
                     instance.timeSpaceGraph.networkNodes[j].type == :plant
                 directCost += arcCost
                 directVolume += arcVolume
+                dirTransCost += length(arcBins) * arcData.unitCost
+                dirCarbCost += arcData.carbonCost * arcVolume / arcCapaV
+                dirStockCost += arcData.distance * arcStockCost
             else
                 transCost += length(arcBins) * arcData.unitCost
                 carbCost += arcData.carbonCost * arcVolume / arcCapaV
                 platCost += dstData.volumeCost * arcVolume / VOLUME_FACTOR
+                stockCost += arcData.distance * arcStockCost
             end
             arcCostj = arcCost - (length(arcBins) - arcBj) * arcData.unitCost
             costj += arcCostj
@@ -353,13 +364,23 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
     println(
         "Cost computed : $(totalCost) (BP) / $(costj) bins (GC) (-$(round((totalCost - costj) * 100 / totalCost; digits=1))%) / $(costk) bins (LC) (-$(round((totalCost - costk) * 100 / totalCost; digits=1))%)",
     )
-    println("Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%)")
+    directCost = round(directCost; digits=1)
+    dirTransCost = round(dirTransCost; digits=1)
+    dirCarbCost = round(dirCarbCost; digits=1)
+    dirStockCost = round(dirStockCost; digits=1)
+    println(
+        "Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%) : $dirTransCost ($(round(dirTransCost * 100 / directCost; digits=1))%) (transport) / $dirCarbCost ($(round(dirCarbCost * 100 / directCost; digits=1))%) (carbon) / $dirStockCost ($(round(dirStockCost * 100 / directCost; digits=1))%) (stock)",
+    )
     nonDirectCost = totalCost - directCost
     println(
         "Non-direct costs : $nonDirectCost ($(round(nonDirectCost * 100 / totalCost; digits=1))%)",
     )
+    transCost = round(transCost; digits=1)
+    carbCost = round(carbCost; digits=1)
+    platCost = round(platCost; digits=1)
+    stockCost = round(stockCost; digits=1)
     println(
-        "Repartition : $transCost ($(round(transCost * 100 / nonDirectCost; digits=1))%) (transport) / $carbCost ($(round(carbCost * 100 / nonDirectCost; digits=1))%) (carbon) / $platCost ($(round(platCost * 100 / nonDirectCost; digits=1))%) (platforms)",
+        "Repartition : $transCost ($(round(transCost * 100 / nonDirectCost; digits=1))%) (transport) / $carbCost ($(round(carbCost * 100 / nonDirectCost; digits=1))%) (carbon) / $platCost ($(round(platCost * 100 / nonDirectCost; digits=1))%) (platforms) / $stockCost ($(round(stockCost * 100 / nonDirectCost; digits=1))%) (stock)",
     )
     println("Direct volume : $(round(Int, directVolume / VOLUME_FACTOR))m3")
     return totalCost
@@ -403,7 +424,7 @@ end
 function repair_paths!(
     paths::Vector{Vector{Int}}, instance::Instance; directRepair::Bool=false
 )
-    TTGraph = instance.travelTimeGraph
+    TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     repaired, fullrepair = 0, 0
     for (idx, path) in enumerate(paths)
         startNode = TTGraph.networkNodes[path[1]]
@@ -419,21 +440,23 @@ function repair_paths!(
                     TTGraph.costMatrix[src, dst] = TTGraph.networkArcs[src, dst].distance
                 else
                     TTGraph.costMatrix[src, dst] = arc_lb_filtering_update_cost(
-                        travelTimeGraph, timeSpaceGraph, bundle, src, dst
+                        TTGraph, TSGraph, bundle, src, dst
                     )
                 end
             end
             # Starting with partial repair
             suppNode, custNode = TTGraph.bundleSrc[idx], path[1]
             shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
-            if length(shortestPath) == 0
-                # Doing full repair if it didn't work 
+            if length(shortestPath) >= 2
+                # Partial repair worked
+                paths[idx] = vcat(shortestPath[1:(end - 1)], path)
+            else
+                # Partial repair didn't worked : doing full repair 
                 custNode = TTGraph.bundleDst[idx]
                 shortestPath, pathCost = shortest_path(TTGraph, suppNode, custNode)
                 fullrepair += 1
+                paths[idx] = shortestPath
             end
-            append!(path, shortestPath)
-            paths[idx] = vcat(shortestPath[1:(end - 1)], path)
         end
     end
     @info "Repaired $(repaired) paths, with full repair for $(fullrepair) paths"

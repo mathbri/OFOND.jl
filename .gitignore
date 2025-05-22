@@ -1,9 +1,11 @@
 /Manifest.toml
 *test.csv
 scripts/data/*
+scripts/academic data/*
 scripts/data_*
 scripts/export/*
 *.jld2
 debug.txt
 .CondaPkg/*
 debug*
+log*
