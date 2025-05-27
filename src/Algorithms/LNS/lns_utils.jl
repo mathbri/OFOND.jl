@@ -13,8 +13,9 @@ function slope_scaling_cost_update!(timeSpaceGraph::TimeSpaceGraph, solution::So
         arcData = timeSpaceGraph.networkArcs[src(arc), dst(arc)]
         # Updating current cost
         timeSpaceGraph.currentCost[src(arc), dst(arc)] = arcData.unitCost
-        # No scaling for linear arcs
+        # No scaling for linear, direct or outsource arcs
         arcData.isLinear && continue
+        arcData.type in [:direct, :outsource] && continue
         # Total volume on arc
         arcBins = solution.bins[src(arc), dst(arc)]
         arcVolume = sum(bin.load for bin in arcBins; init=0)

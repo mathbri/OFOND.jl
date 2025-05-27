@@ -132,14 +132,16 @@ function full_perturbation(instance::Instance)
 end
 
 # Construct a lower bound MILP on the full instance
-function full_lower_bound_milp(instance::Instance; withPacking::Bool=true)
+function full_lower_bound_milp(
+    instance::Instance; withPacking::Bool=true, withElementarity::Bool=true
+)
     # Creating an arc flow perturbation with all bundles 
     perturbation = full_perturbation(instance)
-    model = model_with_optimizer(; timeLimit=600.0, verbose=true)
+    model = model_with_optimizer(; timeLimit=300.0, verbose=true)
     add_variables!(model, instance, perturbation)
     # Putting the current cost back to default unit costs
     slope_scaling_cost_update!(instance.timeSpaceGraph, Solution(instance))
-    add_objective!(model, instance, perturbation)
+    add_objective!(model, instance, perturbation; lowerBound=true)
     if !withPacking
         for key in eachindex(model[:tau])
             delete(model, model[:tau][key])
@@ -151,7 +153,12 @@ function full_lower_bound_milp(instance::Instance; withPacking::Bool=true)
     if withPacking
         add_packing_constraints!(model, instance, perturbation)
         # add_cut_set_inequalities!(model, instance)
-        @info "MILP has $(num_constraints(model; count_variable_in_set_constraints=false)) constraints ($(length(model[:path])) path, $(length(model[:packing])) packing)"
+        if withElementarity
+            add_elementarity_constraints!(model, instance, perturbation)
+            @info "MILP has $(num_constraints(model; count_variable_in_set_constraints=false)) constraints ($(length(model[:path])) path, $(length(model[:packing])) packing, $(length(model[:elementarity])) elementarity)"
+        else
+            @info "MILP has $(num_constraints(model; count_variable_in_set_constraints=false)) constraints ($(length(model[:path])) path, $(length(model[:packing])) packing)"
+        end
     else
         @info "MILP has $(num_constraints(model; count_variable_in_set_constraints=false)) constraints (path)"
     end
@@ -174,6 +181,43 @@ function milp_lower_bound!(solution::Solution, instance::Instance; verbose::Bool
         sort_order_content!(instance)
         update_solution!(solution, instance, instance.bundles, newPaths; sorted=true)
     else
+        @warn "No solution found, only bound"
+        # If no path computed, returning a shortest delivery solution 
+        shortest_delivery!(solution, instance)
+    end
+    return objBound
+end
+
+function milp_lower_bound2!(solution::Solution, instance::Instance; verbose::Bool=false)
+    println("MILP lower bound construction")
+    # Buidling model
+    model = full_lower_bound_milp(instance; withElementarity=true)
+    # Getting bound
+    optimize!(model)
+    objBound = objective_bound(model)
+    println("Lower bound computed = $objBound")
+    # Getting the solution paths (if any)
+    if has_values(model)
+        perturbation = full_perturbation(instance)
+        newPaths = get_paths(model, instance, perturbation)
+        sort_order_content!(instance)
+        update_solution!(solution, instance, instance.bundles, newPaths; sorted=true)
+        # Comparing solutions
+        # for arc in instance.timeSpaceGraph.commonArcs
+        #     solBins = solution.bins[arc]
+        #     nSolBins = length(solBins)
+        #     nMilpBins = value(model[:tau][arc])
+        #     if nSolBins - nMilpBins > 1
+        #         println("Milp bins and Sol bins disagree")
+        #         println("Arc $arc : $(instance.timeSpaceGraph.networkArcs[arc])")
+        #         println("nMilpBins = $nMilpBins")
+        #         println("nSolBins = $nSolBins")
+        #         println(solBins)
+        #         @assert nSolBins == nMilpBins
+        #     end
+        # end
+    else
+        @warn "No solution found, only bound"
         # If no path computed, returning a shortest delivery solution 
         shortest_delivery!(solution, instance)
     end
@@ -341,7 +385,9 @@ function mix_greedy_and_lower_bound!(
         bSrc = TTGraph.bundleSrc[bundleIdx]
         bDst = TTGraph.bundleDst[bundleIdx]
         # Computing greedy shortest path
-        gPath, _ = greedy_insertion2(gSol, TTGraph, TSGraph, bundle, bSrc, bDst, CHANNEL)
+        gPath, gCost = greedy_insertion2(
+            gSol, TTGraph, TSGraph, bundle, bSrc, bDst, CHANNEL
+        )
         upCost = update_solution!(gSol, instance, bundle, gPath; sorted=true)
         # verification
         if !isapprox(upCost, gCost; atol=1.0)
@@ -493,6 +539,15 @@ function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit
             instance, perturbation; verbose=true, optVerbose=true, warmStart=true
         )
         !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
+        # Updating solution
+        changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
+        bunIdxs = perturbation.bundleIdxs[changedIdxs]
+        println("Changed bundles : $(length(bunIdxs))")
+        pertBundles = instance.bundles[bunIdxs]
+        oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
+        update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
+        update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
+        # Computing cost change 
         newBestCost = load_plan_design_cost(instance, solution)
         newRealCost = compute_cost(instance, solution)
         println(
@@ -502,14 +557,7 @@ function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit
             "Improvement : $(round(newBestCost - bestCost; digits=1)) (Real improvement : $(round(newRealCost - realCost; digits=1)))",
         )
         bestCost, realCost = newBestCost, newRealCost
-        # Updating solution
-        changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
-        bunIdxs = perturbation.bundleIdxs[changedIdxs]
-        println("Changed bundles : $(length(bunIdxs))")
-        pertBundles = instance.bundles[bunIdxs]
-        oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
-        update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
-        update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
+        i += 1
     end
 end
 

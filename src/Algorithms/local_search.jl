@@ -8,9 +8,7 @@
 # When we will split bundles, a new neighborhhod based on the perturb than optimize is to a full path for the old bundle and then reintroduce with the new bundles
 # It can also be done between two nodes of the shared network 
 
-# TODO : remove feasibility assertions in production
-
-# TODO : test the new functions !
+# TODO : add a milp packing improvement for direct and non-linear outsource arcs in a final packing option 
 
 # Improving all bin packings if possible
 # The idea is to put skip linear to false just before returning the solution to get a more compact solution but it does not affect the cost
@@ -695,27 +693,49 @@ function two_node_common_incremental2!(
         (bundle, path) in zip(twoNodeBundles, fullOldPaths)
     )
     estimRemCost <= costThreshold && return 0.0, 0
+
+    # startCost = compute_cost(instance, solution; verbose=false)
     # Saving previous bins and removing bundle 
     oldBins = save_previous_bins(
         solution, get_bins_updated(TSGraph, TTGraph, twoNodeBundles, fullOldPaths)
     )
-    costRemoved = update_solution!(
-        solution, instance, twoNodeBundles, commonOldPaths; remove=true
-    )
+    # testSol = deepcopy(solution)
+    # costRemoved2 = update_solution!(
+    #     testSol, instance, twoNodeBundles, commonOldPaths; remove=true
+    # )
+    costRemoved = 0.0
+    for (bundle, path) in zip(twoNodeBundles, commonOldPaths)
+        costRemoved += update_solution!(solution, instance, bundle, path; remove=true)
+        # afterRemovalCost = compute_cost(instance, solution; verbose=false)
+        # println("\nCost removal = $(costRemoved)")
+        # println("Cost removal 2 = $(costRemoved2)")
+        # println("Recomputed cost removal = $(afterRemovalCost - startCost)\n")
+        # @assert isapprox(costRemoved, afterRemovalCost - startCost; atol=1.0)
+    end
+
+    # @assert isapprox(costRemoved, costRemoved2; atol=0.1) "costRemoved = $costRemoved / costRemoved2 = $costRemoved2"
+
+    # afterRemovalCost = compute_cost(instance, solution; verbose=false)
+    # @assert isapprox(costRemoved, afterRemovalCost - startCost; atol=1.0) "afterRemovalCost - startCost = $(afterRemovalCost - startCost) ($afterRemovalCost - $startCost) / costRemoved = $costRemoved"
+
     # Creating a unique bundle for all the bundles concerned
     commonBundle = fuse_bundles(instance, twoNodeBundles, CAPACITIES)
     # Inserting it back
-
-    # TODO : should be able to indicate if we want to force path admissibility because not always possible at this stage and reintroduction will fix it
-
     newPath, pathCost = greedy_insertion2(
         solution, TTGraph, TSGraph, commonBundle, src, dst, CHANNEL
     )
     # Updating solution for the next step
     newPaths = [newPath for _ in 1:length(twoNodeBundles)]
     updateCost = update_solution!(solution, instance, twoNodeBundles, newPaths; sorted=true)
+
+    # afterReinsertionCost = compute_cost(instance, solution; verbose=false)
+    # @assert isapprox(updateCost, afterReinsertionCost - afterRemovalCost; atol=1.0) "afterReinsertionCost - afterRemovalCost = $(afterReinsertionCost - afterRemovalCost) ($afterReinsertionCost - $afterRemovalCost) / updateCost = $updateCost"
+    # @assert isapprox(pathCost, updateCost; atol=1.0) "pathCost = $pathCost / updateCost = $updateCost"
+
     # WARNING : Cost increase can happen after removal and re-introduction
-    improvement = updateCost + costRemoved
+    # improvement = updateCost + costRemoved
+    # @assert isapprox(improvement, afterReinsertionCost - startCost; atol=1.0) "afterReinsertionCost - startCost = $(afterReinsertionCost - startCost) ($afterReinsertionCost - $startCost) / improvement = $improvement"
+
     bunCounter = length(twoNodeBundles)
     # Inserting back concerned bundles
     for (i, bIdx) in enumerate(shuffle(twoNodeBundleIdxs))
@@ -732,6 +752,9 @@ function two_node_common_incremental2!(
         i % 100 == 0 && print(".")
         (improvement < -1) && (bunCounter += 1)
     end
+
+    # afterBunReinsertCost = compute_cost(instance, solution; verbose=false)
+    # @assert isapprox(improvement, afterBunReinsertCost - startCost; atol=1.0) "afterBunReinsertCost - startCost = $(afterBunReinsertCost - startCost) ($afterBunReinsertCost - $startCost) / improvement = $improvement"
 
     # If no improvement at the end, reverting solution to its first state
     if improvement > 1e2
@@ -903,184 +926,6 @@ function local_search!(
     return totalImprovement
 end
 
-# function local_search1!(
-#     solution::Solution,
-#     instance::Instance;
-#     timeLimit::Int=300,
-#     stepTimeLimit::Int=60,
-#     firstLoop::Bool=true,
-# )
-#     # Combine the three small neighborhoods
-#     TTGraph = instance.travelTimeGraph
-#     sort_order_content!(instance)
-#     startCost = compute_cost(instance, solution)
-#     threshold = 5e-5 * startCost
-#     CAPACITIES = Int[]
-#     ALL_COMMODITIES = Commodity[]
-#     totalImprovement = 0.0
-
-#     # The first loop on bundle reintroduction is optional
-#     if firstLoop
-#         bunCounter = 0
-#         startTime = time()
-#         bundleIdxs = randperm(length(instance.bundles))
-#         print("Bundle reintroduction progress : ")
-#         percentIdx = ceil(Int, length(bundleIdxs) / 100)
-#         for (i, bundleIdx) in enumerate(bundleIdxs)
-#             bundle = instance.bundles[bundleIdx]
-#             improvement = bundle_reintroduction!(
-#                 solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
-#             )
-#             i % 10 == 0 && print("|")
-#             i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
-#             # loopImprovement += improvement
-#             totalImprovement += improvement
-#             improvement < -1e-3 && (bunCounter += 1)
-#             time() - startTime > stepTimeLimit && break
-#             time() - startTime > timeLimit && break
-#         end
-#         println()
-#         feasible = is_feasible(instance, solution)
-#         @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
-#             totalImprovement :time = round((time() - startTime) * 1000) / 1000 :feasible =
-#             feasible
-#     end
-
-#     # startTime = time()
-#     # remainingTime = round(Int, timeLimit - (time() - startTime))
-#     # stepTimeLimit = min(stepTimeLimit, remainingTime)
-#     # bundleIdxs = randperm(length(instance.bundles))
-#     # totalImprovement += reintroduce_bundles!(
-#     #     solution, instance, bundleIdxs; costThreshold=threshold, timeLimit=stepTimeLimit
-#     # )
-
-#     # First, two node incremental to consolidate on shared network
-#     stepStartTime = time()
-#     twoNodeImprovement = 0.0
-#     twoNodeCounter = 0
-#     twoNodeTested = 0
-#     srcNodes = TTGraph.commonNodes
-#     plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
-#     dstNodes = vcat(srcNodes, plantNodes)
-#     threshold = 5e-5 * compute_cost(instance, solution)
-#     i = 0
-#     percentIdx = ceil(Int, length(srcNodes) * length(dstNodes) / 100)
-#     barIdx = ceil(Int, percentIdx / 5)
-#     println("Two node incremental progress : (| = $barIdx combinations)")
-#     improvement, bunCounter = 0.0, 0
-#     for dst in shuffle(dstNodes), src in shuffle(srcNodes)
-#         i += 1
-#         i % percentIdx == 0 &&
-#             print(" $(round(Int, i * 100 / (length(srcNodes) * length(dstNodes))))% ")
-#         i % barIdx == 0 && print("|")
-#         are_nodes_candidate(TTGraph, src, dst) || continue
-
-#         improvement, count = two_node_incremental!(
-#             solution, instance, src, dst, CAPACITIES; costThreshold=threshold
-#         )
-
-#         twoNodeTested += 1
-#         (improvement < -1e-1) && (twoNodeCounter += 1)
-#         (improvement < -1) && (bunCounter += count)
-#         twoNodeImprovement += improvement
-#         totalImprovement += improvement
-#         time() - stepStartTime > stepTimeLimit && break
-#         time() - startTime > timeLimit && break
-#     end
-#     println()
-#     @info "Total two-node improvement" :couples_computed = twoNodeTested :improved =
-#         twoNodeCounter :bundles_changed = bunCounter :improvement = twoNodeImprovement :time =
-#         round((time() - startTime) * 1000) / 1000
-
-#     # Second, two node incremental to optimize shared network
-#     # remainingTime = round(Int, timeLimit - (time() - startTime))
-#     # stepTimeLimit = min(stepTimeLimit, remainingTime)
-#     # threshold = 5e-5 * compute_cost(instance, solution)
-#     # improv, count = all_two_nodes!(
-#     #     solution, instance, srcNodes, dstNodes; threshold=threshold, timeLimit=stepTimeLimit
-#     # )
-#     # totalImprovement += improv
-
-#     stepStartTime = time()
-#     twoNodeImprovement = 0.0
-#     twoNodeCounter = 0
-#     twoNodeTested = 0
-#     plantNodes = findall(x -> x.type == :plant, TTGraph.networkNodes)
-#     two_node_nodes = vcat(TTGraph.commonNodes, plantNodes)
-#     i = 0
-#     percentIdx = ceil(Int, length(two_node_nodes) * length(TTGraph.commonNodes) / 100)
-#     barIdx = ceil(Int, percentIdx / 5)
-#     println("Two node common incremental progress : (| = $barIdx combinations)")
-#     for dst in shuffle(two_node_nodes), src in shuffle(TTGraph.commonNodes)
-#         i += 1
-#         i % percentIdx == 0 && print(
-#             " $(round(Int, i * 100 / (length(two_node_nodes) * length(TTGraph.commonNodes))))% ",
-#         )
-#         i % barIdx == 0 && print("|")
-#         are_nodes_candidate(TTGraph, src, dst) || continue
-#         improvement, count = two_node_common_incremental!(
-#             solution, instance, src, dst, CAPACITIES; costThreshold=threshold
-#         )
-#         twoNodeTested += 1
-#         (improvement < -1e-1) && (twoNodeCounter += 1)
-#         (improvement < -1) && (bunCounter += count)
-#         twoNodeImprovement += improvement
-#         totalImprovement += improvement
-#         # More time beacuse helps a lot
-#         time() - stepStartTime > 2 * stepTimeLimit && break
-#         time() - startTime > timeLimit && break
-#     end
-#     println()
-#     @info "Total two-node improvement" :couples_computed = twoNodeTested :improved =
-#         twoNodeCounter :bundles_changed = bunCounter :improvement = twoNodeImprovement :time =
-#         round((time() - startTime) * 1000) / 1000
-
-#     # Bundle reintroduction at last
-#     stepStartTime = time()
-#     bundleIdxs = randperm(length(instance.bundles))
-#     bunCounter = 0
-#     print("Bundle reintroduction progress : ")
-#     percentIdx = ceil(Int, length(bundleIdxs) / 100)
-#     threshold = 5e-5 * startCost
-#     reintroImprov = 0.0
-#     # Bundle reintroduction at last 
-#     for (i, bundleIdx) in enumerate(bundleIdxs)
-#         bundle = instance.bundles[bundleIdx]
-#         improvement = bundle_reintroduction!(
-#             solution, instance, bundle, CAPACITIES; sorted=true, costThreshold=threshold
-#         )
-#         i % 10 == 0 && print("|")
-#         i % percentIdx == 0 && print(" $(round(Int, i * 100 / length(bundleIdxs)))% ")
-#         reintroImprov += improvement
-#         totalImprovement += improvement
-#         improvement < -1e-3 && (bunCounter += 1)
-#         time() - stepStartTime > stepTimeLimit && break
-#         time() - startTime > timeLimit && break
-#     end
-#     println()
-#     feasible = is_feasible(instance, solution)
-#     @info "Total bundle re-introduction improvement" :bundles_updated = bunCounter :improvement =
-#         reintroImprov :time = round((time() - startTime) * 1000) / 1000 :feasible = feasible
-
-#     # remainingTime = round(Int, timeLimit - (time() - startTime))
-#     # stepTimeLimit = min(stepTimeLimit, remainingTime)
-#     # bundleIdxs = randperm(length(instance.bundles))
-#     # totalImprovement += reintroduce_bundles!(
-#     #     solution, instance, bundleIdxs; costThreshold=threshold, timeLimit=stepTimeLimit
-#     # )
-
-#     # Finally, bin packing improvement to optimize packings
-#     startTime = time()
-#     improvement = bin_packing_improvement!(
-#         solution, instance, ALL_COMMODITIES, CAPACITIES; sorted=true
-#     )
-#     @info "Bin packing improvement" :improvement = improvement :time =
-#         round((time() - startTime) * 1000) / 1000
-#     totalImprovement += improvement
-#     @info "Full local search done" :total_improvement = totalImprovement
-#     return totalImprovement
-# end
-
 function local_search2!(
     solution::Solution, instance::Instance; timeLimit::Int=300, stepTimeLimit::Int=60
 )
@@ -1120,12 +965,12 @@ function local_search2!(
     return totImprov
 end
 
-# TODO : add changes from lenovo
 function local_search3!(
     solution::Solution, instance::Instance; timeLimit::Int=300, stepTimeLimit::Int=60
 )
     sort_order_content!(instance)
-    threshold = 5e-5 * compute_cost(instance, solution)
+    startCost = compute_cost(instance, solution)
+    threshold = 5e-5 * startCost
     CAPA, COMMO = Int[], Commodity[]
     CHANNEL = create_filled_channel()
     totImprov, noImprov, i = 0.0, 0, 0
@@ -1135,7 +980,9 @@ function local_search3!(
     dstNodes = vcat(srcNodes, plantNodes)
     # Looping while there is time
     startTime = time()
-    while (time() - startTime < timeLimit) && (i <= 150_000) && (noImprov < 5000)
+    while (time() - startTime < timeLimit) &&
+              (i <= 150_000) &&
+              (noImprov < 2 * length(instance.bundles))
         startLoopImprov = totImprov
         # TODO : make the probability of the neighborhood vary with time ? skewed towards bundle reintroduction ? 
         # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
@@ -1152,7 +999,8 @@ function local_search3!(
 
             # TODO : for bundles separated by parts, (suppliers, plants) couples should also be candidate
 
-            while !are_nodes_candidate(TTGraph, src, dst)
+            while !are_nodes_candidate(TTGraph, src, dst) &&
+                (time() - startTime < timeLimit)
                 src, dst = rand(srcNodes), rand(dstNodes)
             end
             improvement, count = two_node_common_incremental2!(
@@ -1226,14 +1074,15 @@ function local_search4!(
             if rand() < 0.5
                 # Bundle reintroduction
                 bundle = instance.bundles[bundleIdxs[i % length(bundleIdxs) + 1]]
-                totImprov += bundle_reintroduction!(
+                totImprov += bundle_reintroduction2!(
                     solution, instance, bundle, CHANNEL; costThreshold=threshold
                 )
             else
                 # Two node common incremental
                 src, dst = rand(srcNodes), rand(dstNodes)
                 # src, dst = 150, 352
-                while !are_nodes_candidate(TTGraph, src, dst)
+                while !are_nodes_candidate(TTGraph, src, dst) &&
+                    (time() - startTime < timeLimit)
                     src, dst = rand(srcNodes), rand(dstNodes)
                 end
                 improvement, count = two_node_common_incremental2!(

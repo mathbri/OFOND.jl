@@ -57,6 +57,15 @@ function num_path_constr(model::Model)
     end
 end
 
+function num_elem_constr(model::Model)
+    try
+        n = length(model[:elementarity])
+        return n
+    catch e
+        return 0
+    end
+end
+
 function num_pack_constr(model::Model)
     try
         n = length(model[:packing])

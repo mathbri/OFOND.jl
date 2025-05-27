@@ -148,15 +148,49 @@ function add_c_strong_inequalities!(model::Model, instance::Instance) end
 
 # An interesting question here is that by not enforcing that, the search space is larger and easier to explore, so do we really want to enforce here (an not at the very end) the strict path admissibility ?
 
-# TODO 
-
-function path_admissibility_callback() end
+function add_elementarity_constraints!(
+    model::Model, instance::Instance, perturbation::Perturbation
+)
+    # These constraints are implicit in the path model
+    if is_attract_reduce(perturbation)
+        return nothing
+    end
+    TTGraph = instance.travelTimeGraph
+    bundleIdxs = perturbation.bundleIdxs
+    elemConExpr = Dict{Int,Dict{String,AffExpr}}()
+    # Filling expressions bundle by bundle
+    for bIdx in bundleIdxs
+        elemConExpr[bIdx] = Dict{String,AffExpr}()
+        # println("Bundle $bIdx")
+        # println(pathConExpr[bIdx])
+        # For all bundle arcs, adding the corresponding variable to the expressions
+        for arc in TTGraph.bundleArcs[bIdx]
+            aSrc, aDst = arc
+            # If the arc destination is a platform or a port, adding bundle variable to constraint
+            dstData = TTGraph.networkNodes[aDst]
+            if dstData.type in [:platform, :pol, :pod]
+                expr = get!(elemConExpr[bIdx], dstData.account, AffExpr(0))
+                add_to_expression!(expr, 1, model[:x][bIdx, arc])
+            end
+            # println("Arc $arc")
+            # println(pathConExpr[bIdx])
+        end
+    end
+    # println(elemConExpr[1])
+    @constraint(
+        model,
+        elementarity[b in bundleIdxs, v in keys(elemConExpr[b])],
+        elemConExpr[b][v] <= 1
+    )
+end
 
 ###########################################################################################
 ################################   Adding objective   #####################################
 ###########################################################################################
 
-function milp_arc_cost(instance::Instance, bIdx::Int, src::Int, dst::Int)
+function milp_arc_cost(
+    instance::Instance, bIdx::Int, src::Int, dst::Int; lowerBound::Bool=false
+)
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     bundle = instance.bundles[bIdx]
     arcData = TTGraph.networkArcs[src, dst]
@@ -168,7 +202,11 @@ function milp_arc_cost(instance::Instance, bIdx::Int, src::Int, dst::Int)
     if is_outsource_direct(TTGraph, src, dst)
         for order in bundle.orders
             tSrc, tDst = time_space_projector(TTGraph, TSGraph, src, dst, order)
-            orderTrucks = get_lb_transport_units(order, arcData)
+            orderTrucks = if lowerBound
+                get_lb_transport_units(order, arcData)
+            else
+                get_transport_units(order, arcData)
+            end
             cost += orderTrucks * TSGraph.currentCost[tSrc, tDst]
         end
     end
@@ -176,7 +214,9 @@ function milp_arc_cost(instance::Instance, bIdx::Int, src::Int, dst::Int)
 end
 
 # Add the objective function to the model
-function add_objective!(model::Model, instance::Instance, perturbation::Perturbation)
+function add_objective!(
+    model::Model, instance::Instance, perturbation::Perturbation; lowerBound::Bool=false
+)
     tau = model[:tau]
     TTGraph, TSGraph = instance.travelTimeGraph, instance.timeSpaceGraph
     objExpr = AffExpr()
@@ -190,14 +230,14 @@ function add_objective!(model::Model, instance::Instance, perturbation::Perturba
         if is_attract_reduce(perturbation)
             z = model[:z]
             oldPathCost = sum(
-                milp_arc_cost(instance, bIdx, src, dst) for
+                milp_arc_cost(instance, bIdx, src, dst; lowerBound=lowerBound) for
                 (src, dst) in partition(perturbation.oldPaths[bIdx], 2, 1)
             )
             # Adding to the objective oldPathCost * (1 - z[bIdx])
             add_to_expression!(objExpr, oldPathCost)
             add_to_expression!(objExpr, z[bIdx], -oldPathCost)
             newPathCost = sum(
-                milp_arc_cost(instance, bIdx, src, dst) for
+                milp_arc_cost(instance, bIdx, src, dst; lowerBound=lowerBound) for
                 (src, dst) in partition(perturbation.newPaths[bIdx], 2, 1)
             )
             # Adding to the objective newPathCost * z[bIdx]
@@ -207,7 +247,7 @@ function add_objective!(model::Model, instance::Instance, perturbation::Perturba
         # Adding a cost per arc for others
         for (src, dst) in TTGraph.bundleArcs[bIdx]
             x = model[:x]
-            arcCost = milp_arc_cost(instance, bIdx, src, dst)
+            arcCost = milp_arc_cost(instance, bIdx, src, dst; lowerBound=lowerBound)
             add_to_expression!(objExpr, x[bIdx, (src, dst)], arcCost)
         end
     end

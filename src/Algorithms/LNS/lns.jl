@@ -18,10 +18,11 @@ function solve_lns_milp(
         @info "MILP has $(num_variables(model)) variables ($(num_binaries(model)) binary and $(num_integers(model)) integer)"
     end
     add_path_constraints!(model, instance, perturbation)
+    add_elementarity_constraints!(model, instance, perturbation)
     add_packing_constraints!(model, instance, perturbation)
     withCuts && add_cut_set_inequalities!(model, instance)
     if verbose
-        @info "MILP has $(num_constr(model)) constraints ($(num_path_constr(model)) path, $(num_pack_constr(model)) packing and $(num_cut_constr(model)) cuts)"
+        @info "MILP has $(num_constr(model)) constraints ($(num_path_constr(model)) path, $(num_elem_constr(model)) elementarity, $(num_pack_constr(model)) packing and $(num_cut_constr(model)) cuts)"
     end
     add_objective!(model, instance, perturbation)
     warmStart && warm_start!(model, instance, perturbation)
@@ -192,7 +193,7 @@ function ILS!(
     solution::Solution,
     instance::Instance;
     timeLimit::Int=1800,
-    perturbTimeLimit::Int=300,
+    perturbTimeLimit::Int=150,
     lsTimeLimit::Int=300,
     lsStepTimeLimit::Int=60,
     resetCost::Bool=false,
@@ -215,31 +216,35 @@ function ILS!(
     changed, noChange = 0, 0
     changeThreshold = 0.1 * length(instance.bundles)
     while time() - start < timeLimit
-        # neighborhood = rand(PERTURBATIONS)
-        neighborhood = :single_plant
-        improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
-        @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
-            improv :change = change
-        changed += change
-        # If enough path changed
-        if changed >= changeThreshold
-            # Applying local search 
-            local_search3!(
-                solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
-            )
-            changed = 0
-            # If new best solution found, store it
-            if compute_cost(instance, solution) < bestCost
-                bestSol = solution_deepcopy(solution, instance)
-                bestCost = compute_cost(instance, solution)
-                @info "New best solution found" :cost = bestCost :time = round(
-                    time() - start
+        neighborhood = rand(PERTURBATIONS)
+        # neighborhood = :single_plant
+        # neighborhood = :attract_reduce
+        startMilp = time()
+        while time() - startMilp < perturbTimeLimit
+            improv, change = perturbate!(solution, instance, neighborhood; verbose=verbose)
+            @info "$neighborhood perturbation(s) applied (without local search)" :improvement =
+                improv :change = change
+            changed += change
+            # If enough path changed
+            if changed >= changeThreshold
+                # Applying local search 
+                local_search3!(
+                    solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
                 )
+                changed = 0
+                # If new best solution found, store it
+                if compute_cost(instance, solution) < bestCost
+                    bestSol = solution_deepcopy(solution, instance)
+                    bestCost = compute_cost(instance, solution)
+                    @info "New best solution found" :cost = bestCost :time = round(
+                        time() - start
+                    )
+                end
+                # Applying cost scaling
+                slope_scaling_cost_update!(instance, solution)
+            else
+                println("Change threshold : $(change * 100 / changeThreshold)%")
             end
-            # Applying cost scaling
-            slope_scaling_cost_update!(instance, solution)
-        else
-            println("Change threshold : $(change * 100 / changeThreshold)%")
         end
         # Recording step with no change 
         if change == 0
@@ -255,7 +260,6 @@ function ILS!(
         if noChange >= 6
             break
         end
-        throw(ErrorException("debug"))
     end
     println("\n")
     # Final local search : applying large one
@@ -266,8 +270,8 @@ function ILS!(
     totImprov = round(Int, finalCost - startCost)
     @info "Full ILS done" :time = round(time() - start; digits=2) :improvement = totImprov
     # Reverting if cost augmented by more than 0.75% (heuristic level)
-    if totImprov > 0.0075 * startCost
-        println("Reverting solution because too much cost degradation")
+    if totImprov > startCost
+        println("Reverting solution because cost degradation")
         revert_solution!(solution, instance, prevSol)
         return 0.0
     else
