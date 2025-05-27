@@ -256,9 +256,7 @@ function plant_by_plant_milp!(solution::Solution, instance::Instance)
             plantIdxs = plantIdxs[(stopIdx + 1):end]
             # Computing new paths
             perturbation = arc_flow_perturbation(instance, solution, bunGroupIdxs)
-            bunPaths = solve_lns_milp(
-                instance, perturbation; warmStart=false, verbose=true, optVerbose=true
-            )
+            bunPaths = solve_lns_milp(instance, perturbation; warmStart=false, verbose=true)
             # Adding to solution
             bunGroup = instance.bundles[bunGroupIdxs]
             totCost += update_solution!(solution, instance, bunGroup, bunPaths; sorted=true)
@@ -535,8 +533,44 @@ function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit
         is_perturbation_empty(perturbation; verbose=true) && continue
         println("Bundles : $(length(perturbation.bundleIdxs))")
         # With warm start, guaranteed to get a better solution
+        pertPaths = solve_lns_milp(instance, perturbation; verbose=true, warmStart=true)
+        !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
+        # Updating solution
+        changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
+        bunIdxs = perturbation.bundleIdxs[changedIdxs]
+        println("Changed bundles : $(length(bunIdxs))")
+        pertBundles = instance.bundles[bunIdxs]
+        oldPaths, pertPaths = perturbation.oldPaths[changedIdxs], pertPaths[changedIdxs]
+        update_solution!(solution, instance, pertBundles, oldPaths; remove=true)
+        update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
+        # Computing cost change 
+        newBestCost = load_plan_design_cost(instance, solution)
+        newRealCost = compute_cost(instance, solution)
+        println(
+            "New best cost : $(round(newBestCost; digits=1)) (Real cost : $(round(newRealCost; digits=1)))",
+        )
+        println(
+            "Improvement : $(round(newBestCost - bestCost; digits=1)) (Real improvement : $(round(newRealCost - realCost; digits=1)))",
+        )
+        bestCost, realCost = newBestCost, newRealCost
+        i += 1
+    end
+end
+
+function load_plan_design_ils2!(solution::Solution, instance::Instance; timeLimit::Int=300)
+    bestCost = load_plan_design_cost(instance, solution)
+    realCost = compute_cost(instance, solution)
+    @info "Starting load plan design ILS" :start_cost = bestCost :real_cost = realCost
+    start, i = time(), 0
+    while time() - start < timeLimit
+        # Perturbating using single plant
+        @info "Starting perturbation $i (single_plant)"
+        perturbation = get_perturbation(:single_plant, instance, solution)
+        is_perturbation_empty(perturbation; verbose=true) && continue
+        println("Bundles : $(length(perturbation.bundleIdxs))")
+        # With warm start, guaranteed to get a better solution
         pertPaths = solve_lns_milp(
-            instance, perturbation; verbose=true, optVerbose=true, warmStart=true
+            instance, perturbation; verbose=true, warmStart=true, lowerBoundObj=true
         )
         !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
         # Updating solution
@@ -584,20 +618,19 @@ function split_by_part_lower_bound!(solution::Solution, instance::Instance)
     shortestSol = Solution(instance)
     shortest_delivery!(shortestSol, instance)
     # Constructing this attract reduce perturbation
-    # Bundles already on the direct can be ignored (we are going to decrease the cost of using the direct)
-    bunIdxs = findall(path -> length(path) > 2, lowerBoundSol.bundlePaths)
-    # Bundles without direct delivery possible can also be ignored (no choice possible)
-    filter!(idx -> length(shortestSol.bundlePaths[idx]) == 2, bunIdxs)
-    oldPaths = lowerBoundSol.bundlePaths[bunIdxs]
-    newPaths = shortestSol.bundlePaths[bunIdxs]
+    oldPaths = lowerBoundSol.bundlePaths
+    newPaths = shortestSol.bundlePaths
     loads = map(bins -> 0, solution.bins)
-    perturb = Perturbation(:attract_reduce, bunIdxs, oldPaths, newPaths, loads)
+    perturbation = Perturbation(
+        :attract_reduce, idx(instance.bundles), oldPaths, newPaths, loads
+    )
     # Constructing the model
     model = model_with_optimizer(; verbose=true)
     @variable(model, z[perturbation.bundleIdxs], Bin)
     arcDatas = TSGraph.networkArcs
     directArcs = [
-        (a.src, a.dst) for arc in edges(TSGraph.graph) if is_direct(arcDatas[a.src, a.dst])
+        (arc.src, arc.dst) for
+        arc in edges(TSGraph.graph) if is_direct(arcDatas[arc.src, arc.dst])
     ]
     @variable(model, direct[arc in directArcs], Int)
     @info "MILP has $(num_variables(model)) variables ($(num_binaries(model)) binary and $(num_integers(model)) integer)"
@@ -612,9 +645,27 @@ function split_by_part_lower_bound!(solution::Solution, instance::Instance)
     # Completing the expressions with the path variables
     for bIdx in perturbation.bundleIdxs
         bundle = instance.bundles[bIdx]
+        # Only packing in the direct arc
+        if length(newPaths[bIdx]) > 2
+            continue
+        end
+        bSrc, bDst = newPaths[bIdx]
         for order in bundle.orders
-            # Only packing in the direct arc
-            bSrc, bDst = newPaths[bIdx]
+            tsSrc, tsDst = time_space_projector(TTGraph, TSGraph, bSrc, bDst, order)
+            # Getting the corresponding expression
+            packExpr = packConExpr[(tsSrc, tsDst)]
+            # Add to expression order.volume * z[bIdx]
+            add_to_expression!(packExpr, z[bIdx], order.volume)
+        end
+    end
+    for bIdx in perturbation.bundleIdxs
+        bundle = instance.bundles[bIdx]
+        # Only packing in the direct arc
+        if length(oldPaths[bIdx]) > 2
+            continue
+        end
+        bSrc, bDst = oldPaths[bIdx]
+        for order in bundle.orders
             tsSrc, tsDst = time_space_projector(TTGraph, TSGraph, bSrc, bDst, order)
             # Getting the corresponding expression
             packExpr = packConExpr[(tsSrc, tsDst)]
@@ -626,6 +677,7 @@ function split_by_part_lower_bound!(solution::Solution, instance::Instance)
     @info "MILP has $(num_constr(model)) constraints"
 
     # Adapting the objective 
+    slope_scaling_cost_update!(TSGraph, Solution(instance))
     objExpr = AffExpr()
     # Adding costs of the common arcs in the time space graph 
     for (src, dst) in directArcs
@@ -634,7 +686,7 @@ function split_by_part_lower_bound!(solution::Solution, instance::Instance)
     emptySol = Solution(instance)
     # Adding costs of arcs in the travel time graph
     for bIdx in perturbation.bundleIdxs
-        bundle = instance.bundle[bIdx]
+        bundle = instance.bundles[bIdx]
         # Adding a cost per path for attract reduce
         oldPathCost = sum(
             arc_lb_update_cost(
@@ -660,13 +712,10 @@ function split_by_part_lower_bound!(solution::Solution, instance::Instance)
     value, bound = JuMP.objective_value(model) + 1e-5, objective_bound(model)
     gap = round(min(100, abs(value - bound) / value); digits=2)
     @info "MILP solved in $(round(time() - start; digits=2)) s with an Objective value = $(round(value; digits=2)) (gap = $gap %)"
+    @info "Lower bound computed : $(round(bound; digits=2))"
 
-    bunPaths = get_paths(model, instance, perturb)
-    update_solution!(solution, instance, instance.bundles[bunIdxs], bunPaths; sorted=true)
-    return totCost = compute_cost(instance, solution)
-
-    # For the lower bound we want to add the objective value and the costs from bundles not considered
-
+    bunPaths = get_paths(model, instance, perturbation)
+    return update_solution!(solution, instance, instance.bundles, bunPaths; sorted=true)
 end
 
 ###########################################################################################

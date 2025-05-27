@@ -159,6 +159,9 @@ function julia_main_test(instanceName::String="tiny")
     run_simple_heursitic(instance, lower_bound!)
     println("\n######################################\n")
 
+    run_simple_heursitic(instance, split_by_part_lower_bound!)
+    println("\n######################################\n")
+
     # Load plan design lower bound 
     if length(instance.bundles) < 1200
         run_simple_heursitic(instance, milp_lower_bound!)
@@ -182,10 +185,12 @@ function julia_main_test(instanceName::String="tiny")
     println("\n######################################\n")
 
     # Greedy 
-    run_simple_heursitic(instance, greedy!)
+    greedySol = run_simple_heursitic(instance, greedy!)
     println("\n######################################\n")
 
-    return 0
+    if instanceName == "tiny"
+        return 0
+    end
 
     # Local search on current 
     # run_local_search(instance, local_search3!, solution, 30)
@@ -194,10 +199,18 @@ function julia_main_test(instanceName::String="tiny")
     run_local_search(instance, local_search4!, solution, 300)
     println("\n######################################\n")
 
-    # return 0
+    if instanceName == "extra_small"
+        return 0
+    end
 
     # Load plan design ils on current 
     run_local_search(instance, load_plan_design_ils!, solution, 300)
+    println("\n######################################\n")
+
+    run_local_search(instance, load_plan_design_ils!, greedySol, 300)
+    println("\n######################################\n")
+
+    run_local_search(instance, load_plan_design_ils2!, solution, 300)
     println("\n######################################\n")
 
     # Plan by plant milp 
@@ -243,12 +256,11 @@ function julia_main_test(instanceName::String="tiny")
     # local_search3!(solutionSub, instanceSub)
     local_search4!(solutionSub, instanceSub)
 
-    # A tester pasque les perturbations dégradent vachement 
     # Faire le cost scaling et regarder si la solution obtenues en warm start a le même coût que celui calculé en dehors du milp
     # Si différence, regarder ou ca fait nimporte quoi
 
     # Applying ILS 
-    ILS!(solutionSub, instanceSub)
+    ILS!(solutionSub, instanceSub; timeLimit=300, perturbTimeLimit=30, lsTimeLimit=60)
     finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
     println("\n######################################\n")
 

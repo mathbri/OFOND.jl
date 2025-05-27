@@ -733,7 +733,7 @@ function two_node_common_incremental2!(
     # @assert isapprox(pathCost, updateCost; atol=1.0) "pathCost = $pathCost / updateCost = $updateCost"
 
     # WARNING : Cost increase can happen after removal and re-introduction
-    # improvement = updateCost + costRemoved
+    improvement = updateCost + costRemoved
     # @assert isapprox(improvement, afterReinsertionCost - startCost; atol=1.0) "afterReinsertionCost - startCost = $(afterReinsertionCost - startCost) ($afterReinsertionCost - $startCost) / improvement = $improvement"
 
     bunCounter = length(twoNodeBundles)

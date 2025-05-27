@@ -10,9 +10,10 @@ function solve_lns_milp(
     verbose::Bool=false,
     optVerbose::Bool=false,
     withCuts::Bool=false,
+    lowerBoundObj::Bool=false,
 )
     # Buidling MILP
-    model = model_with_optimizer(; verbose=verbose && optVerbose)
+    model = model_with_optimizer(; verbose=verbose && optVerbose, timeLimit=60.0)
     add_variables!(model, instance, perturbation)
     if verbose
         @info "MILP has $(num_variables(model)) variables ($(num_binaries(model)) binary and $(num_integers(model)) integer)"
@@ -24,7 +25,7 @@ function solve_lns_milp(
     if verbose
         @info "MILP has $(num_constr(model)) constraints ($(num_path_constr(model)) path, $(num_elem_constr(model)) elementarity, $(num_pack_constr(model)) packing and $(num_cut_constr(model)) cuts)"
     end
-    add_objective!(model, instance, perturbation)
+    add_objective!(model, instance, perturbation; lowerBound=lowerBoundObj)
     warmStart && warm_start!(model, instance, perturbation)
     # println(model)
     # Solving
@@ -61,7 +62,7 @@ function perturbate!(
     verbose && println("Bundles : $(length(perturbation.bundleIdxs))")
 
     # Computing new paths with lns milp
-    pertPaths = solve_lns_milp(instance, perturbation; verbose=verbose, optVerbose=true)
+    pertPaths = solve_lns_milp(instance, perturbation; verbose=verbose, optVerbose=false)
     # verbose && println("New paths : $pertPaths")
 
     # Filtering bundles to work on
@@ -247,7 +248,7 @@ function ILS!(
             end
         end
         # Recording step with no change 
-        if change == 0
+        if changed == 0
             noChange += 1
         else
             noChange = 0

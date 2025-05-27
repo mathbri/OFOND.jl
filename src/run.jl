@@ -211,11 +211,12 @@ function run_simple_heursitic(
     @info "Running heuristic $heuristic"
     startTime = time()
     heuristic(solution, instance)
-    println("Cost after heuristic: $(compute_cost(instance, solution))")
+    # println("Cost after heuristic: $(compute_cost(instance, solution))")
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solution)
     totalCost = compute_cost(instance, solution)
     @info "Results" :solve_time = solveTime :feasible = feasible :total_cost = totalCost
+    return solution
 end
 
 function run_local_search(
@@ -225,7 +226,7 @@ function run_local_search(
     startTime = time()
     solutionLS = deepcopy(solution)
     heuristic(solutionLS, instance; timeLimit=timeLimit)
-    println("Cost after heuristic: $(compute_cost(instance, solutionLS))")
+    # println("Cost after heuristic: $(compute_cost(instance, solutionLS))")
     solveTime = get_elapsed_time(startTime)
     feasible = is_feasible(instance, solutionLS)
     totalCost = compute_cost(instance, solutionLS)
