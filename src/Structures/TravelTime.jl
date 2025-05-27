@@ -322,7 +322,9 @@ function TravelTimeGraph(
         end
         println()
         meanArcs = mean(length.(travelTimeGraph.bundleArcs))
-        println("Mean bundle arcs : $(round(meanArcs; digits=1))")
+        println(
+            "Mean bundle arcs : $(round(meanArcs; digits=1)) ($(minimum(length.(travelTimeGraph.bundleArcs))) -> $(maximum(length.(travelTimeGraph.bundleArcs))))",
+        )
     end
     # Creating final structures (because of sparse matrices)
     return TravelTimeGraph(travelTimeGraph, I, J, arcs, costs)

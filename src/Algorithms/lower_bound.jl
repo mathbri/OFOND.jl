@@ -15,6 +15,10 @@
 
 # Construct and return solution object 
 
+# TODO : ideas to get a better lower bound :
+# - for direct and non linear outsource, compute exact bin packing costs 
+# - switch to lagragian relaxation instead of LP
+
 function lower_bound_path(
     solution::Solution,
     TTGraph::TravelTimeGraph,
@@ -100,7 +104,7 @@ function lower_bound!(solution::Solution, instance::Instance)
         )
         lowerBound += pathCost
         # Adding to solution
-        update_solution!(solution, instance, [bundle], [shortestPath]; sorted=true)
+        update_solution!(solution, instance, bundle, shortestPath; sorted=true)
         i % 10 == 0 && print("|")
         i % percentIdx == 0 && print(" $(round(Int, i / percentIdx))% ")
     end

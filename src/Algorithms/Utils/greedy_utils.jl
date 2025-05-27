@@ -7,7 +7,7 @@
 function is_update_candidate(TTGraph::TravelTimeGraph, src::Int, dst::Int, bundle::Bundle)
     arcData = TTGraph.networkArcs[src, dst]
     # If it is a shortcut leg, cost alredy set to EPS
-    # arcData.type == :shortcut && return false
+    arcData.type == :shortcut && return false
     # bundleDst = TTGraph.bundleDst[bundle.idx]
     # If the destination is not the right plant, not updating cost
     # toPlantArc = arcData.type == :delivery || arcData.type == :direct
@@ -31,7 +31,7 @@ function volume_stock_cost(
         "Dst $dstData cost : $(dstData.volumeCost) * $(order.volume) / $VOLUME_FACTOR = $(dstData.volumeCost * order.volume / VOLUME_FACTOR)",
     )
     verbose && println(
-        "Arc $arcData cost : $(arcData.carbonCost) * $(order.volume) / $(arcData.volumeCapacity) = $(arcData.carbonCost * order.volume / arcData.volumeCapacity)",
+        "Arc $arcData cost : $(arcData.carbonCost) * $(order.volume) / $(arcData.capacity) = $(arcData.carbonCost * order.volume / arcData.capacity)",
     )
     verbose && println("Order : $order $(order.volume) $(order.stockCost)")
     # Node volume cost + Arc carbon cost + Commodity stock cost

@@ -71,7 +71,7 @@ function refill_bins!(
     # Bound filtering on the recomputation : if the bins already attain the lower bound, no need to optimize the storage
     length(bins) == 0 && return 0
     binsBefore = length(bins)
-    if sum(bin.volumeLoad for bin in bins) == 0
+    if sum(bin.load for bin in bins) == 0
         empty!(bins)
         return -binsBefore
     end
@@ -132,14 +132,12 @@ function refill_bins!(
             arcData.isLinear && continue
             # Adding new bins cost
             arcBins = solution.bins[tSrc, tDst]
-            verbose && println(
-                "Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3"
-            )
+            verbose &&
+                println("Bins : $(length(arcBins)) -> $([bin.load for bin in arcBins]) m3")
             addedBins = refill_bins!(arcBins, arcData.capacity, ALL_COMMODITIES)
             verbose && println("Refilling")
-            verbose && println(
-                "Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3"
-            )
+            verbose &&
+                println("Bins : $(length(arcBins)) -> $([bin.load for bin in arcBins]) m3")
             verbose && println("Bins added : $addedBins")
             costAdded += addedBins * arcData.unitCost
             verbose && println("Total cost added : $costAdded")
@@ -262,7 +260,7 @@ end
 function clean_empty_bins!(solution::Solution, instance::Instance)
     TSGraph = instance.timeSpaceGraph
     for (i, arc) in enumerate(edges(TSGraph.graph))
-        filter!(bin -> bin.volumeLoad > 0, solution.bins[src(arc), dst(arc)])
+        filter!(bin -> bin.load > 0, solution.bins[src(arc), dst(arc)])
         i % 1000 == 0 && print("|")
     end
     return println()

@@ -271,7 +271,9 @@ function compute_arc_cost(
 end
 
 # Compute the cost of a solution : node cost + arc cost + commodity cost
-function compute_cost(instance::Instance, solution::Solution; current_cost::Bool=false)
+function compute_cost(
+    instance::Instance, solution::Solution; current_cost::Bool=false, verbose::Bool=true
+)
     totalCost = 0.0
     directCost, directVolume = 0.0, 0.0
     bi, bj, ba, bk = 0, 0, 0, 0.0
@@ -358,31 +360,31 @@ function compute_cost(instance::Instance, solution::Solution; current_cost::Bool
     bi = round(bi; digits=1)
     bj = round(bj; digits=1)
     bk = round(bk; digits=1)
-    println(
+    verbose && println(
         "Bins computed on $ba arcs : $bi bins (BP) / $bj bins (GC) (-$(round((bi - bj) * 100 / bi; digits=1))%) / $bk bins (LC) (-$(round((bi - bk) * 100 / bi; digits=1))%)",
     )
-    println(
+    verbose && println(
         "Cost computed : $(totalCost) (BP) / $(costj) bins (GC) (-$(round((totalCost - costj) * 100 / totalCost; digits=1))%) / $(costk) bins (LC) (-$(round((totalCost - costk) * 100 / totalCost; digits=1))%)",
     )
     directCost = round(directCost; digits=1)
     dirTransCost = round(dirTransCost; digits=1)
     dirCarbCost = round(dirCarbCost; digits=1)
     dirStockCost = round(dirStockCost; digits=1)
-    println(
+    verbose && println(
         "Direct cost : $directCost ($(round(directCost * 100 / totalCost; digits=1))%) : $dirTransCost ($(round(dirTransCost * 100 / directCost; digits=1))%) (transport) / $dirCarbCost ($(round(dirCarbCost * 100 / directCost; digits=1))%) (carbon) / $dirStockCost ($(round(dirStockCost * 100 / directCost; digits=1))%) (stock)",
     )
     nonDirectCost = totalCost - directCost
-    println(
+    verbose && println(
         "Non-direct costs : $nonDirectCost ($(round(nonDirectCost * 100 / totalCost; digits=1))%)",
     )
     transCost = round(transCost; digits=1)
     carbCost = round(carbCost; digits=1)
     platCost = round(platCost; digits=1)
     stockCost = round(stockCost; digits=1)
-    println(
+    verbose && println(
         "Repartition : $transCost ($(round(transCost * 100 / nonDirectCost; digits=1))%) (transport) / $carbCost ($(round(carbCost * 100 / nonDirectCost; digits=1))%) (carbon) / $platCost ($(round(platCost * 100 / nonDirectCost; digits=1))%) (platforms) / $stockCost ($(round(stockCost * 100 / nonDirectCost; digits=1))%) (stock)",
     )
-    println("Direct volume : $(round(Int, directVolume / VOLUME_FACTOR))m3")
+    verbose && println("Direct volume : $(round(Int, directVolume / VOLUME_FACTOR))m3")
     return totalCost
 end
 

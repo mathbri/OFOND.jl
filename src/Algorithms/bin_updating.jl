@@ -63,8 +63,8 @@ function add_order_verbosed!(
         arcData = TSGraph.networkArcs[timedSrc, timedDst]
         println("Dst node $timedDst : $(dstData)")
         println("Arc $timedSrc -> $timedDst : $(arcData)")
-        previousLoads = [bin.volumeLoad for bin in bins]
-        println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        previousLoads = [bin.load for bin in bins]
+        println("Bins : $(length(bins)) -> $([bin.load for bin in bins]) m3")
         # Updating bins
         addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
         println("Order added : $addedBins new bins")
@@ -72,9 +72,9 @@ function add_order_verbosed!(
             append!(previousLoads, zeros(length(bins) - length(previousLoads)))
         end
         println(
-            "Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins] .- previousLoads) m3",
+            "Bins : $(length(bins)) -> $([bin.load for bin in bins] .- previousLoads) m3"
         )
-        println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        println("Bins : $(length(bins)) -> $([bin.load for bin in bins]) m3")
         # Updating cost
         costAddedForOrder = compute_new_cost(arcData, dstData, addedBins, order.content)
         println("Cost added for order : $costAddedForOrder")
@@ -116,16 +116,16 @@ function remove_order_verbosed!(
     for (timedSrc, timedDst) in partition(timedPath, 2, 1)
         println("\nRemoving on arc $timedSrc -> $timedDst")
         arcBins = solution.bins[timedSrc, timedDst]
-        previousLoads = [bin.volumeLoad for bin in arcBins]
-        println("Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3")
+        previousLoads = [bin.load for bin in arcBins]
+        println("Bins : $(length(arcBins)) -> $([bin.load for bin in arcBins]) m3")
         for bin in solution.bins[timedSrc, timedDst]
             remove!(bin, orderUniqueCom)
         end
         println("Order removed")
         println(
-            "Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins] .- previousLoads) m3",
+            "Bins : $(length(arcBins)) -> $([bin.load for bin in arcBins] .- previousLoads) m3",
         )
-        println("Bins : $(length(arcBins)) -> $([bin.volumeLoad for bin in arcBins]) m3")
+        println("Bins : $(length(arcBins)) -> $([bin.load for bin in arcBins]) m3")
         dstData = TSGraph.networkNodes[timedDst]
         println("Dst Node $timedDst : $(dstData)")
         arcData = TSGraph.networkArcs[timedSrc, timedDst]
@@ -173,7 +173,6 @@ function update_bins!(
             verbose && println("\nRemoving order $(order)")
             costAdded += remove_order!(solution, TSGraph, timedPath, order; verbose=verbose)
             verbose && println("Cost removed : $costAdded")
-            costAdded += remove_order!(solution, TSGraph, timedPath, order)
         else
             verbose && println("\nAdding order $(order)")
             costAdded += add_order!(
@@ -208,9 +207,8 @@ function update_arc_bins!(
         arcData = TSGraph.networkArcs[timedSrc, timedDst]
         verbose && println("Dst node $timedDst : $(dstData)")
         verbose && println("Arc $timedSrc -> $timedDst : $(arcData)")
-        previousLoads = [bin.volumeLoad for bin in bins]
-        verbose &&
-            println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        previousLoads = [bin.load for bin in bins]
+        verbose && println("Bins : $(length(bins)) -> $([bin.load for bin in bins]) m3")
         # Updating bins
         addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
         verbose && println("Order added : $addedBins new bins")
@@ -218,10 +216,9 @@ function update_arc_bins!(
             append!(previousLoads, zeros(length(bins) - length(previousLoads)))
         end
         verbose && println(
-            "Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins] .- previousLoads) m3",
+            "Bins : $(length(bins)) -> $([bin.load for bin in bins] .- previousLoads) m3",
         )
-        verbose &&
-            println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+        verbose && println("Bins : $(length(bins)) -> $([bin.load for bin in bins]) m3")
         # Updating cost
         costAddedForOrder = compute_new_cost(arcData, dstData, addedBins, order.content)
         verbose && println("Cost added for order : $costAddedForOrder")
@@ -259,9 +256,8 @@ function update_bins2!(
             arcData = TSGraph.networkArcs[timedSrc, timedDst]
             verbose && println("Dst node $timedDst : $(dstData)")
             verbose && println("Arc $timedSrc -> $timedDst : $(arcData)")
-            previousLoads = [bin.volumeLoad for bin in bins]
-            verbose &&
-                println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+            previousLoads = [bin.load for bin in bins]
+            verbose && println("Bins : $(length(bins)) -> $([bin.load for bin in bins]) m3")
             # Updating bins
             addedBins = first_fit_decreasing!(bins, arcData, order; sorted=sorted)
             verbose && println("Order added : $addedBins new bins")
@@ -269,10 +265,9 @@ function update_bins2!(
                 append!(previousLoads, zeros(length(bins) - length(previousLoads)))
             end
             verbose && println(
-                "Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins] .- previousLoads) m3",
+                "Bins : $(length(bins)) -> $([bin.load for bin in bins] .- previousLoads) m3",
             )
-            verbose &&
-                println("Bins : $(length(bins)) -> $([bin.volumeLoad for bin in bins]) m3")
+            verbose && println("Bins : $(length(bins)) -> $([bin.load for bin in bins]) m3")
             # Updating cost
             costAddedForOrder = compute_new_cost(arcData, dstData, addedBins, order.content)
             verbose && println("Cost added for order : $costAddedForOrder")

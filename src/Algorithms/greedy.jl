@@ -385,8 +385,9 @@ function greedy!(solution::Solution, instance::Instance; mode::Int=1)
         i % percentIdx == 0 && print(" $(round(Int, i/ percentIdx))% ")
     end
     println()
-    if !approx(totalPathCost, totalCost; atol=1.0)
+    if !isapprox(totalPathCost, totalCost; atol=1.0)
         @warn "Computed path cost and update cost don't match" totalPathCost totalCost
+        throw(ErrorException("Debug"))
     end
     return totalCost
 end
