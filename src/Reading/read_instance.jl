@@ -12,13 +12,18 @@ function read_node!(counts::Dict{Symbol,Int}, row::CSV.Row)
     account, country, continent = promote(
         row.point_account, row.point_country, row.point_continent
     )
+    pointCost = if nodeType == :pol || nodeType == :pod
+        3.2
+    else
+        row.point_m3_cost
+    end
     return NetworkNode(
         account,
         nodeType,
         country,
         continent,
         nodeType in COMMON_NODE_TYPES,
-        row.point_m3_cost,
+        pointCost,
         # 0.0,
     )
 end
@@ -82,9 +87,14 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         0.5
     end
     shipCost = if arcType == :oversea
-        min(row.shipment_cost, 7.5e3 + 5e3 * rand())
+        row.shipment_cost + 600
     else
         row.shipment_cost
+    end
+    capacity = if arcType == :oversea
+        SEA_CAPACITY
+    else
+        LAND_CAPACITY
     end
     return NetworkArc(
         arcType,
@@ -92,12 +102,12 @@ function read_leg!(counts::Dict{Symbol,Int}, row::CSV.Row, isCommon::Bool)
         floor(Int, row.travel_time),
         # min(floor(Int, row.travel_time), 7),
         isCommon,
-        row.shipment_cost,
-        # shipCost,
+        # row.shipment_cost,
+        shipCost,
         row.is_linear,
         # false,
         row.carbon_cost,
-        min(SEA_CAPACITY, row.capacity * VOLUME_FACTOR),
+        capacity,
         # round(Int, row.capacity * VOLUME_FACTOR),
     )
 end
@@ -276,9 +286,54 @@ function read_instance(node_file::String, leg_file::String, commodities_file::St
         if netGraph[srcHash, dstHash].type == :oversea
             seaTime += netGraph[srcHash, dstHash].travelTime
             seaNumber += 1
+            if !(netGraph[srcHash].type == :pol && netGraph[dstHash].type == :pod)
+                println(netGraph[srcHash])
+                println(netGraph[dstHash])
+                println(netGraph[srcHash, dstHash])
+                # throw(ErrorException("False oversea"))
+                @warn "False oversea"
+            end
+        elseif netGraph[srcHash, dstHash].type == :direct
+            if !(netGraph[srcHash].type == :supplier && netGraph[dstHash].type == :plant)
+                println(netGraph[srcHash])
+                println(netGraph[dstHash])
+                println(netGraph[srcHash, dstHash])
+                throw(ErrorException("False direct"))
+            end
+        elseif netGraph[srcHash, dstHash].type == :outsource
+            if !(
+                netGraph[srcHash].type == :supplier &&
+                netGraph[dstHash].type in [:platform, :pol]
+            )
+                println(netGraph[srcHash])
+                println(netGraph[dstHash])
+                println(netGraph[srcHash, dstHash])
+                throw(ErrorException("False outsource"))
+            end
+        elseif netGraph[srcHash, dstHash].type == :cross_plat
+            if !(
+                netGraph[srcHash].type in [:platform, :pod] &&
+                netGraph[dstHash].type in [:platform, :pol]
+            )
+                println(netGraph[srcHash])
+                println(netGraph[dstHash])
+                println(netGraph[srcHash, dstHash])
+                throw(ErrorException("False cross platform"))
+            end
+        elseif netGraph[srcHash, dstHash].type == :delivery
+            if !(
+                netGraph[srcHash].type in [:platform, :pod] &&
+                netGraph[dstHash].type == :plant
+            )
+                println(netGraph[srcHash])
+                println(netGraph[dstHash])
+                println(netGraph[srcHash, dstHash])
+                throw(ErrorException("False delivery"))
+            end
         end
         maxLeg = max(maxLeg, netGraph[srcHash, dstHash].travelTime)
     end
+    # throw(ErrorException("False oversea"))
     meanOverseaTime = seaNumber == 0 ? 0 : round(Int, seaTime / seaNumber)
     netGraph[][:meanOverseaTime] = meanOverseaTime
     netGraph[][:maxLeg] = maxLeg

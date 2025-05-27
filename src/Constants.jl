@@ -4,7 +4,7 @@
 const NODE_TYPES = [:supplier, :plant, :platform, :pol, :pod]
 const COMMON_NODE_TYPES = [:platform, :pol, :pod]
 const ARC_TYPES = [:direct, :outsource, :cross_plat, :delivery, :oversea, :shortcut]
-const BP_ARC_TYPES = [:direct, :cross_plat, :delivery, :oversea]
+const BP_ARC_TYPES = [:outsource, :direct, :cross_plat, :delivery, :oversea]
 const COMMON_ARC_TYPES = [:cross_plat, :delivery, :oversea]
 
 const EPS = 1e-5
@@ -14,11 +14,12 @@ const VOLUME_FACTOR = 100
 const LAND_CAPACITY = 7000
 const SEA_CAPACITY = 6500
 
-const PERTURBATIONS = [
-    :single_plant, :two_shared_node, :attract_reduce, :random, :suppliers
-]
-const MAX_MILP_VAR = 1_000_000
-const MILP_TIME_LIMIT = 300
+# const PERTURBATIONS = [
+#     :single_plant, :two_shared_node, :attract_reduce, :random, :suppliers
+# ]
+const PERTURBATIONS = [:single_plant, :attract_reduce]
+const MAX_MILP_VAR = 500_000
+const MILP_TIME_LIMIT = 150
 
 const NETWORK_DESIGN_COLUMNS = [
     "route_id",
