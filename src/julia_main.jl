@@ -260,8 +260,8 @@ function julia_main_test(instanceName::String="tiny")
     # Si différence, regarder ou ca fait nimporte quoi
 
     # Applying ILS 
-    ILS!(solutionSub, instanceSub; timeLimit=300, perturbTimeLimit=30, lsTimeLimit=60)
-    finalSolution = fuse_solutions(solutionSub_GLS, solution_LBF, instance, instanceSub)
+    ILS!(solutionSub, instanceSub; timeLimit=300, perturbTimeLimit=60, lsTimeLimit=60)
+    finalSolution = fuse_solutions(solutionSub, solution_LBF, instance, instanceSub)
     println("\n######################################\n")
 
     return 0

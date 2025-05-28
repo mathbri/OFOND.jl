@@ -534,7 +534,8 @@ function load_plan_design_ils!(solution::Solution, instance::Instance; timeLimit
         println("Bundles : $(length(perturbation.bundleIdxs))")
         # With warm start, guaranteed to get a better solution
         pertPaths = solve_lns_milp(instance, perturbation; verbose=true, warmStart=true)
-        !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return 0.0, 0
+        # If no new paths, end of the search
+        !are_new_paths(perturbation.oldPaths, pertPaths; verbose=true) && return nothing
         # Updating solution
         changedIdxs = get_new_paths_idx(perturbation, perturbation.oldPaths, pertPaths)
         bunIdxs = perturbation.bundleIdxs[changedIdxs]

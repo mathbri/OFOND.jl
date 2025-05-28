@@ -83,7 +83,7 @@ function perturbate!(
     updateCost = update_solution!(solution, instance, pertBundles, pertPaths; sorted=true)
     improvement = updateCost + costRemoved
     verbose && println(
-        "Improvement : $(round(improvement; digits=1)) (Cost Removed = $(round(costRemoved; digits=1)), Cost Added = $(round(updateCost; digits=1)))",
+        "Improvement : $(round(improvement; digits=1)) ($(round((improvement / startCost) * 100; digits=1)) %)) (Cost Removed = $(round(costRemoved; digits=1)), Cost Added = $(round(updateCost; digits=1)))",
     )
 
     # Reverting if cost augmented by more than 5% 
@@ -228,24 +228,28 @@ function ILS!(
             changed += change
             # If enough path changed
             if changed >= changeThreshold
-                # Applying local search 
-                local_search3!(
-                    solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
-                )
-                changed = 0
-                # If new best solution found, store it
-                if compute_cost(instance, solution) < bestCost
-                    bestSol = solution_deepcopy(solution, instance)
-                    bestCost = compute_cost(instance, solution)
-                    @info "New best solution found" :cost = bestCost :time = round(
-                        time() - start
-                    )
-                end
-                # Applying cost scaling
-                slope_scaling_cost_update!(instance, solution)
+                break
             else
-                println("Change threshold : $(change * 100 / changeThreshold)%")
+                println("Change threshold : $(changed * 100 / changeThreshold)%")
             end
+        end
+        # If enough path changed, next phase
+        if changed >= changeThreshold
+            # Applying local search 
+            local_search3!(
+                solution, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+            )
+            changed = 0
+            # If new best solution found, store it
+            if compute_cost(instance, solution) < bestCost
+                bestSol = solution_deepcopy(solution, instance)
+                bestCost = compute_cost(instance, solution)
+                @info "New best solution found" :cost = bestCost :time = round(
+                    time() - start
+                )
+            end
+            # Applying cost scaling
+            slope_scaling_cost_update!(instance, solution)
         end
         # Recording step with no change 
         if changed == 0
@@ -258,7 +262,7 @@ function ILS!(
             slope_scaling_cost_update!(instance, Solution(instance))
         end
         # Breaking if multiple times no change
-        if noChange >= 6
+        if noChange >= 5
             break
         end
     end
