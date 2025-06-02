@@ -162,3 +162,29 @@ function average_bundle(bundle::Bundle, timeHorizon::Int)
         bundle.supplier, bundle.customer, [newOrder], bundle.idx, bundle.hash, 0, 0
     )
 end
+
+function split_bundle_in_half(bundle::Bundle, startIdx::Int)
+    # No splitting if only one commodity
+    if all(o -> length(o.content) == 1, bundle.orders)
+        return [bundle]
+    end
+    # Dividing bundle in two
+    supp, cust, bIdx = bundle.supplier, bundle.customer, startIdx
+    newBundles = [
+        Bundle(supp, cust, Order[], bIdx, hash(1, bundle.hash), 0, 0),
+        Bundle(supp, cust, Order[], bIdx + 1, hash(2, bundle.hash), 0, 0),
+    ]
+    # Dividing orders 
+    for order in bundle.orders
+        quantity = max(1, round(Int, length(order.content) / n))
+        order1 = Order(order.hash, order.deliveryDate, order.content[1:quantity])
+        push!(newBundles[1].orders, order1)
+        if length(order.content) > 1
+            order2 = Order(
+                order.hash, order.deliveryDate, order.content[(quantity + 1):end]
+            )
+            push!(newBundles[2].orders, order2)
+        end
+    end
+    return newBundles
+end

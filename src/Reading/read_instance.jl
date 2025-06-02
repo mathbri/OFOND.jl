@@ -258,6 +258,11 @@ function read_commodities(networkGraph::NetworkGraph, commodities_file::String)
         maxStockCost = max(maxStockCost, row.lead_time_cost)
         maxAdjustedCost = max(maxAdjustedCost, commodity.stockCost)
         rowQuantity = round(Int, row.quantity)
+        # # Breaking commodities if too big for new capacity
+        # rowSize = max(1, row.size * 100)
+        # if rowSize > SEA_CAPACITY
+        #     rowQuantity = round(Int, rowQuantity * (rowSize / SEA_CAPACITY))
+        # end
         append!(order.content, [commodity for _ in 1:(rowQuantity)])
         comCount += rowQuantity
         comUnique += 1

@@ -116,8 +116,20 @@ function julia_main(; useILS::Bool, splitBundles::Bool, useWeights::Bool)::Cint
     return 0 # if things finished successfully
 end
 
-function julia_main_test(instanceName::String="tiny")
+function julia_main_test(
+    instanceName::String="tiny", timeLimit::Int=300, capacityFactor::Float64=1.0
+)
+    println("\n######################################\n")
     println("Launching OFO Network Design (test)")
+    println("\n######################################\n")
+
+    @info "Test parameters" instanceName timeLimit capacityFactor
+
+    # seaCapa = round(Int, DEFAULT_SEA_CAPACITY * capacityFactor)
+    # global SEA_CAPACITY::Int = seaCapa
+
+    # landCapa = round(Int, DEFAULT_LAND_CAPACITY * capacityFactor)
+    # global LAND_CAPACITY::Int = landCapa
 
     #####################################################################
     # 1. Read instance and solution
@@ -196,7 +208,7 @@ function julia_main_test(instanceName::String="tiny")
     # run_local_search(instance, local_search3!, solution, 30)
     # println("\n######################################\n")
 
-    run_local_search(instance, local_search4!, solution, 300)
+    run_local_search(instance, local_search4!, solution, timeLimit)
     println("\n######################################\n")
 
     if instanceName == "extra_small"
@@ -204,13 +216,13 @@ function julia_main_test(instanceName::String="tiny")
     end
 
     # Load plan design ils on current 
-    run_local_search(instance, load_plan_design_ils!, solution, 300)
+    run_local_search(instance, load_plan_design_ils!, solution, timeLimit)
     println("\n######################################\n")
 
-    run_local_search(instance, load_plan_design_ils!, greedySol, 300)
+    run_local_search(instance, load_plan_design_ils!, greedySol, timeLimit)
     println("\n######################################\n")
 
-    run_local_search(instance, load_plan_design_ils2!, solution, 300)
+    run_local_search(instance, load_plan_design_ils2!, solution, timeLimit)
     println("\n######################################\n")
 
     # Plan by plant milp 
@@ -254,14 +266,26 @@ function julia_main_test(instanceName::String="tiny")
 
     # Applying local search 
     # local_search3!(solutionSub, instanceSub)
-    local_search4!(solutionSub, instanceSub)
+    local_search4!(solutionSub, instanceSub; timeLimit=timeLimit)
 
     # Faire le cost scaling et regarder si la solution obtenues en warm start a le même coût que celui calculé en dehors du milp
     # Si différence, regarder ou ca fait nimporte quoi
 
     # Applying ILS 
-    ILS!(solutionSub, instanceSub; timeLimit=300, perturbTimeLimit=60, lsTimeLimit=60)
+    pertLimit = round(Int, min(150, timeLimit / 5))
+    lsLimit = round(Int, min(600, timeLimit / 5))
+    ILS!(
+        solutionSub,
+        instanceSub;
+        timeLimit=timeLimit,
+        perturbTimeLimit=pertLimit,
+        lsTimeLimit=lsLimit,
+    )
     finalSolution = fuse_solutions(solutionSub, solution_LBF, instance, instanceSub)
+    println("\n######################################\n")
+
+    # Fully outsourced 
+    run_simple_heursitic(instanceSub, fully_outsourced2!)
     println("\n######################################\n")
 
     return 0
@@ -285,32 +309,34 @@ function julia_main_test(instanceName::String="tiny")
     println(
         "Mean platform cost $meanPlatCost and mean size $meanSize and mean cost $meanCost"
     )
-    allTransCost = sum(a -> netGraph[a[1], a[2]].unitCost, edge_labels(netGraph))
-    allCarbCost = sum(a -> netGraph[a[1], a[2]].carbonCost, edge_labels(netGraph))
-    println("Share of transportation cost $(allTransCost / (allTransCost + allCarbCost))")
-
-    # printing bundle arcs to see difference
-    println(
-        "Min bundle arcs : $(minimum(x -> length(x), instanceSubSub.travelTimeGraph.bundleArcs))",
-    )
-    println(
-        "Mean bundle arcs : $(mean(x -> length(x), instanceSubSub.travelTimeGraph.bundleArcs))",
-    )
-    println(
-        "Max bundle arcs : $(maximum(x -> length(x), instanceSubSub.travelTimeGraph.bundleArcs))",
-    )
 
     return 0 # if things finished successfully
 end
 
-function julia_main_logged(instanceNames::Vector{String}=["tiny"])
-    for instanceName in instanceNames
+function julia_main_logged(
+    instanceNames::Vector{String}=["tiny"], timeLimits::Vector{Int}=[300]
+)
+    for (instanceName, timeLimit) in zip(instanceNames, timeLimits)
         open("log_$instanceName.txt", "w") do file
             logger = SimpleLogger(file)
             global_logger(logger)
             redirect_stdout(file) do
-                julia_main_test(instanceName)
+                julia_main_test(instanceName, timeLimit)
             end
         end
     end
 end
+
+# function julia_main_logged(
+#     instanceNames::Vector{String}=["tiny"], capacityFactors::Vector{Float64}=[1.0]
+# )
+#     for (instanceName, factor) in zip(instanceNames, capacityFactors)
+#         open("log_$instanceName.txt", "w") do file
+#             logger = SimpleLogger(file)
+#             global_logger(logger)
+#             redirect_stdout(file) do
+#                 julia_main_test(instanceName, 3600, factor)
+#             end
+#         end
+#     end
+# end
