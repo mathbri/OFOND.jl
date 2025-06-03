@@ -982,7 +982,7 @@ function local_search3!(
     startTime = time()
     while (time() - startTime < timeLimit) &&
               (i <= 150_000) &&
-              (noImprov < 2 * length(instance.bundles))
+              (noImprov < 3 * length(instance.bundles))
         startLoopImprov = totImprov
         # TODO : make the probability of the neighborhood vary with time ? skewed towards bundle reintroduction ? 
         # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental

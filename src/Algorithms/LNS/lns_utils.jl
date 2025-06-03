@@ -294,6 +294,9 @@ end
 function get_perturbation(type::Symbol, instance::Instance, solution::Solution)
     TTGraph = instance.travelTimeGraph
     if type == :attract_reduce
+        # TODO : a selection criteria should be added here, selecting a common arc if can lead to at least 50% valid attract / reduce paths
+        # bundles on it have valid reduce paths
+        # bundles not on it have a have a path from bSrc to aSrc and from aDst to bDst 
         src, dst = select_common_arc(instance)
         println(
             "Common arc selected : $src -> $dst ($(TTGraph.networkNodes[src]) -> $(TTGraph.networkNodes[dst]))",

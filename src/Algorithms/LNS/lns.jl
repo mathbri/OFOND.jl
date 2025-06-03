@@ -233,6 +233,12 @@ function ILS!(
                 println("Change threshold : $(changed * 100 / changeThreshold)%")
             end
         end
+        # Recording step with no change 
+        if changed == 0
+            noChange += 1
+        else
+            noChange = 0
+        end
         # If enough path changed, next phase
         if changed >= changeThreshold
             # Applying local search 
@@ -251,12 +257,6 @@ function ILS!(
             # Applying cost scaling
             slope_scaling_cost_update!(instance, solution)
         end
-        # Recording step with no change 
-        if changed == 0
-            noChange += 1
-        else
-            noChange = 0
-        end
         # Resetting if multiple times no change
         if noChange == 3
             slope_scaling_cost_update!(instance, Solution(instance))
@@ -268,6 +268,7 @@ function ILS!(
     end
     println("\n")
     # Final local search : applying large one
+    # TODO : this could worsen the solution
     lsImprovement = large_local_search!(
         bestSol, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
     )
