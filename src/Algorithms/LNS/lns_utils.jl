@@ -280,24 +280,51 @@ end
 ################################   Perturbation call  #####################################
 ###########################################################################################
 
-function select_common_arc(instance::Instance)
+# Instead of collecting common arcs each time, either store common arc collection or choose a common node and check outgoing arcs
+# Connectivity information can also be stored and reused here on the shelf
+# One way instead of checking has_path is to search for the arc in bundleArcs (but maybe slower)
+function select_common_arc(instance::Instance, solution::Solution)
     TTGraph = instance.travelTimeGraph
-    arc = rand(
-        filter(
-            arc -> TTGraph.networkArcs[src(arc), dst(arc)].type in COMMON_ARC_TYPES,
-            collect(edges(TTGraph.graph)),
-        ),
+    commonArcs = filter(
+        arc -> TTGraph.networkArcs[src(arc), dst(arc)].type in COMMON_ARC_TYPES,
+        collect(edges(TTGraph.graph)),
     )
-    return src(arc), dst(arc)
+    threshold = 0.5 * length(instance.bundles)
+    srcMax, dstMax, candidateMax = -1, -1, 0.0
+    for idx in randperm(length(commonArcs))
+        arc = commonArcs[idx]
+        src, dst = src(arc), dst(arc)
+        # Checking it leads to a sensible attract_reduce perturbation 
+        reduceBundles = get_bundles_to_update(TTGraph, solution, src, dst)
+        # Bundles on it have valid reduce paths
+        nCandidate = length(reduceBundles)
+        # Bundles not on it have a have a path from bSrc to aSrc and from aDst to bDst 
+        bundlesNotOnArc = setdiff(idx(instance.bundles), reduceBundles)
+        for bIdx in bundlesNotOnArc
+            bSrc, bDst = TTGraph.bundleSrc[bIdx], TTGraph.bundleDst[bIdx]
+            if has_path(TTGraph.graph, bSrc, src) && has_path(TTGraph.graph, dst, bDst)
+                nCandidate += 1
+            end
+        end
+        if nCandidate > threshold
+            return src(arc), dst(arc)
+        else
+            println(
+                "Arc $(src(arc)) -> $(dst(arc)) not suitable : $(nCandidate) candidate bundles (threshold : $threshold)",
+            )
+        end
+        if nCandidate > candidateMax
+            srcMax, dstMax, candidateMax = src(arc), dst(arc), nCandidate
+        end
+    end
+    return srcMax, dstMax
 end
 
 function get_perturbation(type::Symbol, instance::Instance, solution::Solution)
     TTGraph = instance.travelTimeGraph
     if type == :attract_reduce
-        # TODO : a selection criteria should be added here, selecting a common arc if can lead to at least 50% valid attract / reduce paths
-        # bundles on it have valid reduce paths
         # bundles not on it have a have a path from bSrc to aSrc and from aDst to bDst 
-        src, dst = select_common_arc(instance)
+        src, dst = select_common_arc(instance, solution)
         println(
             "Common arc selected : $src -> $dst ($(TTGraph.networkNodes[src]) -> $(TTGraph.networkNodes[dst]))",
         )

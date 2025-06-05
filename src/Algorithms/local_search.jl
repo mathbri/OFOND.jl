@@ -22,7 +22,6 @@ function bin_packing_improvement!(
 )
     # @assert is_feasible(instance, solution; verbose=true)
     costImprov, computedNoImprov, computable, candidate = 0.0, 0, 0, 0
-    # TODO : use the following if edges(...) is a bottleneck
     # Efficient iteration over sparse matrices
     rows = rowvals(solution.bins)
     vals = nonzeros(solution.bins)
@@ -66,8 +65,6 @@ function bin_packing_improvement!(
     return costImprov
 end
 
-# TODO : add the complete list of arcs to the time space graph if its creation / collection takes too much time
-# TODO : make buffers for all commodities / capacities channel if allocation takes too much time
 # Parallel version of the bin packing improvement
 function parallel_bin_packing_improvement!(
     solution::Solution, instance::Instance; sorted::Bool=false, skipLinear::Bool=true
@@ -136,11 +133,6 @@ function parallel_bin_packing_improvement!(
     # @assert is_feasible(instance, solution; verbose=true)
     return costImprov
 end
-
-# TODO : if I store the order in which the bundles were inserted on the arcs, there is no need to gather all commodities in refilling : another "global" matrix to use for all computations ? or update solutions with remove returns the previous order insertion matrix of the solution
-# The problem being that cost increase in removal than insertion goes up to 200 000 for world instance
-# But if the bin packing improvement neighborhood change the bin filling, this order no longer makes sense
-# So need to remove it if the bin pack found better solution
 
 function revert_solution!(
     solution::Solution,
@@ -331,6 +323,10 @@ function bundle_reintroduction2!(
     end
 
     # TODO : most of the local search time lost in saving previous bins, getting bins updated and dijkstra computing 
+    # Here we can have also a shared memory for a "tentative solution" with only capacities stored and not the actual bins
+    # The removal and insertion can then happen only when there is improvement 
+    # There is also no need to allocate the revious bins matrix
+    # It can be in the form of a second sparse matrix in the solution object only storing Vectors of Ints and a tentative_update_solution to "remove" the bundle from this solution
 
     # Saving previous bins and removing bundle
     oldBins = save_previous_bins(
@@ -861,16 +857,6 @@ function loop_two_nodes!(
     return totImprov, bunCount
 end
 
-# As they are very costly by the nature of the problem, the full local search step isn't launched multiple time in practice
-# So there will be two options :
-# - "one-step" : bundle reintro + two node incre + bundle reintro + bin pack
-# - "two-step" : forbid direct + bundle reintro + two node incre + allow direct + bundle reintro + two node incre + bin pack
-
-# TODO ; test on full instances that the commented parts do the same that the uncommented ones
-
-# TODO : test on full instances what local search is the best
-
-# This is the one step local search 
 function local_search!(
     solution::Solution,
     instance::Instance;
@@ -980,11 +966,11 @@ function local_search3!(
     dstNodes = vcat(srcNodes, plantNodes)
     # Looping while there is time
     startTime = time()
-    while (time() - startTime < timeLimit) &&
-              (i <= 150_000) &&
-              (noImprov < 3 * length(instance.bundles))
+    maxIter = 150_000
+    noImprovLimit = min(5000, 3 * length(instance.bundles))
+    while (time() - startTime < timeLimit) && (i <= maxIter) && (noImprov < noImprovLimit)
         startLoopImprov = totImprov
-        # TODO : make the probability of the neighborhood vary with time ? skewed towards bundle reintroduction ? 
+        # Make the probability of the neighborhood vary with time ? skewed towards bundle reintroduction ? 
         # Choosing random neighborhood between bundle reintroduction and two_node_common_incremental
         if rand() < 0.5
             # Bundle reintroduction
@@ -992,7 +978,6 @@ function local_search3!(
             totImprov += bundle_reintroduction2!(
                 solution, instance, bundle, CHANNEL; costThreshold=threshold
             )
-            # TODO : add bundle re intro counters
         else
             # Two node common incremental
             src, dst = rand(srcNodes), rand(dstNodes)
@@ -1007,7 +992,6 @@ function local_search3!(
                 solution, instance, src, dst, CAPA, CHANNEL; costThreshold=threshold
             )
             totImprov += improvement
-            # TODO : add two node counters
         end
         # Recording useless step
         if isapprox(totImprov, startLoopImprov; atol=1.0)
@@ -1124,8 +1108,6 @@ function local_search4!(
     return totImprov
 end
 
-# TODO : wouldn'it make more sense to call a neighborhood randomly instead of doing all of one neighborhood and then going to the other ?
-
 # A first modification could be to change the double loop on all_two_nodes to a single loop that stops after a certain amount of time
 
 # Maybe what we want is to alternate between :
@@ -1193,5 +1175,3 @@ function large_local_search!(
         round((time() - startTime) * 1000) / 1000
     return totalImprovement
 end
-
-# TODO : a large local search 2 on top of the local search 2

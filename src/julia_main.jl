@@ -175,7 +175,7 @@ function julia_main_test(
     println("\n######################################\n")
 
     # Load plan design lower bound 
-    if length(instance.bundles) < 1200
+    if length(instance.bundles) < 1000
         run_simple_heursitic(instance, milp_lower_bound!)
         println("\n######################################\n")
     end
@@ -205,9 +205,11 @@ function julia_main_test(
     end
 
     # Local search on current 
-    # run_local_search(instance, local_search3!, solution, 30)
-    # println("\n######################################\n")
+    println("\n###   Trying local search 3   ###\n")
+    run_local_search(instance, local_search3!, solution, timeLimit)
+    println("\n######################################\n")
 
+    println("\n###   Trying local search 4   ###\n")
     run_local_search(instance, local_search4!, solution, timeLimit)
     println("\n######################################\n")
 
@@ -265,7 +267,7 @@ function julia_main_test(
     end
 
     # Applying local search 
-    # local_search3!(solutionSub, instanceSub)
+    # local_search3!(solutionSub, instanceSub; timeLimit=timeLimit)
     local_search4!(solutionSub, instanceSub; timeLimit=timeLimit)
 
     # Faire le cost scaling et regarder si la solution obtenues en warm start a le même coût que celui calculé en dehors du milp

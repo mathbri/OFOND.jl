@@ -2,7 +2,6 @@
 # by adding a binary variable per path and a Special Ordered Set of Type 1 constraint on those, 
 # possibly ordered by (real) path cost
 
-# TODO : if elementarity problem in paths returned, add constraint as callback
 function solve_lns_milp(
     instance::Instance,
     perturbation::Perturbation;
@@ -13,7 +12,12 @@ function solve_lns_milp(
     lowerBoundObj::Bool=false,
 )
     # Buidling MILP
-    model = model_with_optimizer(; verbose=verbose && optVerbose, timeLimit=60.0)
+    timeLimit = if length(instance.bundles) < 1000
+        60.0
+    else
+        150.0
+    end
+    model = model_with_optimizer(; verbose=verbose && optVerbose, timeLimit=timeLimit)
     add_variables!(model, instance, perturbation)
     if verbose
         @info "MILP has $(num_variables(model)) variables ($(num_binaries(model)) binary and $(num_integers(model)) integer)"
@@ -108,12 +112,12 @@ end
 
 # TODO : Analyze this mechanism the same way as the other heuristics 
 
-# TODO : config to test :
+# Config to test :
 # - one slope scaling reset at first 
 # - slope scaling at each iteration
 # - local search after each perturbation
 
-# TODO : how to revert the solution to the previous step if the perturbation + local search didn't find a better solution ?
+# How to revert the solution to the previous step if the perturbation + local search didn't find a better solution ?
 # Put nodes and bundle slection outside of the loop : choose all bundles to be updated with each perturbation before applying them
 # Store previous bins for all those bundles at once
 # This will also allow for easier miw between neighborhood bundle selection and neighborhood perturbation milp :
@@ -268,15 +272,19 @@ function ILS!(
     end
     println("\n")
     # Final local search : applying large one
-    # TODO : this could worsen the solution
-    lsImprovement = large_local_search!(
-        bestSol, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
+    lastSol = solution_deepcopy(bestSol, instance)
+    large_local_search!(
+        lastSol, instance; timeLimit=lsTimeLimit, stepTimeLimit=lsStepTimeLimit
     )
-    finalCost = compute_cost(instance, bestSol)
-    totImprov = round(Int, finalCost - startCost)
+    if compute_cost(instance, lastSol) < bestCost
+        bestSol = solution_deepcopy(lastSol, instance)
+        bestCost = compute_cost(instance, lastSol)
+        @info "New best solution found" :cost = bestCost :time = round(time() - start)
+    end
+    totImprov = round(Int, bestCost - startCost)
     @info "Full ILS done" :time = round(time() - start; digits=2) :improvement = totImprov
     # Reverting if cost augmented by more than 0.75% (heuristic level)
-    if totImprov > startCost
+    if bestCost > startCost
         println("Reverting solution because cost degradation")
         revert_solution!(solution, instance, prevSol)
         return 0.0

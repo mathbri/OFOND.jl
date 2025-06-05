@@ -9,3 +9,4 @@ debug.txt
 .CondaPkg/*
 debug*
 log*
+*.zip
