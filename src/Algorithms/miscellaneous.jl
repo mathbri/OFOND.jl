@@ -425,11 +425,10 @@ end
 #################################   Fully Outsourcing   ###################################
 ###########################################################################################
 
-# TODO : if everything is linear, why not using the lower bound with dijkstra ?
 # Can be used for now as a benchmark for the difference between lower bound with dijkstra and pure LP
 
 # Why would a bundle use platforms if the cost is directly linear with distance ? Because the direct arcs are not linearized
-# TODO : is it possible to have path with more than 2 arcs ?
+# Is it possible to have path with more than 2 arcs (if there is a direct) ?
 # Modify the instance to transform it into a fully outsourced network and then compute a solution to this instance
 function fully_outsourced!(solution::Solution, instance::Instance; maxPathLength::Int=-1)
     # Building the new instance costs

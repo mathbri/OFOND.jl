@@ -188,6 +188,11 @@ end
 ################################   Adding objective   #####################################
 ###########################################################################################
 
+# WARNING : possible error in objective constrcution 
+# Relaxed cost computed in the solver and in compute_cost function doesn't match... (even without slope scaling)
+# TODO : get a solution and compare cost when warm start = true 
+# Compare costs between solution returned
+
 function milp_arc_cost(
     instance::Instance, bIdx::Int, src::Int, dst::Int; lowerBound::Bool=false
 )

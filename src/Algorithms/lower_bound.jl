@@ -15,9 +15,9 @@
 
 # Construct and return solution object 
 
-# TODO : ideas to get a better lower bound :
+# Ideas to get a better lower bound :
 # - for direct and non linear outsource, compute exact bin packing costs 
-# - switch to lagragian relaxation instead of LP
+# - switch to lagragian relaxation instead of LP to scale the load plan design lower bound
 
 function lower_bound_path(
     solution::Solution,

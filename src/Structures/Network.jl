@@ -1,5 +1,7 @@
 # Graph to store all metadatas of the actual network
 
+# TODO : add point capacity and overloading cost
+
 # Network Node Data
 struct NetworkNode
     # Defining properties

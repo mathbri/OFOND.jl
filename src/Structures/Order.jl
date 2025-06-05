@@ -40,6 +40,10 @@ function Base.hash(order::Order)
     return hash(order.deliveryDate, order.bundleHash)
 end
 
+# TODO : change this from arcType keys to capacities keys 
+# It becomes agnsotic of capacity constants and adapts more freely to varying capacities
+# For now changing to global variables because faster
+
 # Add useful properties to the order
 function add_properties(order::Order, bin_packing::Function, CAPACITIES::Vector{Int})
     volume = sum(com -> com.size, order.content)

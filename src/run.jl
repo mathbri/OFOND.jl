@@ -159,8 +159,6 @@ function local_search_heuristic!(
     return println()
 end
 
-# TODO : add mechanism to restart from a completely diffreent solution
-
 function lns_heuristic!(
     solution::Solution,
     instance::Instance;
@@ -186,7 +184,6 @@ function lns_heuristic!(
             break
             # We are restarting so we need to store the best solution found so far
             bestSol = solution_deepcopy(solution, instance)
-            # TODO : restart with greedy and random insertion order
         end
         improvement = ILS!(solution, instance; timeLimit=timeLimit, lsTimeLimit=lsTimeLimit)
         if improvement > improvThreshold
