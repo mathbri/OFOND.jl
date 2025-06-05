@@ -131,6 +131,8 @@ function generate_reduce_path(
     return shortest_path(TTGraph, bSrc, bDst)[1]
 end
 
+# TODO : allowing multiple new paths could be an effcient way to boost attract reduce perturbations performance
+
 function path_flow_perturbation(instance::Instance, solution::Solution, src::Int, dst::Int)
     bundleIdxs = idx(instance.bundles)
     oldPaths = solution.bundlePaths
@@ -289,25 +291,33 @@ function select_common_arc(instance::Instance, solution::Solution)
         arc -> TTGraph.networkArcs[src(arc), dst(arc)].type in COMMON_ARC_TYPES,
         collect(edges(TTGraph.graph)),
     )
-    threshold = 0.5 * length(instance.bundles)
+    threshold = round(Int, 0.33 * length(instance.bundles))
     srcMax, dstMax, candidateMax = -1, -1, 0.0
-    for idx in randperm(length(commonArcs))
-        arc = commonArcs[idx]
-        src, dst = src(arc), dst(arc)
+    for aIdx in randperm(length(commonArcs))
+        arc = commonArcs[aIdx]
+        aSrc, aDst = src(arc), dst(arc)
+        println("Arc $arc : aSrc $aSrc -> aDst $aDst")
         # Checking it leads to a sensible attract_reduce perturbation 
-        reduceBundles = get_bundles_to_update(TTGraph, solution, src, dst)
+        reduceBundles = get_bundles_to_update(TTGraph, solution, aSrc, aDst)
+        println("Reduce bundles : $reduceBundles")
         # Bundles on it have valid reduce paths
         nCandidate = length(reduceBundles)
+        println("Number of candidate bundles : $nCandidate")
         # Bundles not on it have a have a path from bSrc to aSrc and from aDst to bDst 
-        bundlesNotOnArc = setdiff(idx(instance.bundles), reduceBundles)
-        for bIdx in bundlesNotOnArc
+        attractBundles = setdiff(idx(instance.bundles), reduceBundles)
+        println("Number of possible attract bundles : $(length(attractBundles))")
+        for bIdx in attractBundles
             bSrc, bDst = TTGraph.bundleSrc[bIdx], TTGraph.bundleDst[bIdx]
-            if has_path(TTGraph.graph, bSrc, src) && has_path(TTGraph.graph, dst, bDst)
+            if has_path(TTGraph.graph, bSrc, aSrc) && has_path(TTGraph.graph, aDst, bDst)
                 nCandidate += 1
             end
         end
+        println("Number of candidates : $nCandidate")
         if nCandidate > threshold
-            return src(arc), dst(arc)
+            println(
+                "Common arc selected : $aSrc -> $aDst ($(TTGraph.networkNodes[aSrc]) -> $(TTGraph.networkNodes[aDst]))",
+            )
+            return aSrc, aDst
         else
             println(
                 "Arc $(src(arc)) -> $(dst(arc)) not suitable : $(nCandidate) candidate bundles (threshold : $threshold)",
@@ -324,16 +334,13 @@ function get_perturbation(type::Symbol, instance::Instance, solution::Solution)
     TTGraph = instance.travelTimeGraph
     if type == :attract_reduce
         # bundles not on it have a have a path from bSrc to aSrc and from aDst to bDst 
-        src, dst = select_common_arc(instance, solution)
-        println(
-            "Common arc selected : $src -> $dst ($(TTGraph.networkNodes[src]) -> $(TTGraph.networkNodes[dst]))",
-        )
-        return path_flow_perturbation(instance, solution, src, dst)
+        asrc, adst = select_common_arc(instance, solution)
+        return path_flow_perturbation(instance, solution, asrc, adst)
     elseif type == :two_shared_node
         startCost = compute_cost(instance, solution)
         threshold = 1e-3 * startCost
-        src, dst, pertBunIdxs = select_bundles_by_two_node(instance, solution, threshold)
-        return two_shared_node_perturbation(instance, solution, src, dst)
+        asrc, adst, pertBunIdxs = select_bundles_by_two_node(instance, solution, threshold)
+        return two_shared_node_perturbation(instance, solution, asrc, adst)
     else
         # Otherwise, it is a "classic" arc flow perturbation
         pertBunIdxs = if type == :suppliers

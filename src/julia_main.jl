@@ -205,9 +205,9 @@ function julia_main_test(
     end
 
     # Local search on current 
-    println("\n###   Trying local search 3   ###\n")
-    run_local_search(instance, local_search3!, solution, timeLimit)
-    println("\n######################################\n")
+    # println("\n###   Trying local search 3   ###\n")
+    # run_local_search(instance, local_search3!, solution, timeLimit)
+    # println("\n######################################\n")
 
     println("\n###   Trying local search 4   ###\n")
     run_local_search(instance, local_search4!, solution, timeLimit)
@@ -267,7 +267,10 @@ function julia_main_test(
     end
 
     # Applying local search 
-    # local_search3!(solutionSub, instanceSub; timeLimit=timeLimit)
+    sol1 = solution_deepcopy(solutionSub, instanceSub)
+    println("\n###   Trying local search 3   ###\n")
+    local_search3!(sol1, instanceSub; timeLimit=timeLimit)
+    println("\n###   Trying local search 4   ###\n")
     local_search4!(solutionSub, instanceSub; timeLimit=timeLimit)
 
     # Faire le cost scaling et regarder si la solution obtenues en warm start a le même coût que celui calculé en dehors du milp

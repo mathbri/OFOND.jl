@@ -52,6 +52,8 @@ function solve_lns_milp(
     end
 end
 
+# TODO : in the perturbate loop before the local search, add a mechnism to forbid reperturbating exactly the same way (same plants for single_plants, same arcs for attract_reduces) 
+
 function perturbate!(
     solution::Solution, instance::Instance, neighborhood::Symbol; verbose::Bool=false
 )
